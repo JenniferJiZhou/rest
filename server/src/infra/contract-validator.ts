@@ -18,6 +18,45 @@ export interface FixtureContract {
 
 export const FIXTURE_CONTRACTS: FixtureContract[] = [
   {
+    fixture: "unified-inbox-items.json",
+    schema: "unified-inbox.schema.json",
+    fragment: "/$defs/ListResponse"
+  },
+  {
+    fixture: "unified-inbox-item-detail.json",
+    schema: "unified-inbox.schema.json",
+    fragment: "/$defs/ItemResponse"
+  },
+  {
+    fixture: "unified-inbox-item-acknowledged.json",
+    schema: "unified-inbox.schema.json",
+    fragment: "/$defs/ItemResponse"
+  },
+  {
+    fixture: "unified-inbox-draft-editable.json",
+    schema: "unified-inbox.schema.json",
+    fragment: "/$defs/DraftResponse"
+  },
+  {
+    fixture: "unified-inbox-draft-discarded.json",
+    schema: "unified-inbox.schema.json",
+    fragment: "/$defs/DraftResponse"
+  },
+  {
+    fixture: "unified-inbox-confirmation.json",
+    schema: "unified-inbox.schema.json",
+    fragment: "/$defs/ConfirmationResponse"
+  },
+  {
+    fixture: "unified-inbox-send-simulated.json",
+    schema: "unified-inbox.schema.json",
+    fragment: "/$defs/SendResponse"
+  },
+  {
+    fixture: "unified-inbox-error-unavailable.json",
+    schema: "error-response.schema.json"
+  },
+  {
     fixture: "usage-summary-manual-ios.json",
     schema: "usage-summary.schema.json"
   },

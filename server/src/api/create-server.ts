@@ -28,7 +28,22 @@ import type {
   ProviderHealth
 } from "../domain/ports.js";
 import type { HandoffService } from "../application/handoff/handoff-service.js";
+import type { UnifiedInboxService } from "../application/inbox/unified-inbox-service.js";
 import type { RestService } from "../application/rest/rest-service.js";
+import {
+  unifiedInboxAcknowledgeRequestSchema,
+  unifiedInboxConfirmationRequestSchema,
+  unifiedInboxListQuerySchema,
+  unifiedInboxPatchDraftRequestSchema,
+  unifiedInboxSendRequestSchema
+} from "../domain/unified-inbox.js";
+import {
+  toInboxConfirmation,
+  toInboxDraft,
+  toInboxItemDetail,
+  toInboxItemSummary,
+  toInboxSendResult
+} from "./unified-inbox-mappers.js";
 
 export interface ServerDependencies {
   config: AppConfig;
@@ -37,10 +52,14 @@ export interface ServerDependencies {
   handoffOrigin: DataOrigin;
   demoRestOrigin: DataOrigin;
   demoHandoffOrigin: DataOrigin;
+  inboxOrigin: DataOrigin;
+  demoInboxOrigin: DataOrigin;
   rest: RestService;
   handoff: HandoffService;
   demoRest: RestService;
   demoHandoff: HandoffService;
+  inbox: UnifiedInboxService;
+  demoInbox: UnifiedInboxService;
   providerHealth(): Promise<Record<string, ProviderHealth>>;
 }
 
@@ -49,9 +68,10 @@ interface RequestContext {
   origin: DataOrigin;
   rest: RestService;
   handoff: HandoffService;
+  inbox: UnifiedInboxService;
 }
 
-type GraphKind = "rest_decision" | "rest" | "handoff";
+type GraphKind = "rest_decision" | "rest" | "handoff" | "inbox";
 
 export function createServer(
   dependencies: ServerDependencies
@@ -158,11 +178,13 @@ export function createServer(
     const origin = graphOrigin(
       dependencies,
       demo,
-      request.url.startsWith("/v1/handoff")
-        ? "handoff"
-        : request.url.startsWith("/v1/rest/evaluate")
-          ? "rest_decision"
-          : "rest"
+      request.url.startsWith("/v1/inbox")
+        ? "inbox"
+        : request.url.startsWith("/v1/handoff")
+          ? "handoff"
+          : request.url.startsWith("/v1/rest/evaluate")
+            ? "rest_decision"
+            : "rest"
     );
     setResponseHeaders(reply, requestId, origin);
     void reply
@@ -287,6 +309,194 @@ export function createServer(
     return reply.status(202).send();
   });
 
+  server.get<{
+    Querystring: {
+      cursor?: string;
+      source?: string;
+      status?: string;
+      needs_reply?: string | boolean;
+    };
+  }>("/v1/inbox/items", async (request, reply) => {
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      false,
+      "inbox"
+    );
+    const query = unifiedInboxListQuerySchema.parse(request.query);
+    const page = await context.inbox.listItems(
+      {
+        ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+        ...(query.source !== undefined ? { source: query.source } : {}),
+        ...(query.status !== undefined ? { status: query.status } : {}),
+        ...(query.needs_reply !== undefined
+          ? { needsReply: query.needs_reply }
+          : {})
+      },
+      context.requestId
+    );
+    return {
+      schema_version: CONTRACT_VERSION,
+      request_id: context.requestId,
+      items: page.items.map(toInboxItemSummary),
+      next_cursor: page.nextCursor
+    };
+  });
+
+  server.get<{
+    Params: { itemId: string };
+  }>("/v1/inbox/items/:itemId", async (request, reply) => {
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      false,
+      "inbox"
+    );
+    const item = await context.inbox.getItem(
+      request.params.itemId,
+      context.requestId
+    );
+    return {
+      schema_version: CONTRACT_VERSION,
+      request_id: context.requestId,
+      item: toInboxItemDetail(item)
+    };
+  });
+
+  server.post<{
+    Params: { itemId: string };
+  }>("/v1/inbox/items/:itemId", async (request, reply) => {
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "inbox"
+    );
+    const itemId = stripOperationSuffix(
+      request.params.itemId,
+      ":acknowledge"
+    );
+    const idempotencyKey = requiredIdempotencyKey(request);
+    const input = unifiedInboxAcknowledgeRequestSchema.parse(request.body);
+    assertBodyRequestId(input.request_id, context.requestId);
+    const item = await context.inbox.acknowledge(
+      itemId,
+      context.requestId,
+      idempotencyKey
+    );
+    return {
+      schema_version: CONTRACT_VERSION,
+      request_id: context.requestId,
+      item: toInboxItemDetail(item)
+    };
+  });
+
+  server.get<{
+    Params: { draftId: string };
+  }>("/v1/inbox/drafts/:draftId", async (request, reply) => {
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      false,
+      "inbox"
+    );
+    const draft = await context.inbox.getDraft(
+      request.params.draftId,
+      context.requestId
+    );
+    return {
+      schema_version: CONTRACT_VERSION,
+      request_id: context.requestId,
+      draft: toInboxDraft(draft)
+    };
+  });
+
+  server.patch<{
+    Params: { draftId: string };
+  }>("/v1/inbox/drafts/:draftId", async (request, reply) => {
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "inbox"
+    );
+    const idempotencyKey = requiredIdempotencyKey(request);
+    const input = unifiedInboxPatchDraftRequestSchema.parse(request.body);
+    assertBodyRequestId(input.request_id, context.requestId);
+    const draft = await context.inbox.updateDraft(
+      request.params.draftId,
+      input,
+      idempotencyKey
+    );
+    return {
+      schema_version: CONTRACT_VERSION,
+      request_id: context.requestId,
+      draft: toInboxDraft(draft)
+    };
+  });
+
+  server.post<{
+    Params: { draftId: string };
+  }>("/v1/inbox/drafts/:draftId/confirmation", async (request, reply) => {
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "inbox"
+    );
+    const idempotencyKey = requiredIdempotencyKey(request);
+    const input = unifiedInboxConfirmationRequestSchema.parse(request.body);
+    assertBodyRequestId(input.request_id, context.requestId);
+    const confirmation = await context.inbox.createConfirmation(
+      request.params.draftId,
+      input,
+      idempotencyKey
+    );
+    return reply.status(201).send({
+      schema_version: CONTRACT_VERSION,
+      request_id: context.requestId,
+      confirmation: toInboxConfirmation(confirmation)
+    });
+  });
+
+  server.post<{
+    Params: { draftId: string };
+  }>("/v1/inbox/drafts/:draftId", async (request, reply) => {
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "inbox"
+    );
+    const draftId = stripOperationSuffix(request.params.draftId, ":send");
+    const idempotencyKey = requiredIdempotencyKey(request);
+    const input = unifiedInboxSendRequestSchema.parse(request.body);
+    assertBodyRequestId(input.request_id, context.requestId);
+    const cancellation = requestCancellation(request, reply);
+    try {
+      const result = await context.inbox.sendDraft(
+        draftId,
+        input,
+        idempotencyKey,
+        { signal: cancellation.signal }
+      );
+      return {
+        schema_version: CONTRACT_VERSION,
+        request_id: context.requestId,
+        result: toInboxSendResult(result)
+      };
+    } finally {
+      cancellation.dispose();
+    }
+  });
+
   return server;
 }
 
@@ -350,7 +560,8 @@ function requestContext(
     requestId,
     origin,
     rest: demo ? dependencies.demoRest : dependencies.rest,
-    handoff: demo ? dependencies.demoHandoff : dependencies.handoff
+    handoff: demo ? dependencies.demoHandoff : dependencies.handoff,
+    inbox: demo ? dependencies.demoInbox : dependencies.inbox
   };
 }
 
@@ -360,12 +571,18 @@ function graphOrigin(
   graph: GraphKind
 ): DataOrigin {
   if (demo) {
+    if (graph === "inbox") {
+      return dependencies.demoInboxOrigin;
+    }
     return graph === "rest" || graph === "rest_decision"
       ? dependencies.demoRestOrigin
       : dependencies.demoHandoffOrigin;
   }
   if (graph === "rest_decision") {
     return dependencies.restDecisionOrigin;
+  }
+  if (graph === "inbox") {
+    return dependencies.inboxOrigin;
   }
   return graph === "rest"
     ? dependencies.restOrigin
@@ -400,6 +617,19 @@ function requiredHeader(
     });
   }
   return value;
+}
+
+function stripOperationSuffix(value: string, suffix: string): string {
+  if (!value.endsWith(suffix) || value.length === suffix.length) {
+    throw new AppError({
+      code: "INVALID_REQUEST",
+      message: "Unified Inbox operation path 无效。",
+      statusCode: 404,
+      retryable: false,
+      details: { reason: "UNIFIED_INBOX_OPERATION_NOT_FOUND" }
+    });
+  }
+  return value.slice(0, -suffix.length);
 }
 
 function requiredIdempotencyKey(request: FastifyRequest): string {

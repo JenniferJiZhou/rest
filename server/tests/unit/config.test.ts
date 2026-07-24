@@ -176,4 +176,20 @@ describe("server listener configuration", () => {
       }).HUSH_REST_DECISION_PROVIDER
     ).toBe("unavailable");
   });
+
+  it("keeps Normal Unified Inbox unavailable unless Canned is explicit", () => {
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        LOG_LEVEL: "silent"
+      }).HUSH_UNIFIED_INBOX_PROVIDER
+    ).toBe("unavailable");
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        HUSH_UNIFIED_INBOX_PROVIDER: "canned",
+        LOG_LEVEL: "silent"
+      }).HUSH_UNIFIED_INBOX_PROVIDER
+    ).toBe("canned");
+  });
 });

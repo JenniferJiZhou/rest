@@ -11,13 +11,15 @@ import {
 } from "./agent/rest-decision/real-rest-decision-provider.js";
 import type { ServerDependencies } from "./api/create-server.js";
 import { HandoffService } from "./application/handoff/handoff-service.js";
+import { UnifiedInboxService } from "./application/inbox/unified-inbox-service.js";
 import { RestService } from "./application/rest/rest-service.js";
 import type { AppConfig } from "./config.js";
 import { FileRestContentRepository } from "./content/file-rest-content-repository.js";
 import {
   InMemoryFeedbackRepository,
   InMemoryHandoffJobRepository,
-  InMemoryIdempotencyStore
+  InMemoryIdempotencyStore,
+  InMemoryUnifiedInboxRepository
 } from "./infra/in-memory.js";
 import {
   type AgentLLM,
@@ -25,7 +27,8 @@ import {
   type HandoffCompletionSink,
   type MailProvider,
   type MessagingChannel,
-  type RestDecisionProvider
+  type RestDecisionProvider,
+  type UnifiedInboxProvider
 } from "./domain/ports.js";
 import {
   ConsoleMessagingChannel,
@@ -35,12 +38,18 @@ import {
   UnavailableMailProvider
 } from "./infra/provider-stubs.js";
 import { RandomIdGenerator, SystemClock } from "./infra/system.js";
+import {
+  CannedUnifiedInboxProvider,
+  UnavailableUnifiedInboxProvider
+} from "./infra/unified-inbox-providers.js";
 
 export interface ServerCompositionOverrides {
   realAgent?: AgentLLM;
   demoAgent?: AgentLLM;
   normalRestDecisionProvider?: RestDecisionProvider;
   demoRestDecisionProvider?: RestDecisionProvider;
+  normalInboxProvider?: UnifiedInboxProvider;
+  demoInboxProvider?: UnifiedInboxProvider;
   realMail?: MailProvider;
   demoMail?: MailProvider;
   messagingChannel?: MessagingChannel;
@@ -73,6 +82,13 @@ export function buildServerDependencies(
   const demoRestDecisionProvider =
     overrides.demoRestDecisionProvider ??
     new CannedRestDecisionProvider(content);
+  const normalInboxProvider =
+    overrides.normalInboxProvider ??
+    (config.HUSH_UNIFIED_INBOX_PROVIDER === "canned"
+      ? new CannedUnifiedInboxProvider()
+      : new UnavailableUnifiedInboxProvider());
+  const demoInboxProvider =
+    overrides.demoInboxProvider ?? new CannedUnifiedInboxProvider();
   const realMail = overrides.realMail ?? new UnavailableMailProvider();
   const demoMail = overrides.demoMail ?? new FixtureMailProvider();
   const messaging =
@@ -102,6 +118,22 @@ export function buildServerDependencies(
     handoffOrigin: graphOrigin(realAgent, realMail, completionSink),
     demoRestOrigin: "mock",
     demoHandoffOrigin: "mock",
+    inboxOrigin: graphOrigin(normalInboxProvider),
+    demoInboxOrigin: "mock",
+    inbox: new UnifiedInboxService(
+      normalInboxProvider,
+      new InMemoryUnifiedInboxRepository(),
+      new InMemoryIdempotencyStore<unknown>(),
+      clock,
+      ids
+    ),
+    demoInbox: new UnifiedInboxService(
+      demoInboxProvider,
+      new InMemoryUnifiedInboxRepository(),
+      new InMemoryIdempotencyStore<unknown>(),
+      clock,
+      ids
+    ),
     rest: new RestService(
       realAgent,
       content,
@@ -163,6 +195,7 @@ export function buildServerDependencies(
       rest_decision: await normalRestDecisionProvider.health(),
       gmail: await realMail.health(),
       messaging_fallback: await messaging.health(),
+      unified_inbox: await normalInboxProvider.health(),
       rest_content: "ready",
       handoff_jobs: "ready"
     })

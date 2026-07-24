@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "request_id": "req_fixture_draft_discarded",
+  "draft": {
+    "id": "draft_qq_mail_001",
+    "item_id": "item_qq_mail_001",
+    "body": "This synthetic draft was discarded.",
+    "status": "discarded",
+    "version": 2,
+    "updated_at": "2026-07-24T10:20:00+08:00",
+    "confirmation_state": "invalidated",
+    "sent_at": null
+  }
+}

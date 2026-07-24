@@ -69,7 +69,7 @@ corepack pnpm test:deployment
 ```
 
 `test:contracts` validates fixtures and local OpenAPI references. The current
-full suite contains 393 deterministic tests. W1-04
+full suite contains 432 deterministic tests. W1-04
 vertical-slice tests use real TCP/HTTP on a random `127.0.0.1` port and do not
 expose a stable development port.
 
@@ -169,3 +169,27 @@ control Shield, notifications, actions, request IDs, or checkpoints.
 
 See `../docs/19_REAL_REST_DECISION_AGENT.md` for configuration, failure
 behavior, staging handoff, prompt-version policy, and manual evaluation.
+
+## Unified Inbox Mock Vertical Slice
+
+Seven `/v1/inbox/**` operations implement provider-neutral list/detail,
+acknowledge, draft CAS updates/discard, short-lived confirmation, and send.
+Normal defaults to `HUSH_UNIFIED_INBOX_PROVIDER=unavailable`; explicit
+`canned` and the isolated Demo graph use fixed fixtures. Canned send returns
+`delivery_mode=simulated` with `X-Hush-Data-Origin: mock` and never contacts
+Feishu, DingTalk, Outlook, or QQ Mail.
+
+Drafts, confirmations, idempotency claims, and atomic send claims are
+process-local. Restart and multiple instances do not preserve or share this
+state. Swift mapping and the remaining real-integration work are documented
+in `../docs/21_UNIFIED_INBOX_CONTRACT_AND_SWIFT_MAPPING.md`.
+
+Local smoke defaults to read/edit/confirm without send:
+
+```powershell
+..\scripts\smoke-unified-inbox.ps1 `
+  -BaseUrl "http://127.0.0.1:3000" `
+  -Mode LocalHttp
+```
+
+Only a controlled mock environment may add `-AllowSimulatedSend`.

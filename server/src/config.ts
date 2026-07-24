@@ -21,6 +21,9 @@ const environmentSchema = z
     HUSH_REST_DECISION_PROVIDER: z
       .enum(["real", "canned", "unavailable"])
       .default("canned"),
+    HUSH_UNIFIED_INBOX_PROVIDER: z
+      .enum(["canned", "unavailable"])
+      .default("unavailable"),
     CLAUDE_API_KEY: z.string().min(1).optional(),
     CLAUDE_MODEL: z.string().min(1).optional(),
     CLAUDE_BASE_URL: z.url().default("https://api.anthropic.com"),
