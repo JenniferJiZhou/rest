@@ -30,7 +30,8 @@ export class FixtureInboxIntelligenceProvider
       important_points: [input.content.slice(0, 200)],
       todos: ["查看信息并决定回复内容"],
       priority: "normal" as const,
-      needs_reply: true
+      needs_reply: true,
+      reply_targets: []
     };
   }
 

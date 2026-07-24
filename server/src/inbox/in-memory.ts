@@ -3,6 +3,7 @@ import type {
   InboxDraft,
   InboxEvent,
   InboxProvider,
+  InboxSummaryResult,
   InboxSyncStatus,
   UnifiedInboxItem
 } from "../domain/contracts.js";
@@ -39,11 +40,19 @@ export class InMemoryInboxRepository implements InboxRepository {
     const item: UnifiedInboxItem = {
       id: `inbox_${randomUUID()}`,
       ...structuredClone(event),
+      item_kind: "message",
+      revision: 1,
+      message_count: 1,
+      window_started_at: event.received_at,
+      window_ended_at: event.received_at,
+      sealed_at: null,
+      acknowledged_at: null,
       summary: null,
       important_points: [],
       todos: [],
       priority: "uncertain",
       needs_reply: null,
+      reply_targets: [],
       draft_id: null,
       sync_status: "pending"
     };
@@ -77,13 +86,7 @@ export class InMemoryInboxRepository implements InboxRepository {
 
   async saveEnrichment(
     id: string,
-    enrichment: {
-      summary: string;
-      important_points: string[];
-      todos: string[];
-      priority: UnifiedInboxItem["priority"];
-      needs_reply: boolean;
-    }
+    enrichment: InboxSummaryResult
   ): Promise<UnifiedInboxItem> {
     const item = this.requireItem(id);
     const updated: UnifiedInboxItem = {

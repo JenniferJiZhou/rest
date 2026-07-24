@@ -142,9 +142,12 @@ export class OutlookGraphAdapter implements InboxSource, InboxSender {
       provider: this.provider,
       account_id: accountId,
       conversation_id: message.conversationId ?? null,
+      conversation_type: "direct",
+      conversation_name: "Outlook 邮件会话",
       provider_message_id: message.id,
       sender:
         message.from?.emailAddress?.address ?? "unknown@outlook.invalid",
+      sender_ref: null,
       recipients: (message.toRecipients ?? [])
         .map((recipient) => recipient.emailAddress?.address)
         .filter((address): address is string => Boolean(address)),

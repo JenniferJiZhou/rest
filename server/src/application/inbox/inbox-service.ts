@@ -20,6 +20,7 @@ import type {
   InboxDraftRepository,
   InboxIntelligenceProvider,
   InboxRepository,
+  InboxSummaryInput,
   InboxSender
 } from "../../inbox/ports.js";
 import type { InboxProvider } from "../../domain/contracts.js";
@@ -107,14 +108,9 @@ export class InboxService {
 
   async summarize(id: string): Promise<UnifiedInboxItem> {
     const item = await this.getItem(id);
-    const summary = await this.intelligence.summarize({
-      provider: item.provider,
-      sender: item.sender,
-      recipients: item.recipients,
-      subject: item.subject,
-      content: item.content,
-      receivedAt: item.received_at
-    });
+    const summary = await this.intelligence.summarize(
+      sourceMessageInput(item)
+    );
     return this.items.saveEnrichment(id, summary);
   }
 
@@ -131,12 +127,7 @@ export class InboxService {
     }
 
     const generated = await this.intelligence.draftReply({
-      provider: item.provider,
-      sender: item.sender,
-      recipients: item.recipients,
-      subject: item.subject,
-      content: item.content,
-      receivedAt: item.received_at,
+      ...sourceMessageInput(item),
       summary: item.summary!,
       importantPoints: item.important_points,
       todos: item.todos,
@@ -204,6 +195,10 @@ export class InboxService {
       });
     }
     const item = await this.getItem(draft.inbox_item_id);
+    const replyTo = item.sender;
+    if (replyTo === null) {
+      throw rawMessageUnavailable();
+    }
     const requestHash = canonicalRequestHash({
       draftId: draft.id,
       version: draft.version,
@@ -211,7 +206,7 @@ export class InboxService {
       accountId: item.account_id,
       conversationId: item.conversation_id,
       providerMessageId: item.provider_message_id,
-      replyTo: item.sender,
+      replyTo,
       recipients: item.recipients,
       subject: item.subject,
       content: draft.content,
@@ -254,7 +249,7 @@ export class InboxService {
               accountId: item.account_id,
               conversationId: item.conversation_id,
               providerMessageId: item.provider_message_id,
-              replyTo: item.sender,
+              replyTo,
               recipients: item.recipients,
               subject: item.subject,
               content: sendingDraft.content,
@@ -338,5 +333,27 @@ function providerUnavailable(provider: InboxProvider): AppError {
     statusCode: 503,
     retryable: true,
     details: { provider }
+  });
+}
+
+function sourceMessageInput(item: UnifiedInboxItem): InboxSummaryInput {
+  if (item.sender === null || item.content === null) {
+    throw rawMessageUnavailable();
+  }
+  return {
+    provider: item.provider,
+    sender: item.sender,
+    recipients: item.recipients,
+    subject: item.subject,
+    content: item.content,
+    receivedAt: item.received_at
+  };
+}
+
+function rawMessageUnavailable(): AppError {
+  return new AppError({
+    code: "INVALID_REQUEST",
+    message: "该收件箱项目没有可用于摘要、草稿或发送的原始消息内容。",
+    statusCode: 400
   });
 }

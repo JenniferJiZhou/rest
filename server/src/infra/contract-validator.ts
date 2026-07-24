@@ -98,6 +98,10 @@ export const FIXTURE_CONTRACTS: FixtureContract[] = [
     schema: "inbox-item.schema.json"
   },
   {
+    fixture: "inbox-group-digest-demo.json",
+    schema: "inbox-item.schema.json"
+  },
+  {
     fixture: "inbox-draft-edited-demo.json",
     schema: "inbox-draft.schema.json"
   }
@@ -105,6 +109,10 @@ export const FIXTURE_CONTRACTS: FixtureContract[] = [
 
 export function createContractValidator(rootPath?: string): {
   validateFixture(contract: FixtureContract): {
+    valid: boolean;
+    errors: ValidateFunction["errors"];
+  };
+  validateValue(contract: FixtureContract, value: unknown): {
     valid: boolean;
     errors: ValidateFunction["errors"];
   };
@@ -138,25 +146,35 @@ export function createContractValidator(rootPath?: string): {
 
   return {
     validateFixture(contract) {
-      const schemaUrl = new URL(contract.schema, schemaBaseUrl).href;
-      const key = contract.fragment
-        ? `${schemaUrl}#${contract.fragment}`
-        : schemaUrl;
-      const validate = ajv.getSchema(key);
-      if (!validate) {
-        throw new Error(`Schema was not registered: ${key}`);
-      }
       const fixture = JSON.parse(
         readFileSync(resolve(fixtureDirectory, contract.fixture), "utf8")
       ) as unknown;
-      const validationResult = validate(fixture);
-      if (typeof validationResult !== "boolean") {
-        throw new Error("Async JSON Schema validation is not supported.");
-      }
-      return {
-        valid: validationResult,
-        errors: validate.errors
-      };
+      return validateValue(contract, fixture);
+    },
+    validateValue(contract, value) {
+      return validateValue(contract, value);
     }
   };
+
+  function validateValue(contract: FixtureContract, value: unknown): {
+    valid: boolean;
+    errors: ValidateFunction["errors"];
+  } {
+    const schemaUrl = new URL(contract.schema, schemaBaseUrl).href;
+    const key = contract.fragment
+      ? `${schemaUrl}#${contract.fragment}`
+      : schemaUrl;
+    const validate = ajv.getSchema(key);
+    if (!validate) {
+      throw new Error(`Schema was not registered: ${key}`);
+    }
+    const validationResult = validate(value);
+    if (typeof validationResult !== "boolean") {
+      throw new Error("Async JSON Schema validation is not supported.");
+    }
+    return {
+      valid: validationResult,
+      errors: validate.errors
+    };
+  }
 }

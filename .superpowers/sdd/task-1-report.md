@@ -64,3 +64,66 @@ Output: failed outside Task 1's authorized file list because existing Inbox serv
 ## Concerns
 
 - A follow-on implementation task must update Inbox creators, provider normalization, enrichment, and relevant tests before repository-wide typecheck can pass.
+
+## Reviewer fix follow-up
+
+### Scope and implementation
+
+- Registered `inbox-group-digest-demo.json` in the AJV fixture contract list.
+- Added Zod and AJV negative cases for a group digest with a non-null `sender`, `sender_ref`, or `content`.
+- Updated the existing repository, intelligence fixture, provider adapters, and typed Inbox fixtures to construct every newly required field without weakening the contract or using unsafe type assertions.
+- Raw-message operations now explicitly reject a public digest with no raw sender/content instead of treating its redacted fields as strings. No conversation aggregation, mentions, StepFun, or acknowledgement endpoint implementation was added.
+
+### RED → GREEN
+
+```bash
+./node_modules/.bin/vitest run tests/contracts/fixtures.test.ts
+```
+
+Initial RED output: 4 expected failures — the group fixture was not AJV-registered, and Zod accepted each non-null group-digest source field. During the first GREEN attempt, the validation hook was attached to an unrelated Rest schema; the same command reported the remaining 3 expected privacy failures. The hook was moved to `unifiedInboxItemSchema`.
+
+Final GREEN command:
+
+```bash
+./node_modules/.bin/vitest run tests/contracts/fixtures.test.ts tests/contracts/openapi.test.ts
+```
+
+Output: 2 files passed, 39 tests passed.
+
+Focused Inbox verification also passed:
+
+```bash
+./node_modules/.bin/vitest run tests/unit/connector-host.test.ts tests/unit/inbox-repositories.test.ts tests/unit/inbox-service.test.ts tests/unit/inbox-confirmation.test.ts
+./node_modules/.bin/vitest run tests/provider-contracts/inbox-provider-kit.test.ts tests/unit/inbox-intelligence.test.ts tests/unit/inbox-cli-adapters.test.ts
+./node_modules/.bin/vitest run tests/integration/inbox-http.test.ts
+```
+
+Output: 23/23 unit, 14/14 provider/intelligence/adapter, and 3/3 integration tests passed.
+
+```bash
+./node_modules/.bin/tsc --noEmit
+```
+
+Output: passed with no errors.
+
+### Files added or modified by the fix
+
+- `server/src/application/inbox/inbox-service.ts`
+- `server/src/inbox/in-memory.ts`
+- `server/src/inbox/intelligence.ts`
+- `server/src/inbox/providers/{dingtalk-dws-adapter,lark-cli-adapter,outlook-graph-adapter,provider-fixtures,qq-mail-adapter}.ts`
+- `server/src/infra/contract-validator.ts`
+- `server/tests/contracts/fixtures.test.ts`
+- `server/tests/integration/inbox-http.test.ts`
+- `server/tests/unit/{connector-host,inbox-repositories,inbox-service}.test.ts`
+
+### Self-review
+
+- The JSON Schema and Zod validator reject all three public group-digest raw-message fields independently.
+- The fixture validator covers the valid group digest through AJV and invalid values through `validateValue`.
+- Source events remain non-null for raw sender/content; public message items initialize all digest contract metadata with the single-message values.
+- `git diff --check` and TypeScript typecheck complete without output.
+
+### Remaining concern
+
+- `pnpm` is unavailable on this container PATH; direct installed `vitest` and `tsc` commands were used for the recorded verification.

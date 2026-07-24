@@ -30,6 +30,13 @@ describe("contract fixtures", () => {
     });
   }
 
+  it("registers the group digest fixture for JSON Schema validation", () => {
+    expect(FIXTURE_CONTRACTS).toContainEqual({
+      fixture: "inbox-group-digest-demo.json",
+      schema: "inbox-item.schema.json"
+    });
+  });
+
   it.each([
     ["inbox-event-batch-demo.json", inboxEventBatchSchema],
     ["inbox-item-enriched-demo.json", unifiedInboxItemSchema],
@@ -80,6 +87,36 @@ describe("contract fixtures", () => {
       })
     ).toMatchObject({ expected_revision: 3 });
   });
+
+  it.each([
+    ["sender", "leaked-sender"],
+    ["sender_ref", "participant_demo_0002"],
+    ["content", "leaked raw message content"]
+  ])(
+    "rejects a group digest with non-null %s in Zod and JSON Schema",
+    (field, value) => {
+      const digest = JSON.parse(
+        readFileSync(
+          resolve(fixtureDirectory, "inbox-group-digest-demo.json"),
+          "utf8"
+        )
+      ) as Record<string, unknown>;
+      const invalidDigest = { ...digest, [field]: value };
+
+      expect(unifiedInboxItemSchema.safeParse(invalidDigest).success).toBe(
+        false
+      );
+      const result = validator.validateValue(
+        {
+          fixture: "inbox-group-digest-demo.json",
+          schema: "inbox-item.schema.json"
+        },
+        invalidDigest
+      );
+      expect(result.errors).not.toBeNull();
+      expect(result.valid).toBe(false);
+    }
+  );
 
   it.each([
     "usage-summary-manual-ios.json",
