@@ -29,18 +29,24 @@ import type {
   ProviderHealth
 } from "../domain/ports.js";
 import type { HandoffService } from "../application/handoff/handoff-service.js";
+import type { InboxService } from "../application/inbox/inbox-service.js";
 import type { RestService } from "../application/rest/rest-service.js";
+import { registerInboxRoutes } from "./inbox-routes.js";
 
 export interface ServerDependencies {
   config: AppConfig;
   restOrigin: DataOrigin;
   handoffOrigin: DataOrigin;
+  inboxOrigin: DataOrigin;
   demoRestOrigin: DataOrigin;
   demoHandoffOrigin: DataOrigin;
+  demoInboxOrigin: DataOrigin;
   rest: RestService;
   handoff: HandoffService;
+  inbox: InboxService;
   demoRest: RestService;
   demoHandoff: HandoffService;
+  demoInbox: InboxService;
   providerHealth(): Promise<Record<string, ProviderHealth>>;
 }
 
@@ -49,9 +55,10 @@ interface RequestContext {
   origin: DataOrigin;
   rest: RestService;
   handoff: HandoffService;
+  inbox: InboxService;
 }
 
-type GraphKind = "rest" | "handoff";
+type GraphKind = "rest" | "handoff" | "inbox";
 
 export function createServer(
   dependencies: ServerDependencies
@@ -118,11 +125,12 @@ export function createServer(
         suppliedDemoToken,
         dependencies.config.HUSH_DEMO_TOKEN
       );
-    const origin = graphOrigin(
-      dependencies,
-      demo,
-      request.url.startsWith("/v1/handoff") ? "handoff" : "rest"
-    );
+    const graph: GraphKind = request.url.startsWith("/v1/handoff")
+      ? "handoff"
+      : request.url.startsWith("/v1/inbox")
+        ? "inbox"
+        : "rest";
+    const origin = graphOrigin(dependencies, demo, graph);
     setResponseHeaders(reply, requestId, origin);
     void reply
       .status(appError.statusCode)
@@ -133,7 +141,8 @@ export function createServer(
     const requestId = header(request, "x-request-id") ?? request.id;
     const origin =
       dependencies.restOrigin === "real" &&
-      dependencies.handoffOrigin === "real"
+      dependencies.handoffOrigin === "real" &&
+      dependencies.inboxOrigin === "real"
         ? "real"
         : "mock";
     setResponseHeaders(reply, requestId, origin);
@@ -240,6 +249,24 @@ export function createServer(
     return reply.status(202).send();
   });
 
+  registerInboxRoutes(server, {
+    context: (request, reply, hasBody) => {
+      const context = requestContext(
+        request,
+        reply,
+        dependencies,
+        hasBody,
+        "inbox"
+      );
+      return {
+        requestId: context.requestId,
+        inbox: context.inbox
+      };
+    },
+    assertBodyRequestId,
+    requiredIdempotencyKey
+  });
+
   return server;
 }
 
@@ -303,7 +330,8 @@ function requestContext(
     requestId,
     origin,
     rest: demo ? dependencies.demoRest : dependencies.rest,
-    handoff: demo ? dependencies.demoHandoff : dependencies.handoff
+    handoff: demo ? dependencies.demoHandoff : dependencies.handoff,
+    inbox: demo ? dependencies.demoInbox : dependencies.inbox
   };
 }
 
@@ -313,13 +341,19 @@ function graphOrigin(
   graph: GraphKind
 ): DataOrigin {
   if (demo) {
-    return graph === "rest"
-      ? dependencies.demoRestOrigin
-      : dependencies.demoHandoffOrigin;
+    if (graph === "rest") {
+      return dependencies.demoRestOrigin;
+    }
+    return graph === "handoff"
+      ? dependencies.demoHandoffOrigin
+      : dependencies.demoInboxOrigin;
   }
-  return graph === "rest"
-    ? dependencies.restOrigin
-    : dependencies.handoffOrigin;
+  if (graph === "rest") {
+    return dependencies.restOrigin;
+  }
+  return graph === "handoff"
+    ? dependencies.handoffOrigin
+    : dependencies.inboxOrigin;
 }
 
 function assertBodyRequestId(

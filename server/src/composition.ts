@@ -3,6 +3,7 @@ import { ClaudeAgentLLM } from "./agent/claude-llm.js";
 import { ResilientAgentLLM } from "./agent/resilient-llm.js";
 import type { ServerDependencies } from "./api/create-server.js";
 import { HandoffService } from "./application/handoff/handoff-service.js";
+import { InboxService } from "./application/inbox/inbox-service.js";
 import { RestService } from "./application/rest/rest-service.js";
 import type { AppConfig } from "./config.js";
 import { FileRestContentRepository } from "./content/file-rest-content-repository.js";
@@ -26,6 +27,17 @@ import {
   UnavailableMailProvider
 } from "./infra/provider-stubs.js";
 import { RandomIdGenerator, SystemClock } from "./infra/system.js";
+import { InMemoryConfirmationTokenStore } from "./inbox/confirmation.js";
+import {
+  InMemoryCheckpointStore,
+  InMemoryInboxDraftRepository,
+  InMemoryInboxRepository
+} from "./inbox/in-memory.js";
+import {
+  FixtureInboxIntelligenceProvider,
+  UnavailableInboxIntelligenceProvider
+} from "./inbox/intelligence.js";
+import type { InboxSendResult } from "./domain/contracts.js";
 
 export interface ServerCompositionOverrides {
   realAgent?: AgentLLM;
@@ -77,13 +89,19 @@ export function buildServerDependencies(
   }
   const clock = new SystemClock();
   const ids = new RandomIdGenerator();
+  const realInboxIntelligence =
+    new UnavailableInboxIntelligenceProvider();
+  const demoInboxIntelligence =
+    new FixtureInboxIntelligenceProvider();
 
   return {
     config,
     restOrigin: graphOrigin(realAgent),
     handoffOrigin: graphOrigin(realAgent, realMail, completionSink),
+    inboxOrigin: graphOrigin(realInboxIntelligence),
     demoRestOrigin: "mock",
     demoHandoffOrigin: "mock",
+    demoInboxOrigin: "mock",
     rest: new RestService(
       realAgent,
       content,
@@ -132,9 +150,32 @@ export function buildServerDependencies(
         }
       }
     ),
+    inbox: new InboxService(
+      new InMemoryInboxRepository(),
+      new InMemoryInboxDraftRepository(),
+      realInboxIntelligence,
+      new Map(),
+      new InMemoryConfirmationTokenStore(clock.now.bind(clock)),
+      new InMemoryIdempotencyStore<InboxSendResult>(),
+      new InMemoryCheckpointStore(clock.now.bind(clock)),
+      clock,
+      ids
+    ),
+    demoInbox: new InboxService(
+      new InMemoryInboxRepository(),
+      new InMemoryInboxDraftRepository(),
+      demoInboxIntelligence,
+      new Map(),
+      new InMemoryConfirmationTokenStore(clock.now.bind(clock)),
+      new InMemoryIdempotencyStore<InboxSendResult>(),
+      new InMemoryCheckpointStore(clock.now.bind(clock)),
+      clock,
+      ids
+    ),
     providerHealth: async () => ({
       agent: await realAgent.health(),
       gmail: await realMail.health(),
+      inbox_intelligence: await realInboxIntelligence.health(),
       messaging_fallback: await messaging.health(),
       rest_content: "ready",
       handoff_jobs: "ready"
