@@ -450,6 +450,7 @@ function sendInput(accountId: string, conversationId: string) {
     subject: null,
     content: "用户确认后的回复",
     contentType: "text" as const,
-    idempotencyKey: "send-key-1"
+    idempotencyKey: "send-key-1",
+    mentions: []
   };
 }

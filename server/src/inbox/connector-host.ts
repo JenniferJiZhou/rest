@@ -106,12 +106,15 @@ export class ConnectorHost {
         this.syncTimeoutMs,
         () => controller.abort()
       );
-      await this.inbox.ingest({
-        schema_version: CONTRACT_VERSION,
-        request_id: this.ids.next("connector"),
-        checkpoint: pulled.checkpoint,
-        events: pulled.items
-      });
+      await this.inbox.ingest(
+        {
+          schema_version: CONTRACT_VERSION,
+          request_id: this.ids.next("connector"),
+          checkpoint: pulled.checkpoint,
+          events: pulled.items
+        },
+        pulled.participantBindings
+      );
       await this.checkpoints.put(
         account.source.provider,
         account.accountId,

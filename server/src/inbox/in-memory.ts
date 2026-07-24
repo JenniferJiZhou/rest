@@ -210,11 +210,38 @@ export class InMemoryInboxRepository implements InboxRepository {
     return structuredClone(this.sourceMessagesByItemId.get(id) ?? []);
   }
 
+  async markEnrichmentFailed(
+    id: string,
+    expectedRevision: number,
+    _reason: string
+  ): Promise<UnifiedInboxItem> {
+    const item = this.requireItem(id);
+    if (item.revision !== expectedRevision) {
+      throw revisionConflict(item.revision);
+    }
+    const updated: UnifiedInboxItem = {
+      ...item,
+      sync_status: "failed"
+    };
+    this.items.set(id, updated);
+    return structuredClone(updated);
+  }
+
   async setDraftId(
     id: string,
+    expectedRevision: number,
     draftId: string
   ): Promise<UnifiedInboxItem> {
     const item = this.requireItem(id);
+    if (item.revision !== expectedRevision) {
+      throw revisionConflict(item.revision);
+    }
+    if (item.draft_id !== null) {
+      if (item.draft_id === draftId) {
+        return structuredClone(item);
+      }
+      throw revisionConflict(item.revision);
+    }
     const updated = { ...item, draft_id: draftId };
     this.items.set(id, updated);
     return structuredClone(updated);

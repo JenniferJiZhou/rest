@@ -221,6 +221,135 @@ describe("Unified Inbox HTTP API", () => {
     });
   });
 
+  it("acknowledges an exact group digest revision without exposing private participant IDs", async () => {
+    const rawProviderParticipantId = "ou_raw_private_value";
+    const ingest = await server.inject({
+      method: "POST",
+      url: "/v1/inbox/events:batch",
+      headers: baseHeaders("req_group_digest_batch"),
+      payload: groupDigestBatch("req_group_digest_batch", [
+        "group-http-message-1",
+        "group-http-message-2",
+        "group-http-message-3"
+      ])
+    });
+    expect(ingest.statusCode, ingest.body).toBe(202);
+    expect(ingest.json()).toMatchObject({
+      accepted: 3,
+      duplicates: 0
+    });
+    expect(new Set(ingest.json().item_ids).size).toBe(1);
+    const itemId = ingest.json().item_ids[0] as string;
+
+    const listed = await server.inject({
+      method: "GET",
+      url: "/v1/inbox/items",
+      headers: baseHeaders("req_group_digest_list")
+    });
+    const groupCards = (
+      listed.json().items as Array<Record<string, unknown>>
+    ).filter(
+      (item) =>
+        item.conversation_id === "conversation-group-http-ack"
+    );
+    expect(groupCards).toHaveLength(1);
+    expect(groupCards[0]).toMatchObject({
+      id: itemId,
+      item_kind: "conversation_digest",
+      revision: 3,
+      message_count: 3,
+      sender: null,
+      sender_ref: null,
+      content: null
+    });
+
+    const acknowledged = await server.inject({
+      method: "POST",
+      url: `/v1/inbox/items/${itemId}:acknowledge`,
+      headers: baseHeaders("req_group_digest_ack"),
+      payload: {
+        schema_version: "1.0",
+        request_id: "req_group_digest_ack",
+        expected_revision: 3
+      }
+    });
+    expect(acknowledged.statusCode, acknowledged.body).toBe(200);
+    expect(acknowledged.json()).toMatchObject({
+      id: itemId,
+      revision: 3,
+      acknowledged_at: expect.any(String),
+      sealed_at: expect.any(String)
+    });
+
+    const staleAcknowledgement = await server.inject({
+      method: "POST",
+      url: `/v1/inbox/items/${itemId}:acknowledge`,
+      headers: baseHeaders("req_group_digest_ack_stale"),
+      payload: {
+        schema_version: "1.0",
+        request_id: "req_group_digest_ack_stale",
+        expected_revision: 3
+      }
+    });
+    expect(staleAcknowledgement.statusCode).toBe(409);
+    expect(staleAcknowledgement.json().error.code).toBe(
+      "INBOX_VERSION_CONFLICT"
+    );
+
+    const appended = await server.inject({
+      method: "POST",
+      url: "/v1/inbox/events:batch",
+      headers: baseHeaders("req_group_digest_after_ack"),
+      payload: groupDigestBatch("req_group_digest_after_ack", [
+        "group-http-message-4"
+      ])
+    });
+    expect(appended.statusCode, appended.body).toBe(202);
+    const nextItemId = appended.json().item_ids[0] as string;
+    expect(nextItemId).not.toBe(itemId);
+
+    const fetchedItems = await Promise.all(
+      [itemId, nextItemId].map((id, index) =>
+        server.inject({
+          method: "GET",
+          url: `/v1/inbox/items/${id}`,
+          headers: baseHeaders(`req_group_digest_get_${index}`)
+        })
+      )
+    );
+    const firstItem = fetchedItems[0]!;
+    const nextItem = fetchedItems[1]!;
+    expect(firstItem.statusCode).toBe(200);
+    expect(nextItem.statusCode).toBe(200);
+    expect(
+      JSON.stringify([firstItem.json(), nextItem.json()])
+    ).not.toContain(rawProviderParticipantId);
+  });
+
+  it("rejects private participant bindings at the HTTP ingestion boundary", async () => {
+    const payload = {
+      ...groupDigestBatch("req_group_private_binding", [
+        "group-http-private-binding"
+      ]),
+      participant_bindings: [
+        {
+          participant_ref: "participant_12345678",
+          provider_participant_id: "ou_raw_private_value"
+        }
+      ]
+    };
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/inbox/events:batch",
+      headers: baseHeaders("req_group_private_binding"),
+      payload
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body).not.toContain("ou_raw_private_value");
+  });
+
   it("separates app and connector authentication scopes", async () => {
     const unauthenticated = await server.inject({
       method: "GET",
@@ -427,6 +556,39 @@ function feishuGroupEventBatch(requestId: string) {
         }
       }
     ]
+  };
+}
+
+function groupDigestBatch(
+  requestId: string,
+  providerMessageIds: string[]
+) {
+  return {
+    schema_version: "1.0",
+    request_id: requestId,
+    checkpoint: `checkpoint-${requestId}`,
+    events: providerMessageIds.map((providerMessageId, index) => ({
+      provider: "dingtalk",
+      account_id: "dingtalk-http-account",
+      conversation_id: "conversation-group-http-ack",
+      conversation_type: "group",
+      conversation_name: "HTTP 群聊",
+      provider_message_id: providerMessageId,
+      sender: index % 2 === 0 ? "王同学" : "李同学",
+      sender_ref:
+        index % 2 === 0
+          ? "participant_http_0001"
+          : "participant_http_0002",
+      recipients: ["dingtalk-http-account"],
+      subject: null,
+      content: "请确认接口交付时间。",
+      received_at: `2026-07-24T11:0${index}:00+08:00`,
+      coverage: {
+        source: "official_api",
+        complete: true,
+        note: null
+      }
+    }))
   };
 }
 

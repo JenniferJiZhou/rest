@@ -4,6 +4,7 @@ import {
   type InboxDraft,
   type InboxEventBatch,
   type InboxSendResult,
+  type InboxSummaryResult,
   type InboxSyncStatus,
   type UnifiedInboxItem
 } from "../../domain/contracts.js";
@@ -19,7 +20,10 @@ import type {
   ConfirmationTokenStore,
   InboxDraftRepository,
   InboxIntelligenceProvider,
+  InboxParticipantBinding,
+  InboxParticipantDirectory,
   InboxRepository,
+  ReplyDraftResult,
   InboxSourceMessage,
   InboxSummaryInput,
   InboxSender
@@ -57,36 +61,136 @@ export class InboxService {
     private readonly sendIdempotency: IdempotencyStore<InboxSendResult>,
     private readonly checkpoints: CheckpointStore,
     private readonly clock: Clock,
-    private readonly ids: IdGenerator
+    private readonly ids: IdGenerator,
+    private readonly participants?: InboxParticipantDirectory
   ) {}
 
-  async ingest(input: InboxEventBatch): Promise<InboxIngestResult> {
+  async ingest(
+    input: InboxEventBatch,
+    participantBindings: InboxParticipantBinding[] = []
+  ): Promise<InboxIngestResult> {
     const batch = inboxEventBatchSchema.parse(input);
     const itemIds: string[] = [];
-    const createdIds: string[] = [];
+    const changedRevisions = new Map<string, number>();
+    let accepted = 0;
+
+    if (participantBindings.length > 0) {
+      if (!this.participants) {
+        throw new AppError({
+          code: "INTERNAL_ERROR",
+          message: "回复目标目录未配置。",
+          statusCode: 500
+        });
+      }
+      await this.participants.bindAll(participantBindings);
+    }
 
     for (const event of batch.events) {
       const result = await this.items.upsert(event);
       itemIds.push(result.item.id);
-      if (result.created) {
-        createdIds.push(result.item.id);
+      if (result.changed) {
+        accepted += 1;
+        changedRevisions.set(result.item.id, result.item.revision);
       }
     }
 
-    for (const itemId of createdIds) {
-      try {
-        await this.summarize(itemId);
-        await this.createDraft(itemId);
-      } catch {
-        // Raw Inbox items remain available when optional AI enrichment fails.
-      }
+    for (const [itemId, expectedRevision] of changedRevisions) {
+      await this.enrichIngestedItem(itemId, expectedRevision);
     }
 
     return {
-      accepted: createdIds.length,
-      duplicates: batch.events.length - createdIds.length,
+      accepted,
+      duplicates: batch.events.length - accepted,
       itemIds
     };
+  }
+
+  private async enrichIngestedItem(
+    itemId: string,
+    expectedRevision: number
+  ): Promise<void> {
+    const item = await this.getItem(itemId);
+    const messages = await this.items.sourceMessages(itemId);
+    let summary: InboxSummaryResult;
+    try {
+      summary = await this.intelligence.summarize(
+        conversationInput(item, messages)
+      );
+    } catch {
+      await this.markEnrichmentFailed(itemId, expectedRevision);
+      return;
+    }
+
+    let enriched: UnifiedInboxItem;
+    try {
+      enriched = await this.items.saveEnrichment(
+        itemId,
+        expectedRevision,
+        summary
+      );
+    } catch (error) {
+      if (isVersionConflict(error)) {
+        return;
+      }
+      throw error;
+    }
+    if (!enriched.needs_reply) {
+      return;
+    }
+
+    let generated: ReplyDraftResult;
+    try {
+      generated = await this.intelligence.draftReply({
+        ...conversationInput(enriched, messages),
+        summary: enriched.summary!,
+        importantPoints: enriched.important_points,
+        todos: enriched.todos,
+        priority: enriched.priority,
+        needsReply: enriched.needs_reply,
+        replyTargets: enriched.reply_targets.map((target) => ({
+          displayName: target.display_name,
+          reason: target.reason
+        }))
+      });
+    } catch {
+      await this.markEnrichmentFailed(itemId, expectedRevision);
+      return;
+    }
+    const draft = await this.drafts.create({
+      id: this.ids.next("draft"),
+      inboxItemId: enriched.id,
+      content: generated.content,
+      contentType: generated.contentType,
+      now: this.clock.now().toISOString()
+    });
+    try {
+      await this.items.setDraftId(
+        enriched.id,
+        expectedRevision,
+        draft.id
+      );
+    } catch (error) {
+      if (!isVersionConflict(error)) {
+        throw error;
+      }
+    }
+  }
+
+  private async markEnrichmentFailed(
+    itemId: string,
+    expectedRevision: number
+  ): Promise<void> {
+    try {
+      await this.items.markEnrichmentFailed(
+        itemId,
+        expectedRevision,
+        "ai_enrichment_failed"
+      );
+    } catch (error) {
+      if (!isVersionConflict(error)) {
+        throw error;
+      }
+    }
   }
 
   async listItems(input: {
@@ -105,6 +209,18 @@ export class InboxService {
       throw itemNotFound();
     }
     return item;
+  }
+
+  async acknowledge(
+    id: string,
+    expectedRevision: number
+  ): Promise<UnifiedInboxItem> {
+    await this.getItem(id);
+    return this.items.acknowledge(
+      id,
+      expectedRevision,
+      this.clock.now().toISOString()
+    );
   }
 
   async summarize(id: string): Promise<UnifiedInboxItem> {
@@ -150,7 +266,7 @@ export class InboxService {
       contentType: generated.contentType,
       now: this.clock.now().toISOString()
     });
-    await this.items.setDraftId(item.id, draft.id);
+    await this.items.setDraftId(item.id, item.revision, draft.id);
     return draft;
   }
 
@@ -205,9 +321,12 @@ export class InboxService {
     }
     const item = await this.getItem(draft.inbox_item_id);
     const replyTo = item.sender;
-    if (replyTo === null) {
+    if (item.conversation_type === "direct" && replyTo === null) {
       throw rawMessageUnavailable();
     }
+    const replyTargetIds = item.reply_targets.map(
+      (target) => target.target_id
+    );
     const requestHash = canonicalRequestHash({
       draftId: draft.id,
       version: draft.version,
@@ -219,13 +338,18 @@ export class InboxService {
       recipients: item.recipients,
       subject: item.subject,
       content: draft.content,
-      contentType: draft.content_type
+      contentType: draft.content_type,
+      replyTargetIds
     });
     const claim = await this.sendIdempotency.claimOrGet({
       key: input.idempotencyKey,
       requestHash,
       ttlSeconds: SEND_IDEMPOTENCY_TTL_SECONDS,
       create: async () => {
+        const mentions = await this.resolveReplyTargets(
+          item,
+          replyTargetIds
+        );
         const confirmed = await this.confirmations.consume(
           input.confirmationToken,
           draft.id,
@@ -240,10 +364,6 @@ export class InboxService {
           });
         }
 
-        const sender = this.senders.get(item.provider);
-        if (!sender) {
-          throw providerUnavailable(item.provider);
-        }
         const sendingDraft = await this.drafts.claimForSend(
           draft.id,
           input.expectedVersion,
@@ -251,6 +371,10 @@ export class InboxService {
         );
 
         try {
+          const sender = this.senders.get(item.provider);
+          if (!sender) {
+            throw providerUnavailable(item.provider);
+          }
           const result = inboxSendResultSchema.parse(
             await sender.send({
               draftId: draft.id,
@@ -263,7 +387,8 @@ export class InboxService {
               subject: item.subject,
               content: sendingDraft.content,
               contentType: sendingDraft.content_type,
-              idempotencyKey: input.idempotencyKey
+              idempotencyKey: input.idempotencyKey,
+              mentions
             })
           );
           if (
@@ -314,6 +439,24 @@ export class InboxService {
     return claim.value;
   }
 
+  private async resolveReplyTargets(
+    item: UnifiedInboxItem,
+    participantRefs: string[]
+  ) {
+    if (participantRefs.length === 0) {
+      return [];
+    }
+    if (!this.participants || item.conversation_id === null) {
+      throw replyTargetsChanged();
+    }
+    return this.participants.resolve({
+      provider: item.provider,
+      accountId: item.account_id,
+      conversationId: item.conversation_id,
+      participantRefs
+    });
+  }
+
   async syncStatus(): Promise<InboxSyncStatus[]> {
     return this.checkpoints.statuses();
   }
@@ -342,6 +485,14 @@ function providerUnavailable(provider: InboxProvider): AppError {
     statusCode: 503,
     retryable: true,
     details: { provider }
+  });
+}
+
+function replyTargetsChanged(): AppError {
+  return new AppError({
+    code: "INBOX_VERSION_CONFLICT",
+    message: "回复目标已发生变化，请刷新后重试。",
+    statusCode: 409
   });
 }
 
@@ -382,4 +533,11 @@ function rawMessageUnavailable(): AppError {
     message: "该收件箱项目没有可用于摘要、草稿或发送的原始消息内容。",
     statusCode: 400
   });
+}
+
+function isVersionConflict(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === "INBOX_VERSION_CONFLICT"
+  );
 }

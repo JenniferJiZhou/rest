@@ -134,7 +134,8 @@ function sendInput() {
     subject: "Outlook 消息",
     content: "收到，谢谢。",
     contentType: "text" as const,
-    idempotencyKey: "outlook-send-key"
+    idempotencyKey: "outlook-send-key",
+    mentions: []
   };
 }
 

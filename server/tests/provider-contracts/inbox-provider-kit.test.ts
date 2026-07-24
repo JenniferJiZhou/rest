@@ -34,6 +34,7 @@ function sendInput(provider: InboxProvider) {
     subject: "回复主题",
     content: "用户确认后的回复",
     contentType: "text" as const,
-    idempotencyKey: `${provider}-send-key`
+    idempotencyKey: `${provider}-send-key`,
+    mentions: []
   };
 }

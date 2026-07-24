@@ -553,7 +553,11 @@ describe("Unified Inbox in-memory repositories", () => {
       first.item.revision,
       enrichment()
     );
-    await repository.setDraftId(first.item.id, "draft-group-1");
+    await repository.setDraftId(
+      first.item.id,
+      first.item.revision,
+      "draft-group-1"
+    );
 
     const appended = await repository.upsert(
       groupEvent({

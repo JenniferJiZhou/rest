@@ -131,6 +131,7 @@ function sendInput() {
     subject: "项目确认",
     content: "收到，谢谢。",
     contentType: "text" as const,
-    idempotencyKey: "qq-send-key"
+    idempotencyKey: "qq-send-key",
+    mentions: []
   };
 }

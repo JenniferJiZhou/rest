@@ -35,7 +35,16 @@ export interface InboxRepository {
     expectedRevision: number,
     enrichment: InboxSummaryResult
   ): Promise<UnifiedInboxItem>;
-  setDraftId(id: string, draftId: string): Promise<UnifiedInboxItem>;
+  markEnrichmentFailed(
+    id: string,
+    expectedRevision: number,
+    reason: string
+  ): Promise<UnifiedInboxItem>;
+  setDraftId(
+    id: string,
+    expectedRevision: number,
+    draftId: string
+  ): Promise<UnifiedInboxItem>;
   acknowledge(
     id: string,
     expectedRevision: number,
@@ -166,12 +175,13 @@ export interface InboxSendInput {
   accountId: string;
   conversationId: string | null;
   providerMessageId: string;
-  replyTo: string;
+  replyTo: string | null;
   recipients: string[];
   subject: string | null;
   content: string;
   contentType: "text" | "html";
   idempotencyKey: string;
+  mentions: ResolvedInboxParticipant[];
 }
 
 export interface InboxSender {

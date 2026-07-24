@@ -4,6 +4,45 @@ import { InMemoryCheckpointStore } from "../../src/inbox/in-memory.js";
 import type { InboxSource } from "../../src/inbox/ports.js";
 
 describe("ConnectorHost", () => {
+  it("passes private participant bindings only through the local ingest call", async () => {
+    const participantBindings = [
+      {
+        provider: "outlook" as const,
+        accountId: "outlook-account",
+        conversationId: "conversation-1",
+        participantRef: "participant_12345678",
+        providerParticipantId: "ou_private_value",
+        displayName: "王同学"
+      }
+    ];
+    const sourceWithBindings = source("outlook");
+    sourceWithBindings.pull = async (input) => {
+      const pulled = await source("outlook").pull(input);
+      return { ...pulled, participantBindings };
+    };
+    const ingest = vi.fn().mockResolvedValue({
+      accepted: 1,
+      duplicates: 0,
+      itemIds: ["i1"]
+    });
+    const host = new ConnectorHost(
+      [{ source: sourceWithBindings, accountId: "outlook-account" }],
+      { ingest },
+      new InMemoryCheckpointStore(),
+      { next: () => "connector-request-bindings" },
+      30_000
+    );
+
+    await host.runOnce();
+
+    expect(ingest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        events: expect.any(Array)
+      }),
+      participantBindings
+    );
+  });
+
   it("syncs providers independently and checkpoints only successful ingest", async () => {
     const checkpoints = new InMemoryCheckpointStore(
       () => new Date("2026-07-24T01:00:00.000Z")

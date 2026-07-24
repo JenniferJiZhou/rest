@@ -6,6 +6,7 @@ import type {
 import { z } from "zod";
 import type { InboxService } from "../application/inbox/inbox-service.js";
 import {
+  inboxAcknowledgeRequestSchema,
   inboxDraftPatchSchema,
   inboxEventBatchSchema,
   inboxSendRequestSchema
@@ -76,6 +77,24 @@ export function registerInboxRoutes(
     const context = helpers.context(request, reply, false, "app");
     return context.inbox.getItem(request.params.itemId);
   });
+
+  server.post<{
+    Params: { itemId: string };
+  }>(
+    "/v1/inbox/items/:itemId(^[^:]+)::acknowledge",
+    async (request, reply) => {
+      const context = helpers.context(request, reply, true, "app");
+      const input = inboxAcknowledgeRequestSchema.parse(request.body);
+      helpers.assertBodyRequestId(
+        input.request_id,
+        context.requestId
+      );
+      return context.inbox.acknowledge(
+        request.params.itemId,
+        input.expected_revision
+      );
+    }
+  );
 
   server.post<{
     Params: { itemId: string };
