@@ -18,6 +18,7 @@
     "test:providers": "vitest run tests/provider-contracts",
     "test:integration": "vitest run tests/integration",
     "test:vertical": "vitest run tests/vertical-slice",
+    "test:deployment": "vitest run tests/unit/config.test.ts tests/unit/deployment-artifacts.test.ts tests/integration/deployment-readiness.test.ts tests/integration/smoke-script.test.ts",
     "smoke": "vitest run tests/integration/server.test.ts",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },

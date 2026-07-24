@@ -54,4 +54,95 @@ describe("server listener configuration", () => {
       })
     ).toThrow("Invalid server configuration");
   });
+
+  it("requires an explicit public HTTPS base URL in production", () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "production",
+        LOG_LEVEL: "silent"
+      })
+    ).toThrow("PUBLIC_BASE_URL");
+  });
+
+  it.each([
+    "http://hush-staging.example.com",
+    "https://localhost",
+    "https://127.0.0.1",
+    "https://hush-staging.example.com?debug=true",
+    "https://hush-staging.example.com#fragment"
+  ])("rejects unsafe production PUBLIC_BASE_URL=%s", (publicBaseUrl) => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "production",
+        PUBLIC_BASE_URL: publicBaseUrl,
+        LOG_LEVEL: "silent"
+      })
+    ).toThrow("PUBLIC_BASE_URL");
+  });
+
+  it("accepts and normalizes a production HTTPS base URL", () => {
+    const config = loadConfig({
+      NODE_ENV: "production",
+      PUBLIC_BASE_URL: "https://hush-staging.example.com///",
+      LOG_LEVEL: "silent"
+    });
+
+    expect(config.PUBLIC_BASE_URL).toBe(
+      "https://hush-staging.example.com"
+    );
+  });
+
+  it("parses TRUST_PROXY only from explicit booleans", () => {
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        TRUST_PROXY: "true",
+        LOG_LEVEL: "silent"
+      }).TRUST_PROXY
+    ).toBe(true);
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        TRUST_PROXY: "false",
+        LOG_LEVEL: "silent"
+      }).TRUST_PROXY
+    ).toBe(false);
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "test",
+        TRUST_PROXY: "yes",
+        LOG_LEVEL: "silent"
+      })
+    ).toThrow("TRUST_PROXY");
+  });
+
+  it.each(["0", "65536", "3000.5", "not-a-port"])(
+    "rejects invalid PORT=%s",
+    (port) => {
+      expect(() =>
+        loadConfig({
+          NODE_ENV: "test",
+          PORT: port,
+          LOG_LEVEL: "silent"
+        })
+      ).toThrow("PORT");
+    }
+  );
+
+  it("supports explicit canned and unavailable Rest Decision providers", () => {
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        HUSH_REST_DECISION_PROVIDER: "canned",
+        LOG_LEVEL: "silent"
+      }).HUSH_REST_DECISION_PROVIDER
+    ).toBe("canned");
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        HUSH_REST_DECISION_PROVIDER: "unavailable",
+        LOG_LEVEL: "silent"
+      }).HUSH_REST_DECISION_PROVIDER
+    ).toBe("unavailable");
+  });
 });

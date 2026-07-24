@@ -13,9 +13,10 @@ integration.
 |---|---|
 | Same Windows host | `http://127.0.0.1:3000` |
 | Trusted LAN | `http://<windows-lan-ipv4>:<port>` |
-| Demo | `https://<demo-host>` |
+| HTTPS staging | pending (`https://<platform-host>`) |
 
-The Demo URL is a placeholder until deployment. Keep the base URL in client
+The staging URL is pending until deployment. Keep the root base URL (without
+`/v1/rest/evaluate`) in client
 configuration, not inside feature views.
 
 An iPhone or a different Mac must not use `127.0.0.1`; that address points
@@ -51,6 +52,8 @@ X-Hush-Demo-Token: <private runtime token>
 ```
 
 Do not ship a production demo token in the repository or App binary.
+The normal Canned staging graph does not send this token; it is identified
+by `X-Hush-Data-Origin: mock`.
 `GET /v1/health` does not require client headers, but it returns the same
 three Contract response headers.
 
@@ -353,7 +356,7 @@ the live runtime rules described in this document.
 | Endpoint | Client timeout |
 |---|---:|
 | `/v1/health` | 3 s |
-| `/v1/rest/evaluate` | 8 s |
+| `/v1/rest/evaluate` | 5 s (current Swift implementation) |
 | `/v1/rest/check-in` | 12 s |
 | `/v1/rest/recommend` | 8 s |
 | `/v1/rest/feedback` | 5 s |

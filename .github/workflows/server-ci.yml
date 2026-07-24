@@ -45,6 +45,9 @@ jobs:
       - name: Integration tests
         run: pnpm test:integration
 
+      - name: Deployment readiness
+        run: pnpm test:deployment
+
       - name: Vertical slice
         run: pnpm test:vertical
 
