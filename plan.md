@@ -155,6 +155,11 @@ InboxDraft
 
 ## 6. Unified Inbox API
 
+生产模式下，App 路由使用独立的 `HUSH_APP_TOKEN`，Connector ingestion 使用
+不同的 `HUSH_CONNECTOR_TOKEN`；配置拒绝两个值相同。App 每次启动还生成独立
+的高熵 `X-Hush-App-Session`，发送确认令牌绑定到认证凭据和该 session 的摘要，
+不能跨 App session 使用。Demo token 只选择隔离的 Fixture graph。
+
 ### Connector Host 到 W2/P3 Unified Inbox Service
 
 ```http
@@ -319,11 +324,13 @@ App UI；M1/P1 负责 Apple 客户端网络接线与后台生命周期。若客�
 
 ### Phase 2：W2/P3 Connector Host
 
-状态：代码与无凭据 Harness 已完成；真实渠道 smoke test 待 Phase 0。
+状态：代码与无凭据 Harness 已完成；当前 checkpoint 为进程内 Demo 实现，
+持久化仓储与真实渠道 smoke test 待 Phase 0/生产化阶段。
 
 - 先实现 Connector Host 生命周期、checkpoint、去重和 Fixture Provider。
 - 再按飞书、钉钉、Outlook、QQ 的顺序接入 Real Provider。
-- 验收：重启不丢 checkpoint，同一事件不重复入库，凭据和正文不进入日志。
+- 验收：持久化实现接线后重启不丢 checkpoint；当前进程内同一事件不重复入库，
+  凭据和正文不进入日志。
 
 ### Phase 3：W2/P3 Inbox 与 AI 编排
 

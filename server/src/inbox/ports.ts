@@ -56,6 +56,11 @@ export interface InboxDraftRepository {
   create(input: CreateInboxDraft): Promise<InboxDraft>;
   get(id: string): Promise<InboxDraft | null>;
   update(id: string, input: UpdateInboxDraft): Promise<InboxDraft>;
+  claimForSend(
+    id: string,
+    expectedVersion: number,
+    now: string
+  ): Promise<InboxDraft>;
   transition(
     id: string,
     input: TransitionInboxDraft
@@ -159,11 +164,13 @@ export interface CheckpointStore {
 export interface ConfirmationTokenStore {
   issue(
     draftId: string,
-    version: number
+    version: number,
+    principalId: string
   ): Promise<{ token: string; expiresAt: string }>;
   consume(
     token: string,
     draftId: string,
-    version: number
+    version: number,
+    principalId: string
   ): Promise<boolean>;
 }

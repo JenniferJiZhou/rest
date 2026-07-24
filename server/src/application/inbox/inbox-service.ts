@@ -42,6 +42,7 @@ export interface InboxDraftSend {
   expectedVersion: number;
   confirmationToken: string;
   idempotencyKey: string;
+  principalId: string;
 }
 
 export class InboxService {
@@ -61,10 +62,6 @@ export class InboxService {
     const batch = inboxEventBatchSchema.parse(input);
     const itemIds: string[] = [];
     const createdIds: string[] = [];
-    const accounts = new Map<string, {
-      provider: InboxProvider;
-      accountId: string;
-    }>();
 
     for (const event of batch.events) {
       const result = await this.items.upsert(event);
@@ -72,18 +69,6 @@ export class InboxService {
       if (result.created) {
         createdIds.push(result.item.id);
       }
-      accounts.set(
-        `${event.provider}\u0000${event.account_id}`,
-        { provider: event.provider, accountId: event.account_id }
-      );
-    }
-
-    for (const account of accounts.values()) {
-      await this.checkpoints.put(
-        account.provider,
-        account.accountId,
-        batch.checkpoint
-      );
     }
 
     for (const itemId of createdIds) {
@@ -186,7 +171,8 @@ export class InboxService {
   }
 
   async issueConfirmation(
-    draftId: string
+    draftId: string,
+    principalId: string
   ): Promise<{ token: string; expiresAt: string }> {
     const draft = await this.getDraft(draftId);
     if (!["ready", "edited", "failed"].includes(draft.status)) {
@@ -197,7 +183,11 @@ export class InboxService {
         details: { current_status: draft.status }
       });
     }
-    return this.confirmations.issue(draft.id, draft.version);
+    return this.confirmations.issue(
+      draft.id,
+      draft.version,
+      principalId
+    );
   }
 
   async sendDraft(
@@ -235,7 +225,8 @@ export class InboxService {
         const confirmed = await this.confirmations.consume(
           input.confirmationToken,
           draft.id,
-          draft.version
+          draft.version,
+          input.principalId
         );
         if (!confirmed) {
           throw new AppError({
@@ -249,11 +240,11 @@ export class InboxService {
         if (!sender) {
           throw providerUnavailable(item.provider);
         }
-        await this.drafts.transition(draft.id, {
-          expectedStatuses: ["ready", "edited", "failed"],
-          status: "sending",
-          now: this.clock.now().toISOString()
-        });
+        const sendingDraft = await this.drafts.claimForSend(
+          draft.id,
+          input.expectedVersion,
+          this.clock.now().toISOString()
+        );
 
         try {
           const result = inboxSendResultSchema.parse(
@@ -266,11 +257,26 @@ export class InboxService {
               replyTo: item.sender,
               recipients: item.recipients,
               subject: item.subject,
-              content: draft.content,
-              contentType: draft.content_type,
+              content: sendingDraft.content,
+              contentType: sendingDraft.content_type,
               idempotencyKey: input.idempotencyKey
             })
           );
+          if (
+            result.draft_id !== draft.id ||
+            result.provider !== item.provider
+          ) {
+            throw new AppError({
+              code: "INBOX_PROVIDER_UNAVAILABLE",
+              message: "渠道返回了不匹配的发送结果。",
+              statusCode: 503,
+              retryable: false,
+              details: {
+                provider: item.provider,
+                reason: "send_result_mismatch"
+              }
+            });
+          }
           await this.drafts.transition(draft.id, {
             expectedStatuses: ["sending"],
             status: result.status,

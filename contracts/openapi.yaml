@@ -283,6 +283,9 @@ paths:
     post:
       tags: [Inbox]
       operationId: ingestInboxEvents
+      security:
+        - ConnectorBearer: []
+        - DemoTokenAuth: []
       parameters:
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
@@ -327,11 +330,15 @@ paths:
     get:
       tags: [Inbox]
       operationId: listInboxItems
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
         - name: cursor
           in: query
           required: false
@@ -372,6 +379,9 @@ paths:
     get:
       tags: [Inbox]
       operationId: getInboxItem
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - name: itemId
           in: path
@@ -381,6 +391,7 @@ paths:
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
       responses:
         "200":
           description: Unified Inbox item
@@ -404,6 +415,9 @@ paths:
     post:
       tags: [Inbox]
       operationId: summarizeInboxItem
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - name: itemId
           in: path
@@ -413,6 +427,7 @@ paths:
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
       responses:
         "200":
           description: Item with refreshed AI summary
@@ -438,6 +453,9 @@ paths:
     post:
       tags: [Inbox]
       operationId: createInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - name: itemId
           in: path
@@ -447,6 +465,7 @@ paths:
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
       responses:
         "200":
           description: Existing or generated reply draft
@@ -472,6 +491,9 @@ paths:
     get:
       tags: [Inbox]
       operationId: getInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - name: draftId
           in: path
@@ -481,6 +503,7 @@ paths:
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
       responses:
         "200":
           description: Reply draft
@@ -502,6 +525,9 @@ paths:
     patch:
       tags: [Inbox]
       operationId: updateInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - name: draftId
           in: path
@@ -511,6 +537,7 @@ paths:
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
       requestBody:
         required: true
         content:
@@ -540,6 +567,9 @@ paths:
     post:
       tags: [Inbox]
       operationId: confirmInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - name: draftId
           in: path
@@ -549,6 +579,7 @@ paths:
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
       responses:
         "200":
           description: Short-lived one-time user confirmation
@@ -572,6 +603,9 @@ paths:
     post:
       tags: [Inbox]
       operationId: sendInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - name: draftId
           in: path
@@ -581,6 +615,7 @@ paths:
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
@@ -615,11 +650,15 @@ paths:
     get:
       tags: [Inbox]
       operationId: getInboxSyncStatus
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
       responses:
         "200":
           description: Per-account provider coverage and checkpoint state
@@ -721,6 +760,21 @@ paths:
           description: Invalid signature
 
 components:
+  securitySchemes:
+    AppBearer:
+      type: http
+      scheme: bearer
+      description: Hush App session token. Cannot ingest connector events.
+    ConnectorBearer:
+      type: http
+      scheme: bearer
+      description: Connector Host token. Cannot query items or send drafts.
+    DemoTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Hush-Demo-Token
+      description: Available only when HUSH_DEMO_MODE=true.
+
   parameters:
     RequestId:
       name: X-Request-ID
@@ -752,6 +806,17 @@ components:
       schema:
         type: string
         minLength: 8
+    AppSession:
+      name: X-Hush-App-Session
+      in: header
+      required: true
+      description: >
+        Per-launch high-entropy App session secret. Confirmation tokens are
+        bound to its authenticated digest.
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 128
     IdempotencyKey:
       name: Idempotency-Key
       in: header

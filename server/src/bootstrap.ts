@@ -8,7 +8,7 @@ const server = createServer(dependencies);
 
 const close = async (signal: string): Promise<void> => {
   server.log.info({ signal }, "shutting down");
-  dependencies.connectorHost.stop();
+  await dependencies.connectorHost.stop();
   await server.close();
   process.exit(0);
 };

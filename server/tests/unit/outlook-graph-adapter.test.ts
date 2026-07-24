@@ -5,6 +5,27 @@ import {
 } from "../../src/inbox/providers/outlook-graph-adapter.js";
 
 describe("OutlookGraphAdapter", () => {
+  it("reports ready only after a Graph credential check", async () => {
+    const request = vi
+      .fn<GraphFetch>()
+      .mockResolvedValue(Response.json({ id: "graph-user-1" }));
+    const adapter = new OutlookGraphAdapter(
+      {
+        accountId: "hush@example.com",
+        accessToken: async () => "graph-access-value"
+      },
+      request
+    );
+
+    await expect(adapter.health()).resolves.toBe("ready");
+    expect(request).toHaveBeenCalledWith(
+      "https://graph.microsoft.com/v1.0/me?$select=id",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer graph-access-value" }
+      })
+    );
+  });
+
   it("pulls a delta page and normalizes messages", async () => {
     const request = vi.fn<GraphFetch>().mockResolvedValue(
       Response.json({
@@ -21,7 +42,8 @@ describe("OutlookGraphAdapter", () => {
             receivedDateTime: "2026-07-24T01:00:00Z"
           }
         ],
-        "@odata.deltaLink": "https://graph.microsoft.com/delta/final"
+        "@odata.deltaLink":
+          "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=final"
       })
     );
     const adapter = new OutlookGraphAdapter(
@@ -39,7 +61,7 @@ describe("OutlookGraphAdapter", () => {
     });
 
     expect(result.checkpoint).toBe(
-      "https://graph.microsoft.com/delta/final"
+      "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=final"
     );
     expect(result.items[0]).toMatchObject({
       provider: "outlook",
@@ -49,6 +71,31 @@ describe("OutlookGraphAdapter", () => {
     expect(request.mock.calls[0]?.[1]?.headers).toMatchObject({
       Authorization: "Bearer graph-access-value"
     });
+  });
+
+  it("rejects a checkpoint outside the Microsoft Graph delta endpoint", async () => {
+    const request = vi.fn<GraphFetch>();
+    const accessToken = vi.fn(async () => "graph-access-value");
+    const adapter = new OutlookGraphAdapter(
+      {
+        accountId: "hush@example.com",
+        accessToken
+      },
+      request
+    );
+
+    await expect(
+      adapter.pull({
+        accountId: "hush@example.com",
+        checkpoint: "https://attacker.example/collect",
+        limit: 20
+      })
+    ).rejects.toMatchObject({
+      code: "INVALID_REQUEST",
+      statusCode: 400
+    });
+    expect(accessToken).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
   });
 
   it("sends a confirmed reply and never exposes the token in errors", async () => {

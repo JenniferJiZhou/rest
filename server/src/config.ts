@@ -14,6 +14,15 @@ const optionalString = z.preprocess(
   z.string().trim().min(1).optional()
 );
 
+const optionalToken = (minimumLength: number) =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim().length === 0
+        ? undefined
+        : value,
+    z.string().min(minimumLength).optional()
+  );
+
 const environmentSchema = z
   .object({
     HOST: z.string().trim().min(1).default("127.0.0.1"),
@@ -66,7 +75,9 @@ const environmentSchema = z
       .enum(["true", "false"])
       .default("false")
       .transform((value) => value === "true"),
-    HUSH_DEMO_TOKEN: z.string().min(8).optional(),
+    HUSH_DEMO_TOKEN: optionalToken(8),
+    HUSH_APP_TOKEN: optionalToken(32),
+    HUSH_CONNECTOR_TOKEN: optionalToken(32),
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info")
@@ -88,6 +99,24 @@ export function loadConfig(
   if (result.data.HUSH_DEMO_MODE && !result.data.HUSH_DEMO_TOKEN) {
     throw new Error(
       "Invalid server configuration: HUSH_DEMO_TOKEN is required when HUSH_DEMO_MODE=true"
+    );
+  }
+  if (
+    result.data.NODE_ENV === "production" &&
+    (!result.data.HUSH_APP_TOKEN ||
+      !result.data.HUSH_CONNECTOR_TOKEN)
+  ) {
+    throw new Error(
+      "Invalid server configuration: HUSH_APP_TOKEN and HUSH_CONNECTOR_TOKEN are required in production"
+    );
+  }
+  if (
+    result.data.HUSH_APP_TOKEN &&
+    result.data.HUSH_CONNECTOR_TOKEN &&
+    result.data.HUSH_APP_TOKEN === result.data.HUSH_CONNECTOR_TOKEN
+  ) {
+    throw new Error(
+      "Invalid server configuration: HUSH_APP_TOKEN and HUSH_CONNECTOR_TOKEN must be different"
     );
   }
   return result.data;

@@ -64,11 +64,25 @@ describe("server listener configuration", () => {
       LARK_CLI_PATH: "",
       DWS_CLI_PATH: "",
       OUTLOOK_ACCESS_TOKEN: "",
-      QQ_EMAIL_AUTH_CODE: ""
+      QQ_EMAIL_AUTH_CODE: "",
+      HUSH_APP_TOKEN: "",
+      HUSH_CONNECTOR_TOKEN: ""
     });
 
     expect(config.LARK_CLI_PATH).toBeUndefined();
     expect(config.OUTLOOK_ACCESS_TOKEN).toBeUndefined();
     expect(config.QQ_EMAIL_AUTH_CODE).toBeUndefined();
+  });
+
+  it("rejects interchangeable App and Connector credentials", () => {
+    const shared = "shared-token-00000000000000000000";
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "test",
+        LOG_LEVEL: "silent",
+        HUSH_APP_TOKEN: shared,
+        HUSH_CONNECTOR_TOKEN: shared
+      })
+    ).toThrow(/must be different/u);
   });
 });

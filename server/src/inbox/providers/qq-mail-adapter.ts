@@ -32,6 +32,7 @@ export interface QqRuntimeMessage {
 }
 
 export interface QqMailRuntime {
+  health(credentials: QqMailCredentials): Promise<void>;
   pull(
     credentials: QqMailCredentials,
     afterUid: number | null,
@@ -53,8 +54,16 @@ export class QqMailAdapter implements InboxSource, InboxSender {
       new NodeQqMailRuntime()
   ) {}
 
-  async health(): Promise<"ready" | "unavailable"> {
-    return this.config.accountId ? "ready" : "unavailable";
+  async health(): Promise<"ready" | "degraded" | "unavailable"> {
+    if (!this.config.accountId) {
+      return "unavailable";
+    }
+    try {
+      await this.runtime.health(await this.config.credentials());
+      return "ready";
+    } catch {
+      return "degraded";
+    }
   }
 
   async pull(input: {
@@ -86,8 +95,8 @@ export class QqMailAdapter implements InboxSource, InboxSender {
         received_at: message.receivedAt,
         coverage: {
           source: "imap",
-          complete: true,
-          note: null
+          complete: false,
+          note: "当前 Demo 仅提取 IMAP TEXT body part，复杂 MIME 可能不完整"
         }
       }))
     };
@@ -147,27 +156,34 @@ export class QqMailAdapter implements InboxSource, InboxSender {
 }
 
 export class NodeQqMailRuntime implements QqMailRuntime {
+  async health(credentials: QqMailCredentials): Promise<void> {
+    const client = createImapClient(credentials);
+    let connected = false;
+    try {
+      await client.connect();
+      connected = true;
+    } finally {
+      if (connected) {
+        await client.logout();
+      }
+    }
+  }
+
   async pull(
     credentials: QqMailCredentials,
     afterUid: number | null,
     limit: number
   ): Promise<{ messages: QqRuntimeMessage[]; checkpoint: number }> {
-    const client = new ImapFlow({
-      host: "imap.qq.com",
-      port: 993,
-      secure: true,
-      auth: {
-        user: credentials.address,
-        pass: credentials.authorizationCode
-      },
-      logger: false,
-      socketTimeout: 30_000
-    });
+    const client = createImapClient(credentials);
     const messages: QqRuntimeMessage[] = [];
     let checkpoint = afterUid ?? 0;
-    await client.connect();
-    const lock = await client.getMailboxLock("INBOX");
+    let connected = false;
+    let lock: Awaited<ReturnType<ImapFlow["getMailboxLock"]>> | null =
+      null;
     try {
+      await client.connect();
+      connected = true;
+      lock = await client.getMailboxLock("INBOX");
       const range = `${(afterUid ?? 0) + 1}:*`;
       for await (const message of client.fetch(
         range,
@@ -206,8 +222,10 @@ export class NodeQqMailRuntime implements QqMailRuntime {
         }
       }
     } finally {
-      lock.release();
-      await client.logout();
+      lock?.release();
+      if (connected) {
+        await client.logout();
+      }
     }
     return { messages, checkpoint };
   }
@@ -228,10 +246,29 @@ export class NodeQqMailRuntime implements QqMailRuntime {
       greetingTimeout: 15_000,
       socketTimeout: 30_000
     });
-    const result = await transport.sendMail(message);
-    transport.close();
-    return { messageId: result.messageId || null };
+    try {
+      const result = await transport.sendMail(message);
+      return { messageId: result.messageId || null };
+    } finally {
+      transport.close();
+    }
   }
+}
+
+function createImapClient(
+  credentials: QqMailCredentials
+): ImapFlow {
+  return new ImapFlow({
+    host: "imap.qq.com",
+    port: 993,
+    secure: true,
+    auth: {
+      user: credentials.address,
+      pass: credentials.authorizationCode
+    },
+    logger: false,
+    socketTimeout: 30_000
+  });
 }
 
 function parseCheckpoint(value: string): number {

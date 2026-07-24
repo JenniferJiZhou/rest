@@ -6,6 +6,7 @@ export interface CommandInvocation {
   args: string[];
   timeoutMs?: number;
   input?: string;
+  ambiguousOnTimeout?: boolean;
 }
 
 export interface CommandRunner {
@@ -26,6 +27,23 @@ export class ExecFileCommandRunner implements CommandRunner {
         },
         (error, stdout) => {
           if (error) {
+            if (
+              invocation.ambiguousOnTimeout &&
+              (error.killed ||
+                error.signal !== null ||
+                error.code === "ETIMEDOUT")
+            ) {
+              reject(
+                new AppError({
+                  code: "INBOX_SEND_UNKNOWN",
+                  message: "渠道发送结果未知，请先核对原渠道。",
+                  statusCode: 503,
+                  retryable: false,
+                  details: { reason: "command_timeout" }
+                })
+              );
+              return;
+            }
             reject(
               new AppError({
                 code: "INBOX_PROVIDER_UNAVAILABLE",

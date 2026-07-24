@@ -23,6 +23,8 @@ import type {
   InboxSender
 } from "../../src/inbox/ports.js";
 
+const PRINCIPAL_ID = "app-session-1";
+
 describe("InboxService", () => {
   it("ingests once and enriches a new item", async () => {
     const { service } = fixtureService();
@@ -63,7 +65,8 @@ describe("InboxService", () => {
       service.sendDraft(draft.id, {
         expectedVersion: draft.version,
         confirmationToken: "not-issued",
-        idempotencyKey: "send-key-0001"
+        idempotencyKey: "send-key-0001",
+        principalId: PRINCIPAL_ID
       })
     ).rejects.toMatchObject({
       code: "INBOX_CONFIRMATION_REQUIRED"
@@ -73,11 +76,15 @@ describe("InboxService", () => {
   it("sends once after confirmation and replays the same result", async () => {
     const { service, sender } = fixtureService();
     const draft = await seededDraft(service);
-    const confirmation = await service.issueConfirmation(draft.id);
+    const confirmation = await service.issueConfirmation(
+      draft.id,
+      PRINCIPAL_ID
+    );
     const request = {
       expectedVersion: draft.version,
       confirmationToken: confirmation.token,
-      idempotencyKey: "send-key-0002"
+      idempotencyKey: "send-key-0002",
+      principalId: PRINCIPAL_ID
     };
 
     const first = await service.sendDraft(draft.id, request);
@@ -96,12 +103,14 @@ describe("InboxService", () => {
       "provider-message-idempotency-1"
     );
     const firstConfirmation = await service.issueConfirmation(
-      firstDraft.id
+      firstDraft.id,
+      PRINCIPAL_ID
     );
     await service.sendDraft(firstDraft.id, {
       expectedVersion: firstDraft.version,
       confirmationToken: firstConfirmation.token,
-      idempotencyKey: "send-key-shared"
+      idempotencyKey: "send-key-shared",
+      principalId: PRINCIPAL_ID
     });
 
     const secondDraft = await seededDraft(
@@ -109,13 +118,15 @@ describe("InboxService", () => {
       "provider-message-idempotency-2"
     );
     const secondConfirmation = await service.issueConfirmation(
-      secondDraft.id
+      secondDraft.id,
+      PRINCIPAL_ID
     );
     await expect(
       service.sendDraft(secondDraft.id, {
         expectedVersion: secondDraft.version,
         confirmationToken: secondConfirmation.token,
-        idempotencyKey: "send-key-shared"
+        idempotencyKey: "send-key-shared",
+        principalId: PRINCIPAL_ID
       })
     ).rejects.toMatchObject({
       code: "INVALID_REQUEST",
@@ -126,21 +137,108 @@ describe("InboxService", () => {
   it("keeps an uncertain provider result unknown without retrying", async () => {
     const { service, sender } = fixtureService("unknown");
     const draft = await seededDraft(service);
-    const confirmation = await service.issueConfirmation(draft.id);
+    const confirmation = await service.issueConfirmation(
+      draft.id,
+      PRINCIPAL_ID
+    );
 
     await expect(
       service.sendDraft(draft.id, {
         expectedVersion: draft.version,
         confirmationToken: confirmation.token,
-        idempotencyKey: "send-key-unknown"
+        idempotencyKey: "send-key-unknown",
+        principalId: PRINCIPAL_ID
       })
     ).resolves.toMatchObject({ status: "unknown" });
     expect(sender.sendCount).toBe(1);
     expect((await service.getDraft(draft.id)).status).toBe("unknown");
   });
 
+  it("binds confirmation to the authenticated app session", async () => {
+    const { service, sender } = fixtureService();
+    const draft = await seededDraft(service);
+    const confirmation = await service.issueConfirmation(
+      draft.id,
+      PRINCIPAL_ID
+    );
+
+    await expect(
+      service.sendDraft(draft.id, {
+        expectedVersion: draft.version,
+        confirmationToken: confirmation.token,
+        idempotencyKey: "send-key-wrong-session",
+        principalId: "different-app-session"
+      })
+    ).rejects.toMatchObject({
+      code: "INBOX_CONFIRMATION_REQUIRED"
+    });
+    expect(sender.sendCount).toBe(0);
+  });
+
+  it("rejects edits after a draft is claimed for sending", async () => {
+    const { service, sender } = fixtureService();
+    const draft = await seededDraft(service);
+    const confirmation = await service.issueConfirmation(
+      draft.id,
+      PRINCIPAL_ID
+    );
+    sender.pause();
+
+    const sending = service.sendDraft(draft.id, {
+      expectedVersion: draft.version,
+      confirmationToken: confirmation.token,
+      idempotencyKey: "send-key-edit-race",
+      principalId: PRINCIPAL_ID
+    });
+    await sender.started;
+
+    await expect(
+      service.updateDraft(draft.id, {
+        content: "竞态修改",
+        contentType: "text",
+        expectedVersion: draft.version
+      })
+    ).rejects.toMatchObject({
+      code: "INBOX_VERSION_CONFLICT",
+      details: { current_status: "sending" }
+    });
+    sender.resume();
+    await expect(sending).resolves.toMatchObject({ status: "sent" });
+  });
+
+  it("does not reopen sent or unknown drafts through editing", async () => {
+    for (const status of ["sent", "unknown"] as const) {
+      const { service } = fixtureService(status);
+      const draft = await seededDraft(
+        service,
+        `provider-message-terminal-${status}`
+      );
+      const confirmation = await service.issueConfirmation(
+        draft.id,
+        PRINCIPAL_ID
+      );
+      await service.sendDraft(draft.id, {
+        expectedVersion: draft.version,
+        confirmationToken: confirmation.token,
+        idempotencyKey: `send-key-terminal-${status}`,
+        principalId: PRINCIPAL_ID
+      });
+
+      await expect(
+        service.updateDraft(draft.id, {
+          content: "不得重新打开",
+          contentType: "text",
+          expectedVersion: draft.version
+        })
+      ).rejects.toMatchObject({
+        code: "INBOX_VERSION_CONFLICT",
+        details: { current_status: status }
+      });
+    }
+  });
+
   it("reports missing resources and sync status", async () => {
-    const { service } = fixtureService();
+    const { service, checkpoints } = fixtureService();
 
     await expect(service.getItem("missing")).rejects.toMatchObject({
       code: "INBOX_ITEM_NOT_FOUND"
@@ -150,6 +248,11 @@ describe("InboxService", () => {
     });
 
     await service.ingest(batch("provider-message-status"));
+    await checkpoints.put(
+      "outlook",
+      "hush@example.com",
+      "checkpoint-1"
+    );
     await expect(service.syncStatus()).resolves.toEqual([
       expect.objectContaining({
         provider: "outlook",
@@ -165,10 +268,30 @@ class FixtureSender implements InboxSender {
   readonly provider: InboxProvider = "outlook";
   readonly dataOrigin = "mock" as const;
   sendCount = 0;
+  readonly started: Promise<void>;
+  private resolveStarted!: () => void;
+  private gate: Promise<void> | null = null;
+  private resolveGate: (() => void) | null = null;
 
   constructor(
     private readonly resultStatus: InboxSendResult["status"]
-  ) {}
+  ) {
+    this.started = new Promise((resolve) => {
+      this.resolveStarted = resolve;
+    });
+  }
+
+  pause(): void {
+    this.gate = new Promise((resolve) => {
+      this.resolveGate = resolve;
+    });
+  }
+
+  resume(): void {
+    this.resolveGate?.();
+    this.gate = null;
+    this.resolveGate = null;
+  }
 
   async health(): Promise<"ready"> {
     return "ready";
@@ -179,6 +302,8 @@ class FixtureSender implements InboxSender {
     _options?: ProviderCallOptions
   ): Promise<InboxSendResult> {
     this.sendCount += 1;
+    this.resolveStarted();
+    await this.gate;
     return {
       draft_id: input.draftId,
       provider: this.provider,
@@ -204,6 +329,7 @@ function fixtureService(
     next: (prefix) => `${prefix}-${++id}`
   };
   const sender = new FixtureSender(resultStatus);
+  const checkpoints = new InMemoryCheckpointStore(clock.now);
   const service = new InboxService(
     new InMemoryInboxRepository(),
     new InMemoryInboxDraftRepository(),
@@ -211,11 +337,11 @@ function fixtureService(
     new Map([[sender.provider, sender]]),
     new InMemoryConfirmationTokenStore(clock.now),
     new InMemoryIdempotencyStore<InboxSendResult>(),
-    new InMemoryCheckpointStore(clock.now),
+    checkpoints,
     clock,
     ids
   );
-  return { service, sender };
+  return { service, sender, checkpoints };
 }
 
 async function seededDraft(

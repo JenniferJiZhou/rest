@@ -19,6 +19,9 @@ import {
 import { FixtureInboxIntelligenceProvider } from "../../src/inbox/intelligence.js";
 
 const DEMO_TOKEN = "inbox-demo-secret";
+const APP_TOKEN = "app-token-000000000000000000000000";
+const CONNECTOR_TOKEN = "connector-token-000000000000000000";
+const APP_SESSION = "app-session-000000000000000000000";
 
 describe("Unified Inbox HTTP API", () => {
   let server: FastifyInstance;
@@ -29,6 +32,8 @@ describe("Unified Inbox HTTP API", () => {
       NODE_ENV: "test",
       HUSH_DEMO_MODE: "true",
       HUSH_DEMO_TOKEN: DEMO_TOKEN,
+      HUSH_APP_TOKEN: APP_TOKEN,
+      HUSH_CONNECTOR_TOKEN: CONNECTOR_TOKEN,
       LOG_LEVEL: "silent"
     });
     sender = new FixtureSender();
@@ -179,6 +184,86 @@ describe("Unified Inbox HTTP API", () => {
     );
   });
 
+  it("separates app and connector authentication scopes", async () => {
+    const unauthenticated = await server.inject({
+      method: "GET",
+      url: "/v1/inbox/items",
+      headers: contractHeaders("req_inbox_unauthenticated")
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(unauthenticated.json().error.code).toBe(
+      "INBOX_AUTH_REQUIRED"
+    );
+
+    const connectorReadingAppData = await server.inject({
+      method: "GET",
+      url: "/v1/inbox/items",
+      headers: {
+        ...contractHeaders("req_connector_read"),
+        authorization: `Bearer ${CONNECTOR_TOKEN}`
+      }
+    });
+    expect(connectorReadingAppData.statusCode).toBe(401);
+
+    const missingAppSession = await server.inject({
+      method: "GET",
+      url: "/v1/inbox/items",
+      headers: {
+        ...contractHeaders("req_missing_app_session"),
+        authorization: `Bearer ${APP_TOKEN}`
+      }
+    });
+    expect(missingAppSession.statusCode).toBe(401);
+
+    const appIngestingEvents = await server.inject({
+      method: "POST",
+      url: "/v1/inbox/events:batch",
+      headers: {
+        ...contractHeaders("req_app_ingest"),
+        authorization: `Bearer ${APP_TOKEN}`
+      },
+      payload: eventBatch("req_app_ingest", "message-app-ingest")
+    });
+    expect(appIngestingEvents.statusCode).toBe(401);
+
+    const itemId = await ingestOne("req_session_bound_ingest");
+    const item = await server.inject({
+      method: "GET",
+      url: `/v1/inbox/items/${itemId}`,
+      headers: baseHeaders("req_session_bound_item")
+    });
+    const draftId = item.json().draft_id as string;
+    const draft = await server.inject({
+      method: "GET",
+      url: `/v1/inbox/drafts/${draftId}`,
+      headers: baseHeaders("req_session_bound_draft")
+    });
+    const confirmation = await server.inject({
+      method: "POST",
+      url: `/v1/inbox/drafts/${draftId}/confirmation`,
+      headers: baseHeaders("req_session_bound_confirm")
+    });
+    const wrongSessionSend = await server.inject({
+      method: "POST",
+      url: `/v1/inbox/drafts/${draftId}:send`,
+      headers: {
+        ...baseHeaders("req_session_bound_send"),
+        "x-hush-app-session":
+          "different-session-0000000000000000000",
+        "idempotency-key": "session-bound-send-key"
+      },
+      payload: sendPayload(
+        "req_session_bound_send",
+        draft.json().version as number,
+        confirmation.json().confirmation_token as string
+      )
+    });
+    expect(wrongSessionSend.statusCode).toBe(403);
+    expect(wrongSessionSend.json().error.code).toBe(
+      "INBOX_CONFIRMATION_REQUIRED"
+    );
+  });
+
   async function ingestOne(requestId: string): Promise<string> {
     const response = await server.inject({
       method: "POST",
@@ -233,10 +318,17 @@ function inboxService(
 
 function baseHeaders(requestId: string) {
   return {
+    ...contractHeaders(requestId),
+    "x-hush-demo-token": DEMO_TOKEN,
+    "x-hush-app-session": APP_SESSION
+  };
+}
+
+function contractHeaders(requestId: string) {
+  return {
     "x-request-id": requestId,
     "x-client-version": "0.1.0-test",
-    "x-contract-version": "1.0",
-    "x-hush-demo-token": DEMO_TOKEN
+    "x-contract-version": "1.0"
   };
 }
 

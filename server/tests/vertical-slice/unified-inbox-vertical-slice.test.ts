@@ -112,6 +112,7 @@ function headers(requestId: string) {
     "x-request-id": requestId,
     "x-client-version": "0.1.0-test",
     "x-contract-version": "1.0",
-    "x-hush-demo-token": DEMO_TOKEN
+    "x-hush-demo-token": DEMO_TOKEN,
+    "x-hush-app-session": "vertical-session-000000000000000000"
   };
 }

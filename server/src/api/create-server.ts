@@ -52,6 +52,7 @@ export interface ServerDependencies {
 
 interface RequestContext {
   requestId: string;
+  principalId: string;
   origin: DataOrigin;
   rest: RestService;
   handoff: HandoffService;
@@ -72,6 +73,7 @@ export function createServer(
         paths: [
           "req.headers.authorization",
           "req.headers.x-hush-demo-token",
+          "req.headers.x-hush-app-session",
           "req.headers.cookie",
           "res.headers.set-cookie"
         ],
@@ -250,16 +252,18 @@ export function createServer(
   });
 
   registerInboxRoutes(server, {
-    context: (request, reply, hasBody) => {
+    context: (request, reply, hasBody, access) => {
       const context = requestContext(
         request,
         reply,
         dependencies,
         hasBody,
-        "inbox"
+        "inbox",
+        access
       );
       return {
         requestId: context.requestId,
+        principalId: context.principalId,
         inbox: context.inbox
       };
     },
@@ -275,7 +279,8 @@ function requestContext(
   reply: FastifyReply,
   dependencies: ServerDependencies,
   hasBody: boolean,
-  graph: GraphKind
+  graph: GraphKind,
+  inboxAccess: "app" | "connector" = "app"
 ): RequestContext {
   const requestId = requiredHeader(request, "x-request-id");
   requiredHeader(request, "x-client-version");
@@ -315,6 +320,14 @@ function requestContext(
     }
     demo = true;
   }
+  const principalId = authenticateInboxRequest(
+    request,
+    dependencies.config,
+    graph,
+    inboxAccess,
+    demo,
+    demoToken
+  );
   if (hasBody && request.body === null) {
     throw new AppError({
       code: "INVALID_REQUEST",
@@ -328,11 +341,86 @@ function requestContext(
   setResponseHeaders(reply, requestId, origin);
   return {
     requestId,
+    principalId,
     origin,
     rest: demo ? dependencies.demoRest : dependencies.rest,
     handoff: demo ? dependencies.demoHandoff : dependencies.handoff,
     inbox: demo ? dependencies.demoInbox : dependencies.inbox
   };
+}
+
+function authenticateInboxRequest(
+  request: FastifyRequest,
+  config: AppConfig,
+  graph: GraphKind,
+  access: "app" | "connector",
+  demo: boolean,
+  demoToken: string | null
+): string {
+  if (graph !== "inbox") {
+    return "not-applicable";
+  }
+  if (demo) {
+    if (access === "connector") {
+      return `demo-connector:${tokenDigest(demoToken ?? "")}`;
+    }
+    return appSessionPrincipal(
+      request,
+      `demo:${tokenDigest(demoToken ?? "")}`
+    );
+  }
+  const expected =
+    access === "connector"
+      ? config.HUSH_CONNECTOR_TOKEN
+      : config.HUSH_APP_TOKEN;
+  const supplied = bearerToken(header(request, "authorization"));
+  if (!expected || !supplied || !safeTokenEqual(supplied, expected)) {
+    throw new AppError({
+      code: "INBOX_AUTH_REQUIRED",
+      message:
+        access === "connector"
+          ? "需要有效的 Connector 凭证。"
+          : "需要有效的 Hush App 会话。",
+      statusCode: 401,
+      retryable: false
+    });
+  }
+  const authenticatedPrincipal = `${access}:${tokenDigest(supplied)}`;
+  return access === "app"
+    ? appSessionPrincipal(request, authenticatedPrincipal)
+    : authenticatedPrincipal;
+}
+
+function appSessionPrincipal(
+  request: FastifyRequest,
+  authenticatedPrincipal: string
+): string {
+  const session = header(request, "x-hush-app-session");
+  if (
+    !session ||
+    session.length < 32 ||
+    session.length > 128 ||
+    /[\u0000-\u001F\u007F-\u009F]/u.test(session)
+  ) {
+    throw new AppError({
+      code: "INBOX_AUTH_REQUIRED",
+      message: "需要有效的 Hush App 会话标识。",
+      statusCode: 401,
+      retryable: false
+    });
+  }
+  return `app-session:${tokenDigest(
+    `${authenticatedPrincipal}\u0000${session}`
+  )}`;
+}
+
+function bearerToken(value: string | null): string | null {
+  const match = /^Bearer ([^\s]+)$/iu.exec(value ?? "");
+  return match?.[1] ?? null;
+}
+
+function tokenDigest(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function graphOrigin(

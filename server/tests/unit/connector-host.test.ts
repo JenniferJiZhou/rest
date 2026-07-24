@@ -57,6 +57,127 @@ describe("ConnectorHost", () => {
     expect(() => host.start()).not.toThrow();
     host.stop();
   });
+
+  it("coalesces overlapping cycles", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pull = vi.fn(async () => {
+      await gate;
+      return { checkpoint: "checkpoint-1", items: [] };
+    });
+    const host = new ConnectorHost(
+      [
+        {
+          source: {
+            provider: "outlook",
+            dataOrigin: "mock",
+            health: async () => "ready",
+            pull
+          },
+          accountId: "outlook-account"
+        }
+      ],
+      { ingest: vi.fn().mockResolvedValue({}) },
+      new InMemoryCheckpointStore(),
+      { next: () => "connector-request-1" },
+      30_000
+    );
+
+    const first = host.runOnce();
+    const second = host.runOnce();
+    await Promise.resolve();
+    expect(pull).toHaveBeenCalledTimes(1);
+    release();
+    await Promise.all([first, second]);
+  });
+
+  it("backs off a failing account without blocking healthy accounts", async () => {
+    let now = 0;
+    const failedPull = vi.fn(async () => {
+      throw new Error("provider unavailable");
+    });
+    const healthyPull = vi.fn(async () => ({
+      checkpoint: `healthy-${healthyPull.mock.calls.length}`,
+      items: []
+    }));
+    const host = new ConnectorHost(
+      [
+        {
+          source: {
+            provider: "qq_mail",
+            dataOrigin: "mock",
+            health: async () => "ready",
+            pull: failedPull
+          },
+          accountId: "qq-account"
+        },
+        {
+          source: {
+            provider: "outlook",
+            dataOrigin: "mock",
+            health: async () => "ready",
+            pull: healthyPull
+          },
+          accountId: "outlook-account"
+        }
+      ],
+      { ingest: vi.fn().mockResolvedValue({}) },
+      new InMemoryCheckpointStore(),
+      { next: () => "connector-request-1" },
+      1_000,
+      () => now
+    );
+
+    await host.runOnce();
+    await host.runOnce();
+    expect(failedPull).toHaveBeenCalledTimes(1);
+    expect(healthyPull).toHaveBeenCalledTimes(2);
+
+    now = 2_000;
+    await host.runOnce();
+    expect(failedPull).toHaveBeenCalledTimes(2);
+    expect(healthyPull).toHaveBeenCalledTimes(3);
+  });
+
+  it("bounds a stalled account pull", async () => {
+    const healthyPull = vi.fn(async () => ({
+      checkpoint: "healthy-checkpoint",
+      items: []
+    }));
+    const host = new ConnectorHost(
+      [
+        {
+          source: {
+            provider: "qq_mail",
+            dataOrigin: "mock",
+            health: async () => "ready",
+            pull: async () => new Promise(() => undefined)
+          },
+          accountId: "qq-account"
+        },
+        {
+          source: {
+            provider: "outlook",
+            dataOrigin: "mock",
+            health: async () => "ready",
+            pull: healthyPull
+          },
+          accountId: "outlook-account"
+        }
+      ],
+      { ingest: vi.fn().mockResolvedValue({}) },
+      new InMemoryCheckpointStore(),
+      { next: () => "connector-request-1" },
+      1_000,
+      Date.now,
+      10
+    );
+
+    await expect(host.runOnce()).resolves.toBeUndefined();
+    expect(healthyPull).toHaveBeenCalledTimes(1);
+  });
 });
 
 function source(provider: "outlook"): InboxSource {

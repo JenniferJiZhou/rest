@@ -68,8 +68,19 @@ GET  /v1/inbox/sync-status
 ```
 
 Sending requires the current draft version, an unconsumed five-minute
-confirmation token, and `Idempotency-Key`. AI providers receive message text
-but never provider credentials, confirmation tokens, or a send tool.
+confirmation token bound to the authenticated App session, and
+`Idempotency-Key`. AI providers receive message text but never provider
+credentials, confirmation tokens, or a send tool.
+
+Normal Inbox routes require `Authorization: Bearer <HUSH_APP_TOKEN>` plus a
+32–128 character, per-launch high-entropy `X-Hush-App-Session`; confirmation
+tokens are bound to the authenticated digest of both values.
+`POST /v1/inbox/events:batch` instead requires
+`Authorization: Bearer <HUSH_CONNECTOR_TOKEN>`; the two credentials are not
+interchangeable and configuration rejects equal values. Both values must
+contain at least 32 characters and are mandatory in production. Sample Mode
+may use `X-Hush-Demo-Token` and always selects the isolated Fixture graph;
+its App routes still require `X-Hush-App-Session`.
 
 ## Commands
 
@@ -123,14 +134,21 @@ COMPLETION_SEND_TIMEOUT_MS=5000
 INBOX_POLL_INTERVAL_MS=30000
 ```
 
-Each accepts an integer from 100 through 120000 milliseconds. Handoff
+The first four settings accept 100 through 120000 milliseconds.
+`INBOX_POLL_INTERVAL_MS` accepts 1000 through 3600000 milliseconds. Handoff
 cancellation aborts the active Agent, Mail, Draft, or Completion call.
 Completion notification is an auxiliary delivery: failure or timeout is
 logged by correlation ID but does not reverse an already persisted
 `succeeded` Job. A failed draft remains in `drafts` with `saved=false` and in
 the Pause Receipt as `held_items:not_saved`.
 
-Jobs and idempotency claims remain process-local. New Handoff starts run a
+Jobs and idempotency claims remain process-local. Unified Inbox items,
+drafts, checkpoints, confirmation tokens, and send idempotency claims are
+also process-local in this Demo implementation; restarting the server loses
+them. The repository and checkpoint ports are the boundary for a durable
+production implementation.
+
+New Handoff starts run a
 five-minute-throttled opportunistic cleanup of expired terminal Jobs and
 claims; running Jobs are never deleted. Restarting the server loses all Job
 IDs and in-memory claims.

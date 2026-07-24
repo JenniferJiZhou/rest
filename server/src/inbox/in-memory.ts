@@ -154,6 +154,9 @@ export class InMemoryInboxDraftRepository
     input: UpdateInboxDraft
   ): Promise<InboxDraft> {
     const draft = this.requireDraft(id);
+    if (!["ready", "edited", "failed"].includes(draft.status)) {
+      throw statusConflict(draft.status);
+    }
     if (draft.version !== input.expectedVersion) {
       throw versionConflict(draft.version);
     }
@@ -165,6 +168,27 @@ export class InMemoryInboxDraftRepository
       origin: "user",
       status: "edited",
       updated_at: new Date().toISOString()
+    };
+    this.drafts.set(id, updated);
+    return structuredClone(updated);
+  }
+
+  async claimForSend(
+    id: string,
+    expectedVersion: number,
+    now: string
+  ): Promise<InboxDraft> {
+    const draft = this.requireDraft(id);
+    if (draft.version !== expectedVersion) {
+      throw versionConflict(draft.version);
+    }
+    if (!["ready", "edited", "failed"].includes(draft.status)) {
+      throw statusConflict(draft.status);
+    }
+    const updated: InboxDraft = {
+      ...draft,
+      status: "sending",
+      updated_at: now
     };
     this.drafts.set(id, updated);
     return structuredClone(updated);
@@ -294,5 +318,14 @@ function versionConflict(currentVersion: number): AppError {
     message: "草稿版本已更新，请刷新后重试。",
     statusCode: 409,
     details: { current_version: currentVersion }
+  });
+}
+
+function statusConflict(currentStatus: InboxDraft["status"]): AppError {
+  return new AppError({
+    code: "INBOX_VERSION_CONFLICT",
+    message: "草稿状态已发生变化，请刷新后重试。",
+    statusCode: 409,
+    details: { current_status: currentStatus }
   });
 }

@@ -18,6 +18,7 @@ describe("QqMailAdapter", () => {
       runtime
     );
 
+    await expect(adapter.health()).resolves.toBe("ready");
     const pulled = await adapter.pull({
       accountId: "123456@qq.com",
       checkpoint: "40",
@@ -64,10 +65,15 @@ describe("QqMailAdapter", () => {
 });
 
 class FixtureRuntime implements QqMailRuntime {
+  healthCount = 0;
   lastUid: number | null = null;
   sent: Record<string, unknown> | null = null;
   sendCount = 0;
   timeout = false;
+
+  async health() {
+    this.healthCount += 1;
+  }
 
   async pull(
     _credentials: {

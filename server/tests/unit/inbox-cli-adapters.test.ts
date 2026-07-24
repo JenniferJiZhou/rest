@@ -11,25 +11,35 @@ import type {
 describe("Inbox CLI adapters", () => {
   it("uses lark-cli JSON commands without a shell", async () => {
     const runner = new RecordingRunner([
+      JSON.stringify({ authenticated: true }),
       JSON.stringify({
         items: [
           {
             message_id: "lark-message-1",
             chat_id: "lark-chat-1",
-            sender_id: "lark-user-1",
-            text: "飞书消息",
-            create_time: "2026-07-24T09:00:00+08:00"
+            sender: {
+              id: "lark-user-1",
+              name: "飞书用户"
+            },
+            content: "飞书消息",
+            create_time: "1784854800000"
           }
         ],
-        checkpoint: "lark-checkpoint-1"
+        has_more: true,
+        page_token: "lark-page-2"
       }),
       JSON.stringify({ message_id: "lark-sent-1" })
     ]);
     const adapter = new LarkCliAdapter(
-      { executable: "/opt/lark-cli", accountId: "lark-account" },
+      {
+        executable: "/opt/lark-cli",
+        accountId: "lark-account",
+        now: () => new Date("2026-07-24T01:00:00.000Z")
+      },
       runner
     );
 
+    await expect(adapter.health()).resolves.toBe("ready");
     const pulled = await adapter.pull({
       accountId: "lark-account",
       checkpoint: null,
@@ -42,40 +52,88 @@ describe("Inbox CLI adapters", () => {
     expect(pulled.items[0]).toMatchObject({
       provider: "feishu",
       provider_message_id: "lark-message-1",
-      content: "飞书消息"
+      sender: "飞书用户",
+      content: "飞书消息",
+      received_at: "2026-07-24T01:00:00.000Z"
     });
     expect(sent.status).toBe("sent");
-    expect(runner.invocations[0]).toMatchObject({
+    expect(runner.invocations[0]?.args).toEqual([
+      "auth",
+      "status",
+      "--format",
+      "json"
+    ]);
+    expect(runner.invocations[1]).toEqual({
       executable: "/opt/lark-cli",
-      args: expect.arrayContaining(["im", "+messages-list"])
+      args: [
+        "im",
+        "+messages-search",
+        "--as",
+        "user",
+        "--query",
+        "",
+        "--start",
+        "2026-07-23T01:00:00.000Z",
+        "--end",
+        "2026-07-24T01:00:00.000Z",
+        "--page-size",
+        "20",
+        "--format",
+        "json"
+      ]
     });
-    expect(runner.invocations[1]?.args).toEqual(
-      expect.arrayContaining(["im", "+messages-send", "--as", "user"])
-    );
+    expect(JSON.parse(pulled.checkpoint)).toMatchObject({
+      pageToken: "lark-page-2",
+      start: "2026-07-23T01:00:00.000Z",
+      end: "2026-07-24T01:00:00.000Z"
+    });
+    expect(runner.invocations[2]?.args).toEqual([
+      "im",
+      "+messages-send",
+      "--as",
+      "user",
+      "--chat-id",
+      "lark-chat-1",
+      "--text",
+      "用户确认后的回复",
+      "--idempotency-key",
+      "send-key-1",
+      "--format",
+      "json"
+    ]);
   });
 
   it("uses dws chat message list-all and send commands", async () => {
     const runner = new RecordingRunner([
+      JSON.stringify({ authenticated: true }),
       JSON.stringify({
-        messages: [
-          {
-            messageId: "ding-message-1",
-            conversationId: "ding-chat-1",
-            senderId: "ding-user-1",
-            text: "钉钉消息",
-            createdAt: "2026-07-24T09:00:00+08:00"
-          }
-        ],
-        checkpoint: "ding-checkpoint-1"
+        result: {
+          messages: [
+            {
+              messageId: "ding-message-1",
+              conversationId: "ding-chat-1",
+              senderId: "ding-user-1",
+              text: "钉钉消息",
+              createdAt: "2026-07-24T09:00:00+08:00"
+            }
+          ],
+          hasMore: true,
+          nextCursor: "ding-page-2"
+        }
       }),
       JSON.stringify({ messageId: "ding-sent-1" })
     ]);
     const adapter = new DingTalkDwsAdapter(
-      { executable: "/opt/dws", accountId: "ding-account" },
+      {
+        executable: "/opt/dws",
+        accountId: "ding-account",
+        now: () => new Date("2026-07-24T01:00:00.000Z")
+      },
       runner
     );
 
-    await adapter.pull({
+    await expect(adapter.health()).resolves.toBe("ready");
+    const pulled = await adapter.pull({
       accountId: "ding-account",
       checkpoint: null,
       limit: 20
@@ -84,16 +142,93 @@ describe("Inbox CLI adapters", () => {
       sendInput("ding-account", "ding-chat-1")
     );
 
-    expect(runner.invocations[0]?.args.slice(0, 3)).toEqual([
+    expect(runner.invocations[0]?.args).toEqual([
+      "auth",
+      "status",
+      "--format",
+      "json"
+    ]);
+    expect(runner.invocations[1]?.args).toEqual([
       "chat",
       "message",
-      "list-all"
+      "list-all",
+      "--start",
+      "2026-07-23 09:00:00",
+      "--end",
+      "2026-07-24 09:00:00",
+      "--limit",
+      "20",
+      "--cursor",
+      "0",
+      "--format",
+      "json"
     ]);
-    expect(runner.invocations[1]?.args.slice(0, 3)).toEqual([
-      "chat",
-      "message",
-      "send"
-    ]);
+    expect(JSON.parse(pulled.checkpoint)).toMatchObject({
+      cursor: "ding-page-2",
+      start: "2026-07-23T01:00:00.000Z",
+      end: "2026-07-24T01:00:00.000Z"
+    });
+    expect(runner.invocations[2]).toEqual({
+      executable: "/opt/dws",
+      args: [
+        "chat",
+        "message",
+        "send",
+        "--group",
+        "ding-chat-1",
+        "--title",
+        "Hush 回复",
+        "--text",
+        "@-",
+        "--yes",
+        "--format",
+        "json"
+      ],
+      input: "用户确认后的回复",
+      ambiguousOnTimeout: true
+    });
+  });
+
+  it("rejects incomplete provider envelopes instead of advancing checkpoints", async () => {
+    const lark = new LarkCliAdapter(
+      {
+        executable: "/opt/lark-cli",
+        accountId: "lark-account",
+        now: () => new Date("2026-07-24T01:00:00.000Z")
+      },
+      new RecordingRunner([
+        JSON.stringify({ items: [], has_more: true })
+      ])
+    );
+    const dingtalk = new DingTalkDwsAdapter(
+      {
+        executable: "/opt/dws",
+        accountId: "ding-account",
+        now: () => new Date("2026-07-24T01:00:00.000Z")
+      },
+      new RecordingRunner([
+        JSON.stringify({ result: { hasMore: false } })
+      ])
+    );
+
+    await expect(
+      lark.pull({
+        accountId: "lark-account",
+        checkpoint: null,
+        limit: 20
+      })
+    ).rejects.toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE"
+    });
+    await expect(
+      dingtalk.pull({
+        accountId: "ding-account",
+        checkpoint: null,
+        limit: 20
+      })
+    ).rejects.toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE"
+    });
   });
 });
 

@@ -18,6 +18,7 @@ export interface OutlookGraphConfig {
 
 interface GraphMessage {
   id: string;
+  "@removed"?: unknown;
   conversationId?: string;
   from?: { emailAddress?: { address?: string } };
   toRecipients?: Array<{ emailAddress?: { address?: string } }>;
@@ -35,8 +36,20 @@ export class OutlookGraphAdapter implements InboxSource, InboxSender {
     private readonly request: GraphFetch = fetch
   ) {}
 
-  async health(): Promise<"ready" | "unavailable"> {
-    return this.config.accountId ? "ready" : "unavailable";
+  async health(): Promise<"ready" | "degraded" | "unavailable"> {
+    if (!this.config.accountId) {
+      return "unavailable";
+    }
+    try {
+      const token = await this.config.accessToken();
+      const response = await this.request(
+        "https://graph.microsoft.com/v1.0/me?$select=id",
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.ok ? "ready" : "degraded";
+    } catch {
+      return "degraded";
+    }
   }
 
   async pull(input: {
@@ -45,10 +58,11 @@ export class OutlookGraphAdapter implements InboxSource, InboxSender {
     limit: number;
   }): Promise<{ items: InboxEvent[]; checkpoint: string }> {
     this.assertAccount(input.accountId);
-    const token = await this.config.accessToken();
-    const url =
+    const candidateUrl =
       input.checkpoint ??
       `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$top=${input.limit}&$select=id,conversationId,from,toRecipients,subject,bodyPreview,receivedDateTime`;
+    const url = graphDeltaUrl(candidateUrl);
+    const token = await this.config.accessToken();
     let response: Response;
     try {
       response = await this.request(url, {
@@ -75,11 +89,12 @@ export class OutlookGraphAdapter implements InboxSource, InboxSender {
     if (!checkpoint) {
       throw unavailable("missing_checkpoint");
     }
+    const validatedCheckpoint = graphDeltaUrl(checkpoint);
     return {
-      checkpoint,
-      items: (payload.value ?? []).map((message) =>
-        this.mapMessage(message, input.accountId)
-      )
+      checkpoint: validatedCheckpoint,
+      items: (payload.value ?? [])
+        .filter((message) => message["@removed"] === undefined)
+        .map((message) => this.mapMessage(message, input.accountId))
     };
   }
 
@@ -97,14 +112,12 @@ export class OutlookGraphAdapter implements InboxSource, InboxSender {
             "Content-Type": "application/json",
             "Idempotency-Key": input.idempotencyKey
           },
-          body: JSON.stringify({ comment: input.content })
+          body: JSON.stringify({ comment: input.content }),
+          signal: AbortSignal.timeout(30_000)
         }
       );
-    } catch (error) {
-      if (isTimeout(error)) {
-        return unknownResult(input.draftId);
-      }
-      throw unavailable("network");
+    } catch {
+      return unknownResult(input.draftId);
     }
     if (!response.ok) {
       throw unavailable(
@@ -158,6 +171,38 @@ export class OutlookGraphAdapter implements InboxSource, InboxSender {
   }
 }
 
+function graphDeltaUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw invalidCheckpoint();
+  }
+  const deltaPath =
+    /^\/v1\.0\/me\/mailFolders(?:\/[^/]+|\([^)]*\))\/messages\/delta$/iu;
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "graph.microsoft.com" ||
+    url.port !== "" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.hash !== "" ||
+    !deltaPath.test(url.pathname)
+  ) {
+    throw invalidCheckpoint();
+  }
+  return url.toString();
+}
+
+function invalidCheckpoint(): AppError {
+  return new AppError({
+    code: "INVALID_REQUEST",
+    message: "Outlook 增量同步 checkpoint 无效。",
+    statusCode: 400,
+    details: { provider: "outlook", reason: "invalid_checkpoint" }
+  });
+}
+
 function unavailable(reason: string, status?: number): AppError {
   return new AppError({
     code: "INBOX_PROVIDER_UNAVAILABLE",
@@ -180,15 +225,4 @@ function unknownResult(draftId: string): InboxSendResult {
     provider_message_id: null,
     sent_at: null
   };
-}
-
-function isTimeout(error: unknown): boolean {
-  return (
-    error instanceof DOMException && error.name === "AbortError"
-  ) || (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "ETIMEDOUT"
-  );
 }

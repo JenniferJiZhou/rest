@@ -4,6 +4,7 @@ import type { ConfirmationTokenStore } from "./ports.js";
 interface ConfirmationRecord {
   draftId: string;
   version: number;
+  principalId: string;
   expiresAt: number;
 }
 
@@ -18,13 +19,15 @@ export class InMemoryConfirmationTokenStore
 
   async issue(
     draftId: string,
-    version: number
+    version: number,
+    principalId: string
   ): Promise<{ token: string; expiresAt: string }> {
     const token = randomBytes(32).toString("base64url");
     const expiresAt = this.now().getTime() + 5 * 60 * 1_000;
     this.records.set(digest(token), {
       draftId,
       version,
+      principalId,
       expiresAt
     });
     return {
@@ -36,7 +39,8 @@ export class InMemoryConfirmationTokenStore
   async consume(
     token: string,
     draftId: string,
-    version: number
+    version: number,
+    principalId: string
   ): Promise<boolean> {
     const key = digest(token);
     const record = this.records.get(key);
@@ -45,7 +49,8 @@ export class InMemoryConfirmationTokenStore
       record !== undefined &&
       record.expiresAt > this.now().getTime() &&
       record.draftId === draftId &&
-      record.version === version
+      record.version === version &&
+      record.principalId === principalId
     );
   }
 }
