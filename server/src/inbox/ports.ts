@@ -103,6 +103,7 @@ export interface InboxSendInput {
   accountId: string;
   conversationId: string | null;
   providerMessageId: string;
+  replyTo: string;
   recipients: string[];
   subject: string | null;
   content: string;
