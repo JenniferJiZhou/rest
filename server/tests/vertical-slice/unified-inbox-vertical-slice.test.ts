@@ -40,8 +40,11 @@ describe("Unified Inbox fixture vertical slice", () => {
             provider: "feishu",
             account_id: "fixture-feishu",
             conversation_id: "fixture-chat",
+            conversation_type: "direct",
+            conversation_name: "演示会话",
             provider_message_id: "fixture-message",
             sender: "fixture-colleague",
+            sender_ref: null,
             recipients: ["fixture-feishu"],
             subject: null,
             content: "请确认明天的演示时间。",
@@ -55,6 +58,7 @@ describe("Unified Inbox fixture vertical slice", () => {
         ]
       }
     });
+    expect(ingest.statusCode).toBe(202);
     const itemId = ingest.json().item_ids[0] as string;
     const item = await server.inject({
       method: "GET",
@@ -99,7 +103,6 @@ describe("Unified Inbox fixture vertical slice", () => {
       }
     });
 
-    expect(ingest.statusCode).toBe(202);
     expect(item.json().summary).toBeTruthy();
     expect(edit.json().content).toBe("用户最终确认文本");
     expect(sent.statusCode).toBe(200);

@@ -65,7 +65,11 @@ describe("ConnectorHost", () => {
     });
     const pull = vi.fn(async () => {
       await gate;
-      return { checkpoint: "checkpoint-1", items: [] };
+      return {
+        checkpoint: "checkpoint-1",
+        items: [],
+        participantBindings: []
+      };
     });
     const host = new ConnectorHost(
       [
@@ -100,7 +104,8 @@ describe("ConnectorHost", () => {
     });
     const healthyPull = vi.fn(async () => ({
       checkpoint: `healthy-${healthyPull.mock.calls.length}`,
-      items: []
+      items: [],
+      participantBindings: []
     }));
     const host = new ConnectorHost(
       [
@@ -144,7 +149,8 @@ describe("ConnectorHost", () => {
   it("bounds a stalled account pull", async () => {
     const healthyPull = vi.fn(async () => ({
       checkpoint: "healthy-checkpoint",
-      items: []
+      items: [],
+      participantBindings: []
     }));
     const host = new ConnectorHost(
       [
@@ -187,6 +193,7 @@ function source(provider: "outlook"): InboxSource {
     health: async () => "ready",
     pull: async ({ accountId }) => ({
       checkpoint: "outlook-checkpoint-1",
+      participantBindings: [],
       items: [
         {
           provider,

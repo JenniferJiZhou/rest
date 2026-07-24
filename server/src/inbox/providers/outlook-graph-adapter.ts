@@ -4,6 +4,7 @@ import type {
   InboxSendResult
 } from "../../domain/contracts.js";
 import type {
+  InboxParticipantBinding,
   InboxSendInput,
   InboxSender,
   InboxSource
@@ -56,7 +57,11 @@ export class OutlookGraphAdapter implements InboxSource, InboxSender {
     accountId: string;
     checkpoint: string | null;
     limit: number;
-  }): Promise<{ items: InboxEvent[]; checkpoint: string }> {
+  }): Promise<{
+    items: InboxEvent[];
+    checkpoint: string;
+    participantBindings: InboxParticipantBinding[];
+  }> {
     this.assertAccount(input.accountId);
     const candidateUrl =
       input.checkpoint ??
@@ -92,6 +97,7 @@ export class OutlookGraphAdapter implements InboxSource, InboxSender {
     const validatedCheckpoint = graphDeltaUrl(checkpoint);
     return {
       checkpoint: validatedCheckpoint,
+      participantBindings: [],
       items: (payload.value ?? [])
         .filter((message) => message["@removed"] === undefined)
         .map((message) => this.mapMessage(message, input.accountId))

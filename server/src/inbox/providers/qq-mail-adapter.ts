@@ -6,6 +6,7 @@ import type {
   InboxSendResult
 } from "../../domain/contracts.js";
 import type {
+  InboxParticipantBinding,
   InboxSendInput,
   InboxSender,
   InboxSource
@@ -70,7 +71,11 @@ export class QqMailAdapter implements InboxSource, InboxSender {
     accountId: string;
     checkpoint: string | null;
     limit: number;
-  }): Promise<{ items: InboxEvent[]; checkpoint: string }> {
+  }): Promise<{
+    items: InboxEvent[];
+    checkpoint: string;
+    participantBindings: InboxParticipantBinding[];
+  }> {
     this.assertAccount(input.accountId);
     const afterUid = input.checkpoint === null
       ? null
@@ -83,6 +88,7 @@ export class QqMailAdapter implements InboxSource, InboxSender {
     );
     return {
       checkpoint: String(result.checkpoint),
+      participantBindings: [],
       items: result.messages.map((message) => ({
         provider: this.provider,
         account_id: input.accountId,

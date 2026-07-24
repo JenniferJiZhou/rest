@@ -12,7 +12,11 @@ import type {
   CheckpointStore,
   CreateInboxDraft,
   InboxDraftRepository,
+  InboxParticipantBinding,
+  InboxParticipantDirectory,
   InboxRepository,
+  InboxSourceMessage,
+  ResolvedInboxParticipant,
   TransitionInboxDraft,
   UpdateInboxDraft
 } from "./ports.js";
@@ -20,25 +24,75 @@ import type {
 export class InMemoryInboxRepository implements InboxRepository {
   private readonly items = new Map<string, UnifiedInboxItem>();
   private readonly idsByDedupeKey = new Map<string, string>();
+  private readonly openDigestIds = new Map<string, string>();
+  private readonly sourceMessagesByItemId = new Map<
+    string,
+    InboxSourceMessage[]
+  >();
 
   async upsert(
-    event: InboxEvent
-  ): Promise<{ item: UnifiedInboxItem; created: boolean }> {
-    const key = [
-      event.provider,
-      event.account_id,
-      event.provider_message_id
-    ].join("\u0000");
-    const existingId = this.idsByDedupeKey.get(key);
+    event: InboxEvent,
+    now: string = new Date().toISOString()
+  ): Promise<{
+    item: UnifiedInboxItem;
+    created: boolean;
+    changed: boolean;
+  }> {
+    const dedupeKey = this.dedupeKey(event);
+    const existingId = this.idsByDedupeKey.get(dedupeKey);
     if (existingId) {
       return {
         item: structuredClone(this.items.get(existingId)!),
-        created: false
+        created: false,
+        changed: false
       };
     }
 
     const normalizedEvent = structuredClone(event);
     const isGroupConversation = normalizedEvent.conversation_type === "group";
+    if (isGroupConversation) {
+      const digestKey = this.digestKey(normalizedEvent);
+      const openId = this.openDigestIds.get(digestKey);
+      if (openId) {
+        const current = this.items.get(openId)!;
+        const reachesMessageLimit = current.message_count >= 1_000;
+        const reachesTimeLimit =
+          Date.parse(normalizedEvent.received_at) -
+            Date.parse(current.window_started_at) >=
+          24 * 60 * 60 * 1_000;
+        if (reachesMessageLimit || reachesTimeLimit) {
+          this.sealOpenDigest(digestKey, current, now);
+        } else {
+          const updated: UnifiedInboxItem = {
+            ...current,
+            provider_message_id: normalizedEvent.provider_message_id,
+            received_at: normalizedEvent.received_at,
+            revision: current.revision + 1,
+            message_count: current.message_count + 1,
+            window_ended_at: normalizedEvent.received_at,
+            summary: null,
+            important_points: [],
+            todos: [],
+            priority: "uncertain",
+            needs_reply: null,
+            reply_targets: [],
+            draft_id: null,
+            sync_status: "pending"
+          };
+          this.items.set(openId, updated);
+          this.idsByDedupeKey.set(dedupeKey, openId);
+          this.sourceMessagesByItemId
+            .get(openId)!
+            .push(this.sourceMessage(normalizedEvent));
+          return {
+            item: structuredClone(updated),
+            created: false,
+            changed: true
+          };
+        }
+      }
+    }
+
     const item: UnifiedInboxItem = {
       id: `inbox_${randomUUID()}`,
       ...normalizedEvent,
@@ -62,8 +116,18 @@ export class InMemoryInboxRepository implements InboxRepository {
       sync_status: "pending"
     };
     this.items.set(item.id, item);
-    this.idsByDedupeKey.set(key, item.id);
-    return { item: structuredClone(item), created: true };
+    this.idsByDedupeKey.set(dedupeKey, item.id);
+    this.sourceMessagesByItemId.set(item.id, [
+      this.sourceMessage(normalizedEvent)
+    ]);
+    if (isGroupConversation) {
+      this.openDigestIds.set(this.digestKey(normalizedEvent), item.id);
+    }
+    return {
+      item: structuredClone(item),
+      created: true,
+      changed: true
+    };
   }
 
   async get(id: string): Promise<UnifiedInboxItem | null> {
@@ -91,9 +155,13 @@ export class InMemoryInboxRepository implements InboxRepository {
 
   async saveEnrichment(
     id: string,
+    expectedRevision: number,
     enrichment: InboxSummaryResult
   ): Promise<UnifiedInboxItem> {
     const item = this.requireItem(id);
+    if (item.revision !== expectedRevision) {
+      throw revisionConflict(item.revision);
+    }
     const updated: UnifiedInboxItem = {
       ...item,
       ...structuredClone(enrichment),
@@ -103,6 +171,11 @@ export class InMemoryInboxRepository implements InboxRepository {
     return structuredClone(updated);
   }
 
+  async sourceMessages(id: string): Promise<InboxSourceMessage[]> {
+    this.requireItem(id);
+    return structuredClone(this.sourceMessagesByItemId.get(id) ?? []);
+  }
+
   async setDraftId(
     id: string,
     draftId: string
@@ -110,6 +183,34 @@ export class InMemoryInboxRepository implements InboxRepository {
     const item = this.requireItem(id);
     const updated = { ...item, draft_id: draftId };
     this.items.set(id, updated);
+    return structuredClone(updated);
+  }
+
+  async acknowledge(
+    id: string,
+    expectedRevision: number,
+    now: string = new Date().toISOString()
+  ): Promise<UnifiedInboxItem> {
+    const item = this.requireItem(id);
+    if (
+      item.revision !== expectedRevision ||
+      item.acknowledged_at !== null ||
+      item.sealed_at !== null
+    ) {
+      throw revisionConflict(item.revision);
+    }
+    const updated: UnifiedInboxItem = {
+      ...item,
+      acknowledged_at: now,
+      sealed_at: now
+    };
+    this.items.set(id, updated);
+    if (item.conversation_type === "group") {
+      const digestKey = this.digestKey(item);
+      if (this.openDigestIds.get(digestKey) === id) {
+        this.openDigestIds.delete(digestKey);
+      }
+    }
     return structuredClone(updated);
   }
 
@@ -123,6 +224,113 @@ export class InMemoryInboxRepository implements InboxRepository {
       });
     }
     return item;
+  }
+
+  private dedupeKey(event: InboxEvent): string {
+    return [
+      event.provider,
+      event.account_id,
+      event.provider_message_id
+    ].join("\u0000");
+  }
+
+  private digestKey(
+    event: Pick<
+      InboxEvent,
+      "provider" | "account_id" | "conversation_id"
+    >
+  ): string {
+    return [
+      event.provider,
+      event.account_id,
+      event.conversation_id
+    ].join("\u0000");
+  }
+
+  private sourceMessage(event: InboxEvent): InboxSourceMessage {
+    return {
+      providerMessageId: event.provider_message_id,
+      senderRef: event.sender_ref,
+      senderDisplayName: event.sender,
+      content: event.content,
+      receivedAt: event.received_at
+    };
+  }
+
+  private sealOpenDigest(
+    digestKey: string,
+    item: UnifiedInboxItem,
+    now: string
+  ): void {
+    this.items.set(item.id, { ...item, sealed_at: now });
+    this.openDigestIds.delete(digestKey);
+  }
+}
+
+export class InMemoryInboxParticipantDirectory
+  implements InboxParticipantDirectory
+{
+  private readonly bindings = new Map<
+    string,
+    InboxParticipantBinding
+  >();
+
+  async bindAll(bindings: InboxParticipantBinding[]): Promise<void> {
+    for (const binding of bindings) {
+      this.bindings.set(
+        this.key(
+          binding.provider,
+          binding.accountId,
+          binding.conversationId,
+          binding.participantRef
+        ),
+        structuredClone(binding)
+      );
+    }
+  }
+
+  async resolve(input: {
+    provider: InboxProvider;
+    accountId: string;
+    conversationId: string;
+    participantRefs: string[];
+  }): Promise<ResolvedInboxParticipant[]> {
+    return input.participantRefs.map((participantRef) => {
+      const binding = this.bindings.get(
+        this.key(
+          input.provider,
+          input.accountId,
+          input.conversationId,
+          participantRef
+        )
+      );
+      if (!binding) {
+        throw new AppError({
+          code: "INBOX_VERSION_CONFLICT",
+          message: "回复目标已发生变化，请刷新后重试。",
+          statusCode: 409
+        });
+      }
+      return {
+        participantRef: binding.participantRef,
+        providerParticipantId: binding.providerParticipantId,
+        displayName: binding.displayName
+      };
+    });
+  }
+
+  private key(
+    provider: InboxProvider,
+    accountId: string,
+    conversationId: string,
+    participantRef: string
+  ): string {
+    return [
+      provider,
+      accountId,
+      conversationId,
+      participantRef
+    ].join("\u0000");
   }
 }
 
@@ -326,6 +534,15 @@ function versionConflict(currentVersion: number): AppError {
     message: "草稿版本已更新，请刷新后重试。",
     statusCode: 409,
     details: { current_version: currentVersion }
+  });
+}
+
+function revisionConflict(currentRevision: number): AppError {
+  return new AppError({
+    code: "INBOX_VERSION_CONFLICT",
+    message: "会话摘要版本已更新，请刷新后重试。",
+    statusCode: 409,
+    details: { current_revision: currentRevision }
   });
 }
 

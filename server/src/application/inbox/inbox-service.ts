@@ -111,7 +111,7 @@ export class InboxService {
     const summary = await this.intelligence.summarize(
       sourceMessageInput(item)
     );
-    return this.items.saveEnrichment(id, summary);
+    return this.items.saveEnrichment(id, item.revision, summary);
   }
 
   async createDraft(itemId: string): Promise<InboxDraft> {

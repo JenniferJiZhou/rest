@@ -17,18 +17,63 @@ import type {
 
 export interface InboxRepository {
   upsert(
-    event: InboxEvent
-  ): Promise<{ item: UnifiedInboxItem; created: boolean }>;
+    event: InboxEvent,
+    now?: string
+  ): Promise<{
+    item: UnifiedInboxItem;
+    created: boolean;
+    changed: boolean;
+  }>;
   get(id: string): Promise<UnifiedInboxItem | null>;
   list(input: { cursor?: string; limit: number }): Promise<{
     items: UnifiedInboxItem[];
     nextCursor: string | null;
   }>;
+  sourceMessages(id: string): Promise<InboxSourceMessage[]>;
   saveEnrichment(
     id: string,
+    expectedRevision: number,
     enrichment: InboxSummaryResult
   ): Promise<UnifiedInboxItem>;
   setDraftId(id: string, draftId: string): Promise<UnifiedInboxItem>;
+  acknowledge(
+    id: string,
+    expectedRevision: number,
+    now?: string
+  ): Promise<UnifiedInboxItem>;
+}
+
+export interface InboxParticipantBinding {
+  provider: InboxProvider;
+  accountId: string;
+  conversationId: string;
+  participantRef: string;
+  providerParticipantId: string;
+  displayName: string;
+}
+
+export interface ResolvedInboxParticipant {
+  participantRef: string;
+  providerParticipantId: string;
+  displayName: string;
+}
+
+export interface InboxParticipantDirectory {
+  bindAll(bindings: InboxParticipantBinding[]): Promise<void>;
+  resolve(input: {
+    provider: InboxProvider;
+    accountId: string;
+    conversationId: string;
+    participantRefs: string[];
+  }): Promise<ResolvedInboxParticipant[]>;
+}
+
+export interface InboxSourceMessage {
+  providerMessageId: string;
+  senderRef: string | null;
+  senderDisplayName: string | null;
+  content: string;
+  receivedAt: string;
 }
 
 export interface CreateInboxDraft {
@@ -140,6 +185,7 @@ export interface InboxSource {
   ): Promise<{
     items: InboxEvent[];
     checkpoint: string;
+    participantBindings: InboxParticipantBinding[];
   }>;
 }
 

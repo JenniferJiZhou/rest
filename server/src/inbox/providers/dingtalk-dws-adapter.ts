@@ -4,6 +4,7 @@ import type {
   InboxSendResult
 } from "../../domain/contracts.js";
 import type {
+  InboxParticipantBinding,
   InboxSendInput,
   InboxSender,
   InboxSource
@@ -64,7 +65,11 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
     accountId: string;
     checkpoint: string | null;
     limit: number;
-  }): Promise<{ items: InboxEvent[]; checkpoint: string }> {
+  }): Promise<{
+    items: InboxEvent[];
+    checkpoint: string;
+    participantBindings: InboxParticipantBinding[];
+  }> {
     this.assertAccount(input.accountId);
     const checkpoint = resolveCheckpoint(
       input.checkpoint,
@@ -121,6 +126,7 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
     }
     return {
       items,
+      participantBindings: [],
       checkpoint:
         hasMore && nextCursor
           ? JSON.stringify({

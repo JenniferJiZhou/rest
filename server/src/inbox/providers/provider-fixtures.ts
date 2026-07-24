@@ -5,6 +5,7 @@ import type {
   InboxSendResult
 } from "../../domain/contracts.js";
 import type {
+  InboxParticipantBinding,
   InboxSendInput,
   InboxSender,
   InboxSource
@@ -23,9 +24,14 @@ export class FixtureInboxSource implements InboxSource {
     accountId: string;
     checkpoint: string | null;
     limit: number;
-  }): Promise<{ items: InboxEvent[]; checkpoint: string }> {
+  }): Promise<{
+    items: InboxEvent[];
+    checkpoint: string;
+    participantBindings: InboxParticipantBinding[];
+  }> {
     return {
       checkpoint: input.checkpoint ?? `${this.provider}-fixture-1`,
+      participantBindings: [],
       items: input.limit < 1 ? [] : [fixtureEvent(this.provider, input.accountId)]
     };
   }
