@@ -51,7 +51,7 @@ Outlook Graph ─┼─> W2/P3 Connector Host
 QQ IMAP ───────┘      │
                       │ normalize / dedupe / checkpoint
                       ▼
-                 W1/P2 Unified Inbox
+                 W2/P3 Unified Inbox
                       │
               store / query / AI orchestration
                       │
@@ -60,7 +60,7 @@ QQ IMAP ───────┘      │
               查看摘要 → 编辑草稿 → 用户确认
                       │
                       ▼
-               W1/P2 Send Command
+               W2/P3 Send Command
                       │
                       ▼
                W2/P3 Provider Adapter
@@ -68,8 +68,9 @@ QQ IMAP ───────┘      │
            飞书 / 钉钉 / Graph / QQ SMTP
 ```
 
-Connector Host 是 Hush 启动后运行的本机 sidecar/service。它负责连接状态和数据
-搬运，不包含摘要业务规则、草稿审批状态或 App 页面逻辑。
+Connector Host 是 Hush 启动后运行的本机 sidecar/service。W2/P3 同时拥有其
+后方的 Unified Inbox 服务、AI 编排和发送命令；App 页面仍由 M2/P4 按 W2/P3
+定义的接口实现。
 
 ## 4. 职责边界
 
@@ -82,20 +83,23 @@ Connector Host 是 Hush 启动后运行的本机 sidecar/service。它负责连�
 - 隔离供应商 payload、CLI 输出、SDK 类型和错误。
 - 保存凭据引用，不把 token、授权码或消息正文写入日志。
 - 为每个 Provider 提供 Real 与 Fixture/Unavailable 实现及集成测试 Harness。
-- 端口不足时向 W1/P2 提交 Contract Change，不静默修改公共契约。
-
-W2/P3 不负责 Unified Inbox 公共 API、Inbox 存储和查询、AI 提示词或摘要业务
-规则、草稿版本和审批状态、App UI、公共 contracts 或 Composition Root。
-
-### W1 / P2
-
 - 定义并维护统一 Inbox、草稿、发送命令和 AI Provider 契约。
 - 实现 Inbox 存储、查询、分页和来源覆盖状态。
 - 编排 AI 摘要、待办提取和回复草稿生成。
 - 实现草稿编辑、版本控制、用户确认和幂等发送命令。
-- 只在确认通过后调用 W2/P3 的发送 Adapter。
+- 只在确认通过后调用发送 Adapter。
 - 维护公共 OpenAPI/Schema/fixtures、provider contract tests 和最终接线。
 - 对 Connector Host 使用的凭据引用、日志脱敏和审计策略负责。
+- 负责 Unified Inbox 在 Composition Root 中的最终服务接线。
+
+W2/P3 不负责 App UI、Apple 平台权限或 Xcode 工程。M2/P4 根据 W2/P3 维护的
+接口实现页面；M1/P1 负责 Apple 客户端接线。
+
+### W1 / P2
+
+- 不负责 Unified Inbox 的功能实现、接口、契约、AI 编排或服务接线。
+- 继续维护 Unified Inbox 之外的既有后端能力。
+- 在公共后端基础设施受影响时参与兼容性评审，但不与 W2/P3 共同拥有本功能。
 
 ### M1 / P1 与 M2 / P4
 
@@ -151,7 +155,7 @@ InboxDraft
 
 ## 6. Unified Inbox API
 
-### Connector Host 到 W1/P2
+### Connector Host 到 W2/P3 Unified Inbox Service
 
 ```http
 POST /v1/inbox/events:batch
@@ -159,7 +163,7 @@ GET  /v1/inbox/sync-status
 ```
 
 批量事件必须携带稳定的 provider event/message ID、account ID、checkpoint 和
-覆盖范围。W1/P2 按 `provider + account_id + provider_message_id` 去重。新
+覆盖范围。W2/P3 按 `provider + account_id + provider_message_id` 去重。新
 item 入库后默认异步排队生成摘要和回复草稿；以下单项接口同时支持用户手动
 重新生成。
 
@@ -287,7 +291,11 @@ OpenCLI 仅作为平台官方接口确实无法覆盖某项 Demo 能力时的显
 fixtures 和测试仍以 Gmail/Photon 为中心，并禁止外部消息自动发送。因此不能
 只替换 Adapter 后直接开发。
 
-第一项协作工作应由 W1/P2 发起 Contract Change：
+开发前必须先更新 `AGENTS.md` 与团队所有权文档，将 Unified Inbox 的公共
+contracts、application、API、Composition Root 修改权授予 W2/P3。该治理变更
+由 M1/P1、W1/P2、W2/P3 和受影响 UI Owner 共同评审。
+
+治理变更通过后，由 W2/P3 发起并实现 Unified Inbox Contract Change：
 
 1. 删除 Photon webhook 和 Gmail 专属命名，增加 provider-neutral Inbox。
 2. 扩展 `MailProvider`/`MessagingChannel`，或拆分为
@@ -297,8 +305,10 @@ fixtures 和测试仍以 Gmail/Photon 为中心，并禁止外部消息自动发
 5. 更新 TS、Swift 镜像、fixtures 和 provider contract tests。
 6. 由 M1/P1、W1/P2、W2/P3 和受影响 UI Owner 共同评审。
 
-W2/P3 在该 Contract Change 合并前只做独立 spike 和 Provider Harness，不修改
-公共 contracts、application、composition 或 Xcode 工程。
+所有权治理变更合并前，W2/P3 只做独立 spike 和 Provider Harness，不修改当前
+仍受保护的公共 contracts、application、composition 或 Xcode 工程。治理变更
+合并后，Unified Inbox 相关 contracts、application、API 和 composition 由
+W2/P3 独占实现；W1/P2 仅在共享基础设施受影响时做兼容性评审。
 
 ## 12. 实现路径
 
@@ -309,8 +319,9 @@ W2/P3 在该 Contract Change 合并前只做独立 spike 和 Provider Harness，
 - 记录管理员审批、scope、限流和无法覆盖的消息类型。
 - 验收：四个渠道分别得到一份真实 capability matrix；失败渠道有明确降级。
 
-### Phase 1：W1/P2 Contract Change
+### Phase 1：W2/P3 Ownership 与 Contract Change
 
+- 更新所有权规则，获得 Unified Inbox 相关公共目录的明确修改权。
 - 冻结统一数据模型和本文 API。
 - 提供成功、空 Inbox、权限不足、AI 失败、版本冲突、发送超时 fixtures。
 - 验收：OpenAPI/Schema/TS/Swift contract tests 一致。
@@ -321,7 +332,7 @@ W2/P3 在该 Contract Change 合并前只做独立 spike 和 Provider Harness，
 - 再按飞书、钉钉、Outlook、QQ 的顺序接入 Real Provider。
 - 验收：重启不丢 checkpoint，同一事件不重复入库，凭据和正文不进入日志。
 
-### Phase 3：W1/P2 Inbox 与 AI 编排
+### Phase 3：W2/P3 Inbox 与 AI 编排
 
 - 实现 Inbox repository/query、AI Provider、摘要和草稿任务。
 - 实现草稿版本、确认令牌、发送幂等和 Adapter 调用。

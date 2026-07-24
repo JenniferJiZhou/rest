@@ -15,8 +15,8 @@
 
 - **M1 / P1（Mac）**：Apple 平台、Xcode、共享核心、Session、最终集成。
 - **M2 / P4（Mac）**：SwiftUI 产品界面、Design System、Rest Quest 与内容、Demo。
-- **W1 / P2（Windows）**：统一 Inbox API 与契约、存储和查询、AI 摘要与回复草稿编排、草稿版本和用户确认、幂等发送命令、服务组合根。
-- **W2 / P3（Windows）**：本机 Unified Inbox Connector Host；负责飞书 `lark-cli`、钉钉 `dws`、Outlook Graph、QQ IMAP/SMTP 的认证、后台增量同步、规范化、去重、checkpoint 与发送 Adapter；不负责 Inbox 业务编排、AI 规则、公共契约或 App 页面。
+- **W1 / P2（Windows）**：非 Unified Inbox 的后端 API、Rest Agent、Handoff Job 与既有后端能力维护；不负责 Unified Inbox 功能实现或接口。
+- **W2 / P3（Windows）**：端到端负责 Unified Inbox 功能及对应接口，包括本机 Connector Host，飞书 `lark-cli`、钉钉 `dws`、Outlook Graph、QQ IMAP/SMTP 接入，认证与后台同步，Inbox API、存储和查询，AI 摘要与回复草稿编排，草稿编辑与用户确认，幂等发送，公共契约、测试及最终服务接线；App UI 由 M2/P4 按 W2/P3 提供的接口实现。
 
 ## 核心工程原则
 
