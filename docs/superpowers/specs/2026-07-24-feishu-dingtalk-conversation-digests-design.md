@@ -237,7 +237,8 @@ The backend validates that each target belongs to the sealed digest and target
 conversation before mapping it to provider-native syntax:
 
 - Feishu text/post mention using the authorized user's official send path;
-- DingTalk group send using `--at-users`.
+- DingTalk group send using `--at-open-dingtalk-ids`, with matching
+  `<@openDingTalkId>` placeholders in the message body.
 
 StepFun cannot add, remove, or change targets after user confirmation.
 
