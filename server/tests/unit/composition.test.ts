@@ -47,6 +47,21 @@ describe("server dependency graph isolation", () => {
     expect(graphOrigins(dependencies).restOrigin).toBe("mock");
   });
 
+  it("does not use Claude credentials for Inbox intelligence", async () => {
+    const dependencies = buildServerDependencies(
+      config({
+        CLAUDE_API_KEY: "not-used-for-inbox",
+        CLAUDE_MODEL: "not-used-for-inbox"
+      })
+    );
+
+    await expect(
+      dependencies.providerHealth()
+    ).resolves.toMatchObject({
+      inbox_intelligence: "unavailable"
+    });
+  });
+
   it("marks a fully real normal graph as real", () => {
     const dependencies = buildServerDependencies(config(), {
       realAgent: new RealAgent(),

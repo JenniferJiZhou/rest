@@ -38,6 +38,26 @@ describe("InboxService", () => {
     expect(item.draft_id).toBeTruthy();
   });
 
+  it("summarizes a group digest from its safe source messages", async () => {
+    const { service } = fixtureService();
+    const result = await service.ingest(groupBatch());
+    const item = await service.getItem(result.itemIds[0]!);
+
+    expect(item).toMatchObject({
+      conversation_type: "group",
+      item_kind: "conversation_digest",
+      sender: null,
+      content: null,
+      summary: expect.stringContaining("项目讨论组"),
+      reply_targets: [
+        expect.objectContaining({
+          target_id: "participant_demo_0001",
+          display_name: "王同学"
+        })
+      ]
+    });
+  });
+
   it("does not overwrite a user-edited draft when AI reruns", async () => {
     const { service } = fixtureService();
     const { itemIds } = await service.ingest(
@@ -371,6 +391,35 @@ function batch(providerMessageId: string): InboxEventBatch {
         recipients: ["hush@example.com"],
         subject: "项目确认",
         content: "请确认项目时间。",
+        received_at: "2026-07-24T09:00:00+08:00",
+        coverage: {
+          source: "official_api",
+          complete: true,
+          note: null
+        }
+      }
+    ]
+  };
+}
+
+function groupBatch(): InboxEventBatch {
+  return {
+    schema_version: "1.0",
+    request_id: "request-group-summary",
+    checkpoint: "checkpoint-group-1",
+    events: [
+      {
+        provider: "dingtalk",
+        account_id: "hush-group-account",
+        conversation_id: "conversation-group-1",
+        conversation_type: "group",
+        conversation_name: "项目讨论组",
+        provider_message_id: "provider-group-message-1",
+        sender: "王同学",
+        sender_ref: "participant_demo_0001",
+        recipients: ["hush-group-account"],
+        subject: null,
+        content: "请王同学确认接口交付时间。",
         received_at: "2026-07-24T09:00:00+08:00",
         coverage: {
           source: "official_api",

@@ -20,6 +20,7 @@ import type {
   InboxDraftRepository,
   InboxIntelligenceProvider,
   InboxRepository,
+  InboxSourceMessage,
   InboxSummaryInput,
   InboxSender
 } from "../../inbox/ports.js";
@@ -108,8 +109,9 @@ export class InboxService {
 
   async summarize(id: string): Promise<UnifiedInboxItem> {
     const item = await this.getItem(id);
+    const messages = await this.items.sourceMessages(id);
     const summary = await this.intelligence.summarize(
-      sourceMessageInput(item)
+      conversationInput(item, messages)
     );
     return this.items.saveEnrichment(id, item.revision, summary);
   }
@@ -127,12 +129,19 @@ export class InboxService {
     }
 
     const generated = await this.intelligence.draftReply({
-      ...sourceMessageInput(item),
+      ...conversationInput(
+        item,
+        await this.items.sourceMessages(item.id)
+      ),
       summary: item.summary!,
       importantPoints: item.important_points,
       todos: item.todos,
       priority: item.priority,
-      needsReply: item.needs_reply!
+      needsReply: item.needs_reply!,
+      replyTargets: item.reply_targets.map((target) => ({
+        displayName: target.display_name,
+        reason: target.reason
+      }))
     });
     const draft = await this.drafts.create({
       id: this.ids.next("draft"),
@@ -336,17 +345,34 @@ function providerUnavailable(provider: InboxProvider): AppError {
   });
 }
 
-function sourceMessageInput(item: UnifiedInboxItem): InboxSummaryInput {
-  if (item.sender === null || item.content === null) {
-    throw rawMessageUnavailable();
+function conversationInput(
+  item: UnifiedInboxItem,
+  sourceMessages: InboxSourceMessage[]
+): InboxSummaryInput {
+  const allowedParticipants = [];
+  const seen = new Set<string>();
+  for (const message of sourceMessages) {
+    if (
+      message.senderRef !== null &&
+      message.senderDisplayName !== null &&
+      !seen.has(message.senderRef)
+    ) {
+      seen.add(message.senderRef);
+      allowedParticipants.push({
+        participantRef: message.senderRef,
+        displayName: message.senderDisplayName
+      });
+    }
   }
   return {
-    provider: item.provider,
-    sender: item.sender,
-    recipients: item.recipients,
-    subject: item.subject,
-    content: item.content,
-    receivedAt: item.received_at
+    conversationName: item.conversation_name,
+    allowedParticipants,
+    messages: sourceMessages.map((message) => ({
+      participantRef: message.senderRef,
+      displayName: message.senderDisplayName,
+      content: message.content,
+      receivedAt: message.receivedAt
+    }))
   };
 }
 

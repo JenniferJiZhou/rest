@@ -113,10 +113,19 @@ export interface InboxDraftRepository {
 }
 
 export interface InboxSummaryInput {
-  provider: InboxProvider;
-  sender: string;
-  recipients: string[];
-  subject: string | null;
+  conversationName: string;
+  allowedParticipants: InboxAllowedParticipant[];
+  messages: InboxIntelligenceMessage[];
+}
+
+export interface InboxAllowedParticipant {
+  participantRef: string;
+  displayName: string;
+}
+
+export interface InboxIntelligenceMessage {
+  participantRef: string | null;
+  displayName: string | null;
   content: string;
   receivedAt: string;
 }
@@ -127,6 +136,10 @@ export interface ReplyDraftInput extends InboxSummaryInput {
   todos: string[];
   priority: InboxPriority;
   needsReply: boolean;
+  replyTargets: Array<{
+    displayName: string;
+    reason: string;
+  }>;
 }
 
 export interface ReplyDraftResult {

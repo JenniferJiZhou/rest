@@ -40,7 +40,6 @@ import {
 } from "./inbox/in-memory.js";
 import {
   FixtureInboxIntelligenceProvider,
-  RealInboxIntelligenceProvider,
   UnavailableInboxIntelligenceProvider
 } from "./inbox/intelligence.js";
 import type {
@@ -131,12 +130,7 @@ export function buildServerDependencies(
   const ids = new RandomIdGenerator();
   const realInboxIntelligence =
     overrides.inboxIntelligence ??
-    (config.CLAUDE_API_KEY && config.CLAUDE_MODEL
-      ? new RealInboxIntelligenceProvider(
-          config.CLAUDE_API_KEY,
-          config.CLAUDE_MODEL
-        )
-      : new UnavailableInboxIntelligenceProvider());
+    new UnavailableInboxIntelligenceProvider();
   const demoInboxIntelligence =
     new FixtureInboxIntelligenceProvider();
   const commandRunner = new ExecFileCommandRunner();
