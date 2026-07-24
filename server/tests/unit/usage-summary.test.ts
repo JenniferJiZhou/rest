@@ -301,6 +301,28 @@ describe("UsageSummary current and legacy compatibility", () => {
     expect(result.user_provided_context_label).toBe("学习");
   });
 
+  it("accepts an explicit null label for a domain-labelled website", () => {
+    const result = usageSummarySchema.parse(
+      macWebsiteUsage({
+        label_source: "domain",
+        user_provided_context_label: null
+      })
+    );
+
+    expect(result.user_provided_context_label).toBeNull();
+  });
+
+  it.each([
+    currentUsage({ user_provided_context_label: null }),
+    macAppUsage({ user_provided_context_label: null }),
+    macWebsiteUsage({
+      label_source: "user",
+      user_provided_context_label: null
+    })
+  ])("rejects null when a user label is required", (payload) => {
+    expect(usageSummarySchema.safeParse(payload).success).toBe(false);
+  });
+
   it.each([
     [
       "iOS and Mac App fields",

@@ -10,6 +10,17 @@ describe("server listener configuration", () => {
 
     expect(config.HOST).toBe("127.0.0.1");
     expect(config.PORT).toBe(3000);
+    expect(config.HUSH_REST_DECISION_PROVIDER).toBe("canned");
+  });
+
+  it("allows an explicit unavailable Rest Decision test provider", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      HUSH_REST_DECISION_PROVIDER: "unavailable",
+      LOG_LEVEL: "silent"
+    });
+
+    expect(config.HUSH_REST_DECISION_PROVIDER).toBe("unavailable");
   });
 
   it("allows an explicit trusted-LAN listener and custom port", () => {

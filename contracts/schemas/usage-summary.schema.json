@@ -49,7 +49,10 @@
       ]
     },
     "user_provided_context_label": {
-      "type": "string",
+      "type": [
+        "string",
+        "null"
+      ],
       "minLength": 1,
       "maxLength": 80,
       "pattern": "^(?!\\s*$)(?!.*[\\u0000-\\u001F\\u007F-\\u009F]).+$",
@@ -184,6 +187,9 @@
         },
         "continuous_usage_is_estimated": {
           "const": true
+        },
+        "user_provided_context_label": {
+          "type": "string"
         }
       },
       "not": {
@@ -224,6 +230,9 @@
         },
         "continuous_usage_is_estimated": {
           "const": false
+        },
+        "user_provided_context_label": {
+          "type": "string"
         }
       },
       "not": {
@@ -282,7 +291,19 @@
       "then": {
         "required": [
           "user_provided_context_label"
-        ]
+        ],
+        "properties": {
+          "user_provided_context_label": {
+            "type": "string"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "user_provided_context_label": {
+            "type": "null"
+          }
+        }
       },
       "not": {
         "anyOf": [

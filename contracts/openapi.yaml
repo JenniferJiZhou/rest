@@ -6,10 +6,8 @@ info:
     Contract for Hush Apple clients, Agent backend, Gmail handoff, and Photon adapter.
     Quest steps are canonical in the fixed content library; the backend primarily returns quest_id.
 servers:
-  - url: https://api.example.com
-    description: Demo
   - url: http://localhost:3000
-    description: Local
+    description: Local protocol smoke; HTTPS staging pending
 tags:
   - name: Health
   - name: Rest
@@ -54,7 +52,9 @@ paths:
         Evaluates exactly one current iOS App, current Mac App, current Mac
         website, or legacy UsageSummary. Current and legacy usage fields must
         not be combined. The server only offers a choice; it never controls
-        Shield state or changes the next usage threshold.
+        Shield state or changes the next usage threshold. request_id is also
+        the idempotency key for this checkpoint: an identical retry returns
+        the stored decision, while reuse with different content returns 409.
       parameters:
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"

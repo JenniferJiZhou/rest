@@ -28,7 +28,7 @@ export class CannedRestDecisionProvider
       "manual_macos",
       "notification",
       "debug"
-    ].includes(context.triggerSource);
+    ].includes(context.source.triggerSource);
 
     if (manual) {
       return offer(
@@ -61,16 +61,16 @@ export class CannedRestDecisionProvider
         questId
       );
     }
-    if (context.usage.estimatedContinuousUsageMinutes >= 20) {
+    if (context.usage.continuousMinutes >= 20) {
       return offer(
         "long_continuous_use",
-        context.usage.continuousUsageIsEstimated
+        context.usage.continuousIsEstimated
           ? "估算的持续使用时间已经较长，可以先暂停几分钟。"
           : "这段持续使用时间已经较长，可以先暂停几分钟。",
         questId
       );
     }
-    if ((context.usage.dailyUsageMinutes ?? 0) >= 45) {
+    if ((context.usage.dailyMinutes ?? 0) >= 45) {
       return offer(
         "insufficient_signal",
         "今天累计使用时间已经较长，如果方便，可以做一个短休息。",

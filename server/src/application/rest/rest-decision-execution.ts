@@ -92,7 +92,7 @@ export class RestDecisionExecutor {
 
     let candidate: unknown;
     if (
-      !isManual(context.triggerSource) &&
+      !isManual(context.source.triggerSource) &&
       context.minutesSinceLastRest < 15
     ) {
       candidate = {
@@ -186,24 +186,31 @@ function normalizeParsedContext(
   return {
     requestId: request.request_id,
     measuredAt: request.measured_at,
-    platform: request.platform,
-    triggerSource: request.trigger_source,
-    monitoredScope: {
-      userProvidedContextLabel: label,
-      labelIsUserSupplied:
-        label !== null &&
-        (!website || request.label_source === "user"),
+    source: {
+      platform: request.platform,
+      triggerSource: request.trigger_source,
+      targetType: website ? "website" : "app"
+    },
+    monitoredContext: {
+      userProvidedLabel: label,
+      labelSource:
+        label !== null && !website
+          ? "user"
+          : website
+            ? request.label_source ?? null
+            : null,
       rawAppIdentityAvailable: false,
-      websiteDomain: request.website_domain ?? null
+      websiteDomain: request.website_domain ?? null,
+      fullUrlAvailable: false,
+      pageTitleAvailable: false
     },
     usage: {
-      dailyUsageMinutes: daily,
-      estimatedContinuousUsageMinutes: continuous,
-      continuousUsageIsEstimated:
+      dailyMinutes: daily,
+      continuousMinutes: continuous,
+      continuousIsEstimated:
         sourceFormat === "current"
           ? request.continuous_usage_is_estimated ?? false
-          : false,
-      sourceFormat
+          : false
     },
     appSwitchesLast10Minutes:
       request.app_switches_last_10_minutes ?? null,
@@ -235,7 +242,7 @@ function validateCandidate(
     throw invalidProviderOutput();
   }
   if (
-    context.usage.continuousUsageIsEstimated &&
+    context.usage.continuousIsEstimated &&
     /精确.*连续|exact.*continuous/iu.test(message)
   ) {
     throw invalidProviderOutput();

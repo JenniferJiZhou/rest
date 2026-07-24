@@ -71,6 +71,10 @@ Provider receives `RestDecisionContext`, including normalized usage,
 user-supplied scope metadata, recent feedback, and explicit output
 constraints. It never receives an unstructured prompt made from raw JSON.
 
+The normalized groups are `source`, `monitoredContext`, and `usage`.
+`usage.continuousIsEstimated` preserves the iOS estimate boundary. Website
+domain labels accept an omitted or explicit-null user label.
+
 The user label is trimmed and NFC-normalized. It is not an Apple-verified App
 identity. Ordinary request/error logs contain request ID and error metadata,
 not the raw label.
@@ -86,6 +90,19 @@ not the raw label.
 No Claude, OpenAI, DeepSeek, or other real model is called for Rest
 Decision in this phase. Existing AgentLLM use by check-in, quest selection,
 and Handoff is unchanged.
+
+For local failure verification,
+`HUSH_REST_DECISION_PROVIDER=unavailable` selects the Unavailable Provider;
+the safe default remains `canned`.
+
+## Checkpoint idempotency
+
+`request_id` is the idempotency key for `/v1/rest/evaluate`. The service uses
+the shared `IdempotencyStore` boundary:
+
+- same ID and same normalized request returns the stored decision;
+- same ID and different content returns HTTP 409;
+- failed Provider calls are not cached.
 
 ## Output Guard
 

@@ -22,7 +22,8 @@ describe("contract fixtures", () => {
     "usage-summary-manual-ios.json",
     "usage-summary-device-activity-ios.json",
     "usage-summary-macos-app.json",
-    "usage-summary-macos-website.json"
+    "usage-summary-macos-website.json",
+    "usage-summary-macos-website-user-label.json"
   ])("%s also matches the runtime Zod contract", (fixture) => {
     const input = JSON.parse(
       readFileSync(

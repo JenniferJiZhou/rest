@@ -7,36 +7,67 @@ struct HushWaveBackground: View {
         ZStack {
             Color.black
 
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion)) { timeline in
                 Canvas { context, size in
                     let elapsed = timeline.date.timeIntervalSinceReferenceDate
                     let phase = reduceMotion
-                        ? 0.35
-                        : elapsed.truncatingRemainder(dividingBy: 24) * 0.16
+                        ? 0.5
+                        : elapsed * .pi * 2 / 10.5
+                    let breathPhase = reduceMotion
+                        ? 0.0
+                        : elapsed * .pi * 2 / 6.8
                     let breath = reduceMotion
-                        ? 0.92
-                        : 0.88 + sin(elapsed * .pi * 2 / 7.5) * 0.12
-                    let centerY = size.height * 0.81
-                    let amplitude = min(86, size.height * 0.12) * breath
-
-                    drawWave(
-                        context: &context,
+                        ? 0.96
+                        : 0.92 + sin(breathPhase - .pi / 2) * 0.08
+                    let centerY = size.height * 0.82 + sin(breathPhase) * 10
+                    let amplitude = min(118, size.height * 0.17) * breath
+                    let path = wavePath(
                         size: size,
                         centerY: centerY,
                         amplitude: amplitude,
-                        phase: phase,
-                        lineWidth: 8,
-                        opacity: 0.045
+                        phase: phase
                     )
 
-                    drawWave(
-                        context: &context,
-                        size: size,
-                        centerY: centerY,
-                        amplitude: amplitude,
-                        phase: phase,
-                        lineWidth: 1.15,
-                        opacity: 0.88
+                    context.drawLayer { glow in
+                        glow.addFilter(.blur(radius: 12))
+                        glow.stroke(
+                            path,
+                            with: .color(
+                                Color(red: 0.62, green: 0.88, blue: 1.0)
+                                    .opacity(0.24)
+                            ),
+                            style: StrokeStyle(
+                                lineWidth: 7,
+                                lineCap: .round,
+                                lineJoin: .round
+                            )
+                        )
+                    }
+
+                    context.drawLayer { glow in
+                        glow.addFilter(.blur(radius: 4))
+                        glow.stroke(
+                            path,
+                            with: .color(
+                                Color(red: 0.76, green: 0.94, blue: 1.0)
+                                    .opacity(0.36)
+                            ),
+                            style: StrokeStyle(
+                                lineWidth: 3.4,
+                                lineCap: .round,
+                                lineJoin: .round
+                            )
+                        )
+                    }
+
+                    context.stroke(
+                        path,
+                        with: .color(Color.white.opacity(0.94)),
+                        style: StrokeStyle(
+                            lineWidth: 1.35,
+                            lineCap: .round,
+                            lineJoin: .round
+                        )
                     )
                 }
             }
@@ -45,27 +76,29 @@ struct HushWaveBackground: View {
         .accessibilityHidden(true)
     }
 
-    private func drawWave(
-        context: inout GraphicsContext,
+    private func wavePath(
         size: CGSize,
         centerY: CGFloat,
         amplitude: CGFloat,
-        phase: Double,
-        lineWidth: CGFloat,
-        opacity: Double
-    ) {
-        guard size.width > 0 else { return }
+        phase: Double
+    ) -> Path {
+        guard size.width > 0 else { return Path() }
 
         var path = Path()
-        let step = max(1.5, size.width / 260)
+        let step = max(1.0, size.width / 360)
 
         for x in stride(from: 0.0, through: size.width, by: step) {
             let progress = x / size.width
-            let envelope = pow(max(0, sin(.pi * progress)), 0.82)
-            let mainWave = sin(progress * .pi * 6.3 + phase) * 0.72
-            let unevenRise = sin(progress * .pi * 2.9 - phase * 0.36 + 0.8) * 0.22
-            let fineMotion = sin(progress * .pi * 10.8 + phase * 0.28) * 0.06
-            let y = centerY + (mainWave + unevenRise + fineMotion) * amplitude * envelope
+            let edgeEnvelope = 0.72 + sin(.pi * progress) * 0.28
+            let heightVariation =
+                0.86 + sin(progress * .pi * 2 - phase * 0.22) * 0.14
+            let carrier = sin(progress * .pi * 6 + phase)
+            let softHarmonic =
+                sin(progress * .pi * 12 + phase * 0.55) * 0.055
+            let y = centerY
+                + (carrier * heightVariation + softHarmonic)
+                    * amplitude
+                    * edgeEnvelope
 
             if x == 0 {
                 path.move(to: CGPoint(x: x, y: y))
@@ -74,10 +107,6 @@ struct HushWaveBackground: View {
             }
         }
 
-        context.stroke(
-            path,
-            with: .color(Color.white.opacity(opacity)),
-            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
-        )
+        return path
     }
 }

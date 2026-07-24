@@ -1,7 +1,10 @@
 import { CannedAgentLLM } from "./agent/canned-llm.js";
 import { ClaudeAgentLLM } from "./agent/claude-llm.js";
 import { ResilientAgentLLM } from "./agent/resilient-llm.js";
-import { CannedRestDecisionProvider } from "./agent/rest-decision-providers.js";
+import {
+  CannedRestDecisionProvider,
+  UnavailableRestDecisionProvider
+} from "./agent/rest-decision-providers.js";
 import type { ServerDependencies } from "./api/create-server.js";
 import { HandoffService } from "./application/handoff/handoff-service.js";
 import { RestService } from "./application/rest/rest-service.js";
@@ -62,7 +65,9 @@ export function buildServerDependencies(
   const demoAgent = overrides.demoAgent ?? new CannedAgentLLM();
   const normalRestDecisionProvider =
     overrides.normalRestDecisionProvider ??
-    new CannedRestDecisionProvider(content);
+    (config.HUSH_REST_DECISION_PROVIDER === "unavailable"
+      ? new UnavailableRestDecisionProvider()
+      : new CannedRestDecisionProvider(content));
   const demoRestDecisionProvider =
     overrides.demoRestDecisionProvider ??
     new CannedRestDecisionProvider(content);
@@ -98,7 +103,7 @@ export function buildServerDependencies(
       realAgent,
       content,
       new InMemoryFeedbackRepository(),
-      new InMemoryIdempotencyStore<boolean>(),
+      new InMemoryIdempotencyStore<unknown>(),
       normalRestDecisionProvider,
       { llmTimeoutMs: config.LLM_TIMEOUT_MS }
     ),
@@ -106,7 +111,7 @@ export function buildServerDependencies(
       demoAgent,
       content,
       new InMemoryFeedbackRepository(),
-      new InMemoryIdempotencyStore<boolean>(),
+      new InMemoryIdempotencyStore<unknown>(),
       demoRestDecisionProvider,
       { llmTimeoutMs: config.LLM_TIMEOUT_MS }
     ),

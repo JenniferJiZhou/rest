@@ -5,6 +5,8 @@ import {
   restFeedbackSchema,
   restQuestRecommendationSchema,
   restRecommendationRequestSchema,
+  restSuggestionSchema,
+  usageSummarySchema,
   type FatigueCheckIn,
   type FatigueReflection,
   type RestFeedback,
@@ -36,7 +38,7 @@ export class RestService {
     private readonly agent: AgentLLM,
     private readonly content: RestContentRepository,
     private readonly feedback: FeedbackRepository,
-    private readonly feedbackIdempotency: IdempotencyStore<boolean>,
+    private readonly idempotency: IdempotencyStore<unknown>,
     decisionProvider: RestDecisionProvider,
     private readonly options: RestServiceOptions = {}
   ) {
@@ -50,14 +52,41 @@ export class RestService {
     input: unknown,
     verifiedRequestId: string
   ): Promise<RestSuggestion> {
-    const result = await this.decisionExecutor.execute(
-      input,
-      verifiedRequestId
-    );
-    if (result.kind === "responded") {
-      return result.response;
+    const request = usageSummarySchema.parse(input);
+    if (request.request_id !== verifiedRequestId) {
+      throw new AppError({
+        code: "INVALID_REQUEST",
+        message: "正文 request_id 必须与 X-Request-ID 相同。",
+        statusCode: 400,
+        retryable: false
+      });
     }
-    throw result.error;
+    await this.idempotency.deleteExpired(new Date().toISOString());
+    const claim = await this.idempotency.claimOrGet({
+      key: `rest:evaluate:${verifiedRequestId}`,
+      requestHash: canonicalRequestHash(request),
+      ttlSeconds: 24 * 60 * 60,
+      create: async () => {
+        const result = await this.decisionExecutor.execute(
+          request,
+          verifiedRequestId
+        );
+        if (result.kind === "responded") {
+          return result.response;
+        }
+        throw result.error;
+      }
+    });
+    if (claim.kind === "conflict_different_request") {
+      throw new AppError({
+        code: "INVALID_REQUEST",
+        message: "该 request_id 已用于不同的请求内容。",
+        statusCode: 409,
+        retryable: false,
+        details: { reason: "REQUEST_ID_REUSED" }
+      });
+    }
+    return restSuggestionSchema.parse(claim.value);
   }
 
   async checkIn(input: FatigueCheckIn): Promise<FatigueReflection> {
@@ -139,11 +168,11 @@ export class RestService {
     idempotencyKey: string
   ): Promise<void> {
     const feedback = restFeedbackSchema.parse(input);
-    await this.feedbackIdempotency.deleteExpired(
+    await this.idempotency.deleteExpired(
       new Date().toISOString()
     );
-    const result = await this.feedbackIdempotency.claimOrGet({
-      key: idempotencyKey,
+    const result = await this.idempotency.claimOrGet({
+      key: `rest:feedback:${idempotencyKey}`,
       requestHash: canonicalRequestHash(feedback),
       ttlSeconds: 24 * 60 * 60,
       create: async () => {

@@ -129,6 +129,110 @@ describe("Cloud Rest Decision HTTP vertical slice", () => {
     expect(response.statusCode).toBe(200);
   });
 
+  it("accepts both Website label combinations used by Apple", async () => {
+    const server = await createTestServer();
+    const userId = "req_http_mac_website_user";
+    const domainId = "req_http_mac_website_domain";
+    const userResponse = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: headers(userId),
+      payload: websiteUsage(userId, "youtube.com", {
+        label_source: "user",
+        user_provided_context_label: "学习"
+      })
+    });
+    const domainResponse = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: headers(domainId),
+      payload: websiteUsage(domainId, "youtube.com", {
+        label_source: "domain",
+        user_provided_context_label: null
+      })
+    });
+
+    expect(userResponse.statusCode).toBe(200);
+    expect(domainResponse.statusCode).toBe(200);
+  });
+
+  it("returns an Apple-decodable complete Contract response", async () => {
+    const server = await createTestServer();
+    const requestId = "req_http_swift_decode";
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: headers(requestId),
+      payload: iosUsage(requestId)
+    });
+    const body = response.json();
+
+    expect(body).toMatchObject({
+      schema_version: "1.0",
+      request_id: requestId,
+      should_offer_rest: expect.any(Boolean),
+      reason_code: expect.any(String),
+      message: expect.any(String),
+      actions: expect.any(Array)
+    });
+    expect(body.actions).toEqual(
+      expect.arrayContaining([
+        "start_rest_session",
+        "open_check_in",
+        "remind_later",
+        "dismiss"
+      ])
+    );
+  });
+
+  it("reuses a decision for the same request ID and payload", async () => {
+    const server = await createTestServer();
+    const requestId = "req_http_evaluate_retry";
+    const request = {
+      method: "POST" as const,
+      url: "/v1/rest/evaluate",
+      headers: headers(requestId),
+      payload: iosUsage(requestId)
+    };
+
+    const first = await server.inject(request);
+    const retry = await server.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toEqual(first.json());
+  });
+
+  it("returns 409 when an evaluate request ID is reused with different content", async () => {
+    const server = await createTestServer();
+    const requestId = "req_http_evaluate_conflict";
+    const first = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: headers(requestId),
+      payload: iosUsage(requestId)
+    });
+    const conflict = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: headers(requestId),
+      payload: iosUsage(requestId, {
+        daily_app_usage_minutes: 36
+      })
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({
+      request_id: requestId,
+      error: {
+        code: "INVALID_REQUEST",
+        retryable: false,
+        details: { reason: "REQUEST_ID_REUSED" }
+      }
+    });
+  });
+
   it("rejects current and legacy usage fields together", async () => {
     const server = await createTestServer();
     const requestId = "req_http_usage_conflict";
@@ -206,7 +310,11 @@ describe("Cloud Rest Decision HTTP vertical slice", () => {
   });
 });
 
-function websiteUsage(requestId: string, domain: string) {
+function websiteUsage(
+  requestId: string,
+  domain: string,
+  overrides: Record<string, unknown> = {}
+) {
   return {
     schema_version: "1.0",
     request_id: requestId,
@@ -225,7 +333,8 @@ function websiteUsage(requestId: string, domain: string) {
     self_reported_energy: null,
     recent_feedback: [],
     full_url_included: false,
-    page_title_included: false
+    page_title_included: false,
+    ...overrides
   };
 }
 

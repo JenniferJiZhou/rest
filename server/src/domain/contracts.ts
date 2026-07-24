@@ -58,7 +58,9 @@ export const usageSummarySchema = z
       "notification",
       "debug"
     ]),
-    user_provided_context_label: userProvidedContextLabel.optional(),
+    user_provided_context_label: userProvidedContextLabel
+      .nullable()
+      .optional(),
     daily_app_usage_minutes: z.number().int().min(0).max(1440).optional(),
     estimated_continuous_app_usage_minutes: z
       .number()
@@ -150,6 +152,7 @@ export const usageSummarySchema = z
         ],
         context
       );
+      requireUserLabel(value.user_provided_context_label, context);
       requireLiteral(
         value.continuous_usage_is_estimated,
         true,
@@ -188,6 +191,7 @@ export const usageSummarySchema = z
         ],
         context
       );
+      requireUserLabel(value.user_provided_context_label, context);
       requireLiteral(
         value.continuous_usage_is_estimated,
         false,
@@ -243,12 +247,22 @@ export const usageSummarySchema = z
       );
       if (
         value.label_source === "user" &&
-        value.user_provided_context_label === undefined
+        value.user_provided_context_label == null
       ) {
         context.addIssue({
           code: "custom",
           path: ["user_provided_context_label"],
           message: "a user-supplied website label is required"
+        });
+      }
+      if (
+        value.label_source === "domain" &&
+        value.user_provided_context_label != null
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["user_provided_context_label"],
+          message: "a domain-labelled website must not include a user label"
         });
       }
       forbidFields(
@@ -304,6 +318,19 @@ function requireLiteral(
       code: "custom",
       path: [field],
       message: `${field} must be ${String(expected)} for this usage format`
+    });
+  }
+}
+
+function requireUserLabel(
+  value: string | null | undefined,
+  context: z.core.$RefinementCtx<unknown>
+): void {
+  if (value == null) {
+    context.addIssue({
+      code: "custom",
+      path: ["user_provided_context_label"],
+      message: "a user-provided context label is required"
     });
   }
 }

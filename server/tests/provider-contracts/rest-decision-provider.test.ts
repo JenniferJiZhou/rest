@@ -13,19 +13,23 @@ const context = (
 ): RestDecisionContext => ({
   requestId: "req_provider_contract",
   measuredAt: "2026-07-24T04:00:00Z",
-  platform: "ios",
-  triggerSource: "device_activity_threshold",
-  monitoredScope: {
-    userProvidedContextLabel: "用户命名",
-    labelIsUserSupplied: true,
+  source: {
+    platform: "ios",
+    triggerSource: "device_activity_threshold",
+    targetType: "app"
+  },
+  monitoredContext: {
+    userProvidedLabel: "用户命名",
+    labelSource: "user",
     rawAppIdentityAvailable: false,
-    websiteDomain: null
+    websiteDomain: null,
+    fullUrlAvailable: false,
+    pageTitleAvailable: false
   },
   usage: {
-    dailyUsageMinutes: 35,
-    estimatedContinuousUsageMinutes: 30,
-    continuousUsageIsEstimated: true,
-    sourceFormat: "current"
+    dailyMinutes: 35,
+    continuousMinutes: 30,
+    continuousIsEstimated: true
   },
   appSwitchesLast10Minutes: null,
   localHour: 14,

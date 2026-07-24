@@ -116,25 +116,31 @@ export interface AgentLLM {
 }
 
 export interface NormalizedUsageSignals {
-  dailyUsageMinutes: number | null;
-  estimatedContinuousUsageMinutes: number;
-  continuousUsageIsEstimated: boolean;
-  sourceFormat: "current" | "legacy";
+  dailyMinutes: number | null;
+  continuousMinutes: number;
+  continuousIsEstimated: boolean;
 }
 
-export interface MonitoredScopeContext {
-  userProvidedContextLabel: string | null;
-  labelIsUserSupplied: boolean;
-  rawAppIdentityAvailable: false;
+export interface MonitoredContext {
+  userProvidedLabel: string | null;
+  labelSource: "user" | "domain" | null;
   websiteDomain: string | null;
+  rawAppIdentityAvailable: false;
+  fullUrlAvailable: false;
+  pageTitleAvailable: false;
+}
+
+export interface RestDecisionSource {
+  platform: "ios" | "ipados" | "macos";
+  triggerSource: string;
+  targetType: "app" | "website";
 }
 
 export interface RestDecisionContext {
   requestId: string;
   measuredAt: string;
-  platform: "ios" | "ipados" | "macos";
-  triggerSource: string;
-  monitoredScope: MonitoredScopeContext;
+  source: RestDecisionSource;
+  monitoredContext: MonitoredContext;
   usage: NormalizedUsageSignals;
   appSwitchesLast10Minutes: number | null;
   localHour: number;

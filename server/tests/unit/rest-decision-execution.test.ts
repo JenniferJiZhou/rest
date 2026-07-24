@@ -41,21 +41,97 @@ describe("Rest Decision execution", () => {
 
     expect(context).toMatchObject({
       requestId: "req_decision",
-      monitoredScope: {
-        userProvidedContextLabel: "小红书",
-        labelIsUserSupplied: true,
-        rawAppIdentityAvailable: false
+      source: {
+        platform: "ios",
+        triggerSource: "device_activity_threshold",
+        targetType: "app"
+      },
+      monitoredContext: {
+        userProvidedLabel: "小红书",
+        labelSource: "user",
+        websiteDomain: null,
+        rawAppIdentityAvailable: false,
+        fullUrlAvailable: false,
+        pageTitleAvailable: false
       },
       usage: {
-        dailyUsageMinutes: 35,
-        estimatedContinuousUsageMinutes: 30,
-        continuousUsageIsEstimated: true,
-        sourceFormat: "current"
+        dailyMinutes: 35,
+        continuousMinutes: 30,
+        continuousIsEstimated: true
       },
       outputConstraints: {
         maximumMessageCharacters: 240,
         mayControlDevice: false,
         mayChangeNextThreshold: false
+      }
+    });
+  });
+
+  it("normalizes the Mac App checkpoint into the shared context", () => {
+    const context = normalizeRestDecisionContext({
+      ...currentUsage(),
+      platform: "macos",
+      trigger_source: "macos_usage_checkpoint",
+      estimated_continuous_app_usage_minutes: undefined,
+      continuous_app_usage_minutes: 12,
+      continuous_usage_is_estimated: false
+    });
+
+    expect(context).toMatchObject({
+      source: {
+        platform: "macos",
+        triggerSource: "macos_usage_checkpoint",
+        targetType: "app"
+      },
+      usage: {
+        dailyMinutes: 35,
+        continuousMinutes: 12,
+        continuousIsEstimated: false
+      }
+    });
+  });
+
+  it("normalizes a domain-labelled website into the shared context", () => {
+    const context = normalizeRestDecisionContext({
+      schema_version: "1.0",
+      request_id: "req_website_context",
+      measured_at: "2026-07-24T04:00:00Z",
+      platform: "macos",
+      trigger_source: "macos_website_checkpoint",
+      target_type: "website",
+      website_domain: "WWW.YouTube.COM",
+      user_provided_context_label: null,
+      label_source: "domain",
+      daily_usage_minutes: 60,
+      continuous_usage_minutes: 12,
+      continuous_usage_is_estimated: false,
+      app_switches_last_10_minutes: 3,
+      local_hour: 14,
+      minutes_since_last_rest: 180,
+      self_reported_energy: null,
+      recent_feedback: [],
+      full_url_included: false,
+      page_title_included: false
+    });
+
+    expect(context).toMatchObject({
+      source: {
+        platform: "macos",
+        triggerSource: "macos_website_checkpoint",
+        targetType: "website"
+      },
+      monitoredContext: {
+        userProvidedLabel: null,
+        labelSource: "domain",
+        websiteDomain: "youtube.com",
+        rawAppIdentityAvailable: false,
+        fullUrlAvailable: false,
+        pageTitleAvailable: false
+      },
+      usage: {
+        dailyMinutes: 60,
+        continuousMinutes: 12,
+        continuousIsEstimated: false
       }
     });
   });
@@ -77,12 +153,11 @@ describe("Rest Decision execution", () => {
     });
 
     expect(context.usage).toEqual({
-      dailyUsageMinutes: null,
-      estimatedContinuousUsageMinutes: 25,
-      continuousUsageIsEstimated: false,
-      sourceFormat: "legacy"
+      dailyMinutes: null,
+      continuousMinutes: 25,
+      continuousIsEstimated: false
     });
-    expect(context.monitoredScope.userProvidedContextLabel).toBeNull();
+    expect(context.monitoredContext.userProvidedLabel).toBeNull();
   });
 
   it.each([

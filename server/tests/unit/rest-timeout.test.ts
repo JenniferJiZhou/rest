@@ -55,7 +55,7 @@ function createService(agent: CannedAgentLLM): RestService {
     agent,
     content,
     new InMemoryFeedbackRepository(),
-    new InMemoryIdempotencyStore<boolean>(),
+    new InMemoryIdempotencyStore<unknown>(),
     new CannedRestDecisionProvider(content),
     { llmTimeoutMs: 100 }
   );

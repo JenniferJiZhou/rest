@@ -20,7 +20,7 @@ struct HushDoorView: View {
                 .accessibilityHint("打开任务详情")
                 .position(
                     x: geometry.size.width * 0.43,
-                    y: geometry.size.height * 0.52
+                    y: geometry.size.height * 0.57
                 )
 
                 Button(action: onSettings) {
@@ -45,49 +45,85 @@ private struct HushTypewriterText: View {
 
     let text: String
 
-    @State private var visibleText = ""
+    @State private var settledText = ""
+    @State private var activeCharacter = ""
+    @State private var activeOpacity = 0.0
 
     var body: some View {
-        Text(visibleText)
-            .font(HushType.agentTask)
-            .tracking(0.8)
-            .lineSpacing(6)
-            .foregroundStyle(Color.white.opacity(0.94))
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .task(id: text) {
-                await revealText()
-            }
+        ZStack(alignment: .topLeading) {
+            Text(text)
+                .hidden()
+                .accessibilityHidden(true)
+
+            Text("\(Text(settledText))\(Text(activeCharacter).foregroundColor(Color.white.opacity(0.94 * activeOpacity)))")
+        }
+        .font(HushType.agentTask)
+        .tracking(0.8)
+        .lineSpacing(6)
+        .foregroundStyle(Color.white.opacity(0.94))
+        .multilineTextAlignment(.leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .task(id: text) {
+            await revealText()
+        }
     }
 
     @MainActor
     private func revealText() async {
-        visibleText = ""
+        settledText = ""
+        activeCharacter = ""
+        activeOpacity = 0
 
         guard !reduceMotion else {
-            visibleText = text
+            settledText = text
+            return
+        }
+
+        do {
+            try await Task.sleep(nanoseconds: 220_000_000)
+        } catch {
             return
         }
 
         for character in text {
             guard !Task.isCancelled else { return }
-            visibleText.append(character)
 
-            let delay: UInt64
+            if character == "\n" {
+                settledText.append(character)
+                do {
+                    try await Task.sleep(nanoseconds: 45_000_000)
+                } catch {
+                    return
+                }
+                continue
+            }
+
+            activeCharacter = String(character)
+            activeOpacity = 0
+
+            withAnimation(.easeOut(duration: 0.085)) {
+                activeOpacity = 1
+            }
+
+            let cadence: UInt64
             switch character {
             case "，", "、":
-                delay = 220_000_000
+                cadence = 125_000_000
             case "。", "！", "？":
-                delay = 380_000_000
+                cadence = 180_000_000
             default:
-                delay = 92_000_000
+                cadence = 72_000_000
             }
 
             do {
-                try await Task.sleep(nanoseconds: delay)
+                try await Task.sleep(nanoseconds: cadence)
             } catch {
                 return
             }
+
+            settledText.append(character)
+            activeCharacter = ""
+            activeOpacity = 0
         }
     }
 }

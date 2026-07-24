@@ -85,4 +85,23 @@ describe("UsageSummary JSON Schema", () => {
       validate(websiteUsage({ continuous_screen_minutes: 12 }))
     ).toBe(false);
   });
+
+  it("accepts null only for a domain-labelled website", () => {
+    expect(
+      validate(
+        websiteUsage({
+          label_source: "domain",
+          user_provided_context_label: null
+        })
+      )
+    ).toBe(true);
+    expect(
+      validate(
+        websiteUsage({
+          label_source: "user",
+          user_provided_context_label: null
+        })
+      )
+    ).toBe(false);
+  });
 });

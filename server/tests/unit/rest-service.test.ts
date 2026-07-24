@@ -14,7 +14,7 @@ const createService = (): RestService => {
     new CannedAgentLLM(),
     content,
     new InMemoryFeedbackRepository(),
-    new InMemoryIdempotencyStore<boolean>(),
+    new InMemoryIdempotencyStore<unknown>(),
     new CannedRestDecisionProvider(content)
   );
 };
@@ -118,7 +118,7 @@ describe("RestService", () => {
       new CannedAgentLLM(),
       new FileRestContentRepository(),
       repository,
-      new InMemoryIdempotencyStore<boolean>(),
+      new InMemoryIdempotencyStore<unknown>(),
       new CannedRestDecisionProvider(
         new FileRestContentRepository()
       )
@@ -140,7 +140,7 @@ describe("RestService", () => {
       new CannedAgentLLM(),
       new FileRestContentRepository(),
       repository,
-      new InMemoryIdempotencyStore<boolean>(),
+      new InMemoryIdempotencyStore<unknown>(),
       new CannedRestDecisionProvider(
         new FileRestContentRepository()
       )
@@ -169,7 +169,7 @@ describe("RestService", () => {
       new CannedAgentLLM(),
       new FileRestContentRepository(),
       repository,
-      new InMemoryIdempotencyStore<boolean>(),
+      new InMemoryIdempotencyStore<unknown>(),
       new CannedRestDecisionProvider(
         new FileRestContentRepository()
       )
