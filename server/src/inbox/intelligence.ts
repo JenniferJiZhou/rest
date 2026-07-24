@@ -242,13 +242,17 @@ export class StepFunInboxIntelligenceProvider
       if (mapped.length === 1) {
         return mapped[0]!;
       }
-      const compactMapped = compactMapResults(
+      const compact = compactReduceInput(
         input,
         mapped,
         this.maxPromptCharacters
       );
       return await this.completeSummary(
-        reducePrompt(input, compactMapped),
+        reducePrompt(
+          input,
+          compact.mapResults,
+          compact.targetEvidence
+        ),
         input.allowedParticipants,
         options
       );
@@ -316,7 +320,8 @@ function mapPrompt(
 
 function reducePrompt(
   input: InboxSummaryInput,
-  mapped: CompactMapResult[]
+  mapped: CompactMapResult[],
+  targetEvidence: TargetEvidence[]
 ): string {
   return summaryPolicy(
     JSON.stringify({
@@ -325,6 +330,7 @@ function reducePrompt(
       allowed_participants: safeParticipants(
         input.allowedParticipants
       ),
+      target_evidence: targetEvidence,
       map_results: mapped
     })
   );
@@ -336,17 +342,23 @@ interface CompactMapResult {
   todos: string[];
   priority: InboxSummaryResult["priority"];
   needs_reply: boolean;
-  reply_targets: Array<{
-    target_id: string;
-    reason: string;
-  }>;
 }
 
-function compactMapResults(
+interface TargetEvidence {
+  target_id: string;
+  display_name: string;
+  reason: string;
+}
+
+function compactReduceInput(
   input: InboxSummaryInput,
   mapped: InboxSummaryResult[],
   maxCharacters: number
-): CompactMapResult[] {
+): {
+  mapResults: CompactMapResult[];
+  targetEvidence: TargetEvidence[];
+} {
+  const targetEvidence = collectTargetEvidence(mapped);
   let low = 1;
   let high = Math.max(
     1,
@@ -358,7 +370,10 @@ function compactMapResults(
     const candidate = mapped.map((result) =>
       compactMapResult(result, quota)
     );
-    if (reducePrompt(input, candidate).length <= maxCharacters) {
+    if (
+      reducePrompt(input, candidate, targetEvidence).length <=
+      maxCharacters
+    ) {
       accepted = candidate;
       low = quota + 1;
     } else {
@@ -369,10 +384,13 @@ function compactMapResults(
     throw new StepFunInvalidOutputError();
   }
   assertPromptWithinLimit(
-    reducePrompt(input, accepted),
+    reducePrompt(input, accepted, targetEvidence),
     maxCharacters
   );
-  return accepted;
+  return {
+    mapResults: accepted,
+    targetEvidence
+  };
 }
 
 function compactMapResult(
@@ -380,10 +398,8 @@ function compactMapResult(
   quota: number
 ): CompactMapResult {
   const summaryBudget = Math.max(1, Math.floor(quota * 0.4));
-  const pointsBudget = Math.floor(quota * 0.2);
-  const todosBudget = Math.floor(quota * 0.2);
-  const targetsBudget =
-    quota - summaryBudget - pointsBudget - todosBudget;
+  const pointsBudget = Math.floor(quota * 0.3);
+  const todosBudget = quota - summaryBudget - pointsBudget;
   return {
     summary: clipText(result.summary, summaryBudget),
     important_points: clipTextList(
@@ -393,12 +409,32 @@ function compactMapResult(
     ),
     todos: clipTextList(result.todos, 3, todosBudget),
     priority: result.priority,
-    needs_reply: result.needs_reply,
-    reply_targets: compactTargets(
-      result.reply_targets,
-      targetsBudget
-    )
+    needs_reply: result.needs_reply
   };
+}
+
+function collectTargetEvidence(
+  mapped: InboxSummaryResult[]
+): TargetEvidence[] {
+  const seen = new Set<string>();
+  const evidence: TargetEvidence[] = [];
+  for (const result of mapped) {
+    for (const target of result.reply_targets) {
+      if (seen.has(target.target_id)) {
+        continue;
+      }
+      seen.add(target.target_id);
+      evidence.push({
+        target_id: target.target_id,
+        display_name: target.display_name,
+        reason: clipText(target.reason, 120)
+      });
+      if (evidence.length === 20) {
+        return evidence;
+      }
+    }
+  }
+  return evidence;
 }
 
 function clipTextList(
@@ -425,30 +461,6 @@ function clipTextList(
   return result;
 }
 
-function compactTargets(
-  targets: InboxSummaryResult["reply_targets"],
-  budget: number
-): CompactMapResult["reply_targets"] {
-  const result: CompactMapResult["reply_targets"] = [];
-  let remaining = budget;
-  for (const target of targets.slice(0, 5)) {
-    const targetIdLength = Array.from(target.target_id).length;
-    if (remaining <= targetIdLength) {
-      break;
-    }
-    const reason = clipText(
-      target.reason,
-      Math.min(120, remaining - targetIdLength)
-    );
-    result.push({
-      target_id: target.target_id,
-      reason
-    });
-    remaining -= targetIdLength + Array.from(reason).length;
-  }
-  return result;
-}
-
 function clipText(value: string, maxCharacters: number): string {
   return Array.from(value).slice(0, Math.max(1, maxCharacters)).join("");
 }
@@ -464,6 +476,7 @@ function summaryPolicy(serializedInput: string): string {
     "只有源会话明确要求某位参与者回答、决定、审批、交付或接手工作时，才能选择该参与者。",
     "仅仅发言、被社交性提及或频繁出现，都不能成为回复目标。",
     "每个目标必须来自 allowed_participants，并包含 target_id、display_name 和基于证据的简短 reason。",
+    "reduce 输入中的 target_evidence 是已验证的具体请求证据，必须优先用于最终 reply_targets 判断。",
     serializedInput
   ].join("\n");
 }

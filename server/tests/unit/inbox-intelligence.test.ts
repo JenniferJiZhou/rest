@@ -395,6 +395,67 @@ describe("Inbox intelligence providers", () => {
         (request) => request.prompt.length <= 60_000
       )
     ).toBe(true);
+    const reducePayload = recordedPromptPayload(
+      transport.requests.find((request) =>
+        request.prompt.includes('"operation":"reduce"')
+      )!.prompt
+    );
+    expect(reducePayload.target_evidence).toHaveLength(20);
+    expect(reducePayload.target_evidence).toEqual(
+      targets.map((target) =>
+        expect.objectContaining({
+          target_id: target.target_id,
+          display_name: target.display_name,
+          reason: expect.stringMatching(/.+/u)
+        })
+      )
+    );
+  });
+
+  it("preserves more than five canonical target evidence entries for reduce", async () => {
+    const targets = participantTargets(6);
+    const transport = new RecordingTransport([
+      summaryResult({ reply_targets: targets }),
+      summaryResult(),
+      summaryResult()
+    ]);
+    const provider = new StepFunInboxIntelligenceProvider(
+      { ...config, maxMessagesPerChunk: 1 },
+      transport
+    );
+
+    await provider.summarize(
+      summaryInput({
+        allowedParticipants: allowedParticipants(targets),
+        messages: [
+          summaryInput().messages[0]!,
+          {
+            participantRef: targets[1]!.target_id,
+            displayName: targets[1]!.display_name,
+            content: "第二条消息。",
+            receivedAt: "2026-07-24T09:01:00+08:00"
+          }
+        ]
+      })
+    );
+
+    const reducePayload = recordedPromptPayload(
+      transport.requests.find((request) =>
+        request.prompt.includes('"operation":"reduce"')
+      )!.prompt
+    );
+    expect(reducePayload.target_evidence).toEqual(
+      targets.map((target) => ({
+        target_id: target.target_id,
+        display_name: target.display_name,
+        reason: target.reason
+      }))
+    );
+    expect(
+      reducePayload.map_results.every(
+        (result) => !("reply_targets" in result)
+      )
+    ).toBe(true);
   });
 
   it("keeps raw source canaries and prompt injection out of reduce prompts", async () => {
@@ -876,4 +937,22 @@ function largeSummaryResult(
       reason: target.reason.padEnd(500, "据")
     }))
   });
+}
+
+function recordedPromptPayload(prompt: string): {
+  target_evidence: Array<{
+    target_id: string;
+    display_name: string;
+    reason: string;
+  }>;
+  map_results: Array<Record<string, unknown>>;
+} {
+  return JSON.parse(prompt.split("\n").at(-1)!) as {
+    target_evidence: Array<{
+      target_id: string;
+      display_name: string;
+      reason: string;
+    }>;
+    map_results: Array<Record<string, unknown>>;
+  };
 }

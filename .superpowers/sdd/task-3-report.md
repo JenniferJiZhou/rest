@@ -298,3 +298,86 @@ Task 4 still owns late-output orchestration. The repository revision check
 prevents a late summary from overwriting a newer digest revision, but Task 3
 does not add cancellation, changed-item rescheduling, acknowledgement, or
 send orchestration.
+
+## Re-review follow-up — preserve global target evidence
+
+### RED
+
+Added reduce-payload parsing regressions for:
+
+- one validated map output containing six distinct reply targets;
+- 10 maximal valid map outputs containing the same first-seen set of 20
+  distinct reply targets.
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-intelligence.test.ts \
+  -t "canonical target evidence|compacts large"
+```
+
+RED output: 2 tests failed because the reduce payload had no independent
+`target_evidence`; target evidence existed only inside compact map records,
+where `slice(0, 5)` discarded targets 6–20.
+
+### GREEN
+
+- Target evidence is now collected across all validated map results in
+  first-seen order and de-duplicated by synthetic target ID.
+- The global section contains at most 20 canonical
+  `target_id + display_name + non-empty clipped reason` records.
+- Compact per-map records no longer repeat or truncate reply targets.
+- The global evidence section is constructed before summary detail budgeting.
+  Its complete serialized size participates in every binary-search prompt
+  measurement, so the final request remains at most 60,000 characters.
+- Existing full target validation remains before evidence collection, so an
+  invented reference anywhere in a map or final reduce output is still
+  rejected even after the 20-result output cap.
+
+Focused GREEN:
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-intelligence.test.ts \
+  tests/unit/inbox-service.test.ts \
+  tests/unit/composition.test.ts
+```
+
+Output: 3 files passed; 35 tests passed.
+
+Broad Inbox GREEN:
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-intelligence.test.ts \
+  tests/unit/inbox-service.test.ts \
+  tests/unit/composition.test.ts \
+  tests/unit/inbox-confirmation.test.ts \
+  tests/unit/inbox-cli-adapters.test.ts \
+  tests/unit/inbox-repositories.test.ts \
+  tests/unit/inbox-participants.test.ts \
+  tests/integration/inbox-http.test.ts \
+  tests/provider-contracts/inbox-provider-kit.test.ts \
+  tests/vertical-slice/unified-inbox-vertical-slice.test.ts
+```
+
+Output: 10 files passed; 83 tests passed.
+
+```bash
+./node_modules/.bin/tsc --noEmit
+git diff --check
+```
+
+Output: both exited 0 with no diagnostics.
+
+```bash
+rg -n "Anthropic|CLAUDE_" src/inbox src/application/inbox
+```
+
+Output: no matches (`rg` exit 1).
+
+### Minor note
+
+The uniform per-map quota binary search is deterministic and selects the
+largest passing quota, but discrete JSON/list structure can leave a small
+amount of unusable prompt slack. Repacking that residual slack across maps is
+non-blocking and was not added to this security-focused follow-up.
