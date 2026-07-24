@@ -205,3 +205,37 @@ Output: repository/service/CLI/contracts tests passed; integration passed 3/3; t
 
 - Redaction happens before the item enters the repository map, so both creation and list retrieval use the same non-leaking public value.
 - The direct path still copies raw source fields and remains `item_kind: "message"`.
+
+## Fourth re-review HTTP coverage fix
+
+### Test-first coverage
+
+Added an adapter-shaped Feishu group event regression to the real HTTP path:
+
+```text
+POST /v1/inbox/events:batch → InboxService → InMemoryInboxRepository → GET /v1/inbox/items
+```
+
+The test asserts the app response exposes `conversation_digest` and null `sender`, `sender_ref`, and `content`. The existing direct HTTP test now also explicitly asserts its `message` item retains sender/content.
+
+```bash
+./node_modules/.bin/vitest run --maxWorkers=1 --minWorkers=1 tests/integration/inbox-http.test.ts
+```
+
+The first test-first run passed 4/4: the preceding repository redaction fix already covered this path, so no production code change was warranted. This run closes a missing integration regression rather than masking a newly discovered behavior failure.
+
+### Focused verification
+
+```bash
+./node_modules/.bin/vitest run tests/unit/inbox-repositories.test.ts tests/unit/inbox-service.test.ts tests/unit/inbox-cli-adapters.test.ts tests/contracts/fixtures.test.ts tests/contracts/openapi.test.ts
+./node_modules/.bin/tsc --noEmit
+```
+
+Output: 5 files and 60 tests passed; typecheck passed with no output.
+
+### Files and self-review
+
+- `server/tests/integration/inbox-http.test.ts`
+- `.superpowers/sdd/task-1-report.md`
+
+The test feeds raw group sender/content directly into the connector ingestion request and inspects the app list response; it does not manually overwrite fields before parsing. No production logic, aggregation, acknowledgement handling, mentions, or AI behavior changed.

@@ -68,6 +68,11 @@ describe("Unified Inbox HTTP API", () => {
       headers: baseHeaders("req_inbox_get")
     });
     expect(item.statusCode).toBe(200);
+    expect(item.json()).toMatchObject({
+      item_kind: "message",
+      sender: "sender@example.com",
+      content: "请确认演示时间并回复。"
+    });
     expect(item.json().summary).toBeTruthy();
     const draftId = item.json().draft_id as string;
     const draft = await server.inject({
@@ -182,6 +187,38 @@ describe("Unified Inbox HTTP API", () => {
     expect(reused.json().error.code).toBe(
       "INBOX_CONFIRMATION_REQUIRED"
     );
+  });
+
+  it("redacts an adapter-shaped Feishu group event in the app list response", async () => {
+    const ingest = await server.inject({
+      method: "POST",
+      url: "/v1/inbox/events:batch",
+      headers: baseHeaders("req_feishu_group_ingest"),
+      payload: feishuGroupEventBatch("req_feishu_group_ingest")
+    });
+    expect(ingest.statusCode).toBe(202);
+
+    const listed = await server.inject({
+      method: "GET",
+      url: "/v1/inbox/items",
+      headers: baseHeaders("req_feishu_group_list")
+    });
+    expect(listed.statusCode).toBe(200);
+
+    const groupItem = (
+      listed.json().items as Array<Record<string, unknown>>
+    ).find(
+      (item) => item.provider_message_id === "feishu-group-message-http-1"
+    );
+    expect(groupItem).toMatchObject({
+      provider: "feishu",
+      conversation_type: "group",
+      conversation_name: "产品讨论组",
+      item_kind: "conversation_digest",
+      sender: null,
+      sender_ref: null,
+      content: null
+    });
   });
 
   it("separates app and connector authentication scopes", async () => {
@@ -358,6 +395,35 @@ function eventBatch(
           source: "official_api",
           complete: true,
           note: null
+        }
+      }
+    ]
+  };
+}
+
+function feishuGroupEventBatch(requestId: string) {
+  return {
+    schema_version: "1.0",
+    request_id: requestId,
+    checkpoint: "feishu-group-checkpoint-http-1",
+    events: [
+      {
+        provider: "feishu",
+        account_id: "feishu-demo-account",
+        conversation_id: "feishu-group-demo-1",
+        conversation_type: "group",
+        conversation_name: "产品讨论组",
+        provider_message_id: "feishu-group-message-http-1",
+        sender: "王同学",
+        sender_ref: null,
+        recipients: ["feishu-demo-account"],
+        subject: null,
+        content: "请确认接口交付时间。",
+        received_at: "2026-07-24T10:00:00+08:00",
+        coverage: {
+          source: "official_api",
+          complete: false,
+          note: "可见范围受飞书应用权限、租户策略和会话成员资格限制"
         }
       }
     ]
