@@ -4,6 +4,8 @@ struct HushDoorView: View {
     let taskText: String
     let onOpenTask: () -> Void
     let onSettings: () -> Void
+    var onOpenInbox: (() -> Void)?
+    var onOpenCompanion: (() -> Void)?
 
     var body: some View {
         GeometryReader { geometry in
@@ -23,19 +25,79 @@ struct HushDoorView: View {
                     y: geometry.size.height * 0.57
                 )
 
-                Button(action: onSettings) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundStyle(Color.white.opacity(0.78))
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(Color.white.opacity(0.035)))
-                        .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
+                HStack(spacing: HushSpacing.xs) {
+                    if let onOpenCompanion {
+                        Button(action: onOpenCompanion) {
+                            Image(systemName: "sun.max.fill")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundStyle(Color.white.opacity(0.82))
+                                .frame(width: 34, height: 34)
+                                .background(
+                                    Circle().fill(Color.white.opacity(0.035))
+                                )
+                                .overlay(
+                                    Circle().stroke(
+                                        Color.white.opacity(0.12),
+                                        lineWidth: 0.8
+                                    )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("打开常亮陪伴")
+                    }
+
+                    Button(action: onSettings) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundStyle(Color.white.opacity(0.78))
+                            .frame(width: 34, height: 34)
+                            .background(
+                                Circle().fill(Color.white.opacity(0.035))
+                            )
+                            .overlay(
+                                Circle().stroke(
+                                    Color.white.opacity(0.12),
+                                    lineWidth: 0.8
+                                )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("设置")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("设置")
                 .padding(.top, HushSpacing.md)
                 .padding(.trailing, HushSpacing.lg)
+
+                if let onOpenInbox {
+                    Button {
+                        onOpenInbox()
+                    } label: {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.32))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .position(
+                        x: geometry.size.width * 0.5,
+                        y: geometry.size.height * 0.93
+                    )
+                    .accessibilityLabel("打开消息")
+                    .accessibilityHint("点按或向上轻扫")
+                }
             }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 18)
+                    .onEnded { value in
+                        guard let onOpenInbox else { return }
+                        let vertical = value.translation.height
+                        let horizontal = abs(value.translation.width)
+                        if vertical < -52, abs(vertical) > horizontal {
+                            onOpenInbox()
+                        }
+                    }
+            )
         }
     }
 }

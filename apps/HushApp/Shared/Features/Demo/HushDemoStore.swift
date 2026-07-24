@@ -14,6 +14,7 @@ enum HushDemoRoute: Equatable {
     case handoffRunning
     case pauseReceipt
     case blueReset
+    case inbox
 }
 
 enum HushDemoPreference: String, CaseIterable, Identifiable {
@@ -39,6 +40,9 @@ final class HushDemoStore: ObservableObject {
     @Published var selectedQuestIndex = 0
     @Published var openLoop = "明早确认路演材料的最终版本"
     @Published var includeGmail = true
+    @Published var sleepTodaySummary = ""
+    @Published var sleepHighlight = ""
+    @Published var sleepTomorrowFirstStep = ""
 
     let content: HushDemoContentSnapshot
 
@@ -129,10 +133,35 @@ final class HushDemoStore: ObservableObject {
         move(to: .blueReset)
     }
 
+    func openInbox() {
+        move(to: .inbox)
+    }
+
+    func closeInbox() {
+        move(to: .door)
+    }
+
+    func finishSleepHandoff() {
+        clearSleepDraft()
+        move(to: .door)
+    }
+
+    func presentRestSuggestion(questID: String?) {
+        if let questID,
+           let index = content.quests.firstIndex(
+               where: { $0.id == questID }
+           )
+        {
+            selectedQuestIndex = index
+        }
+        move(to: .door)
+    }
+
     func reset() {
         fatigueDescription = ""
         selectedPreference = nil
         selectedQuestIndex = 0
+        clearSleepDraft()
         route = .door
     }
 
@@ -140,8 +169,11 @@ final class HushDemoStore: ObservableObject {
         switch route {
         case .door:
             break
-        case .checkIn, .quest, .sleepHandoff, .pauseReceipt:
+        case .checkIn, .quest, .pauseReceipt, .inbox:
             move(to: .door)
+        case .sleepHandoff:
+            clearSleepDraft()
+            move(to: .inbox)
         case .reflection:
             move(to: .checkIn)
         case .session:
@@ -160,6 +192,12 @@ final class HushDemoStore: ObservableObject {
     private func selectFirstMatchingQuest(preference: HushDemoPreference?) {
         let preferredEnergy = preference == .quiet ? "very_low" : "low"
         selectedQuestIndex = content.quests.firstIndex(where: { $0.energyRequired == preferredEnergy }) ?? 0
+    }
+
+    private func clearSleepDraft() {
+        sleepTodaySummary = ""
+        sleepHighlight = ""
+        sleepTomorrowFirstStep = ""
     }
 
     private func move(to destination: HushDemoRoute) {
