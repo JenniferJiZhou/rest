@@ -71,26 +71,19 @@ struct HushDoorView: View {
                     Button {
                         onOpenInbox()
                     } label: {
-                        VStack(spacing: 7) {
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("向上滑查看消息")
-                                .font(HushType.micro)
-                                .tracking(0.5)
-                        }
-                        .foregroundStyle(Color.white.opacity(0.48))
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.32))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .frame(
-                        width: min(240, geometry.size.width - 64)
-                    )
                     .position(
                         x: geometry.size.width * 0.5,
                         y: geometry.size.height * 0.93
                     )
-                    .accessibilityHint("打开统一消息收件箱")
+                    .accessibilityLabel("打开消息")
+                    .accessibilityHint("点按或向上轻扫")
                 }
             }
             .contentShape(Rectangle())

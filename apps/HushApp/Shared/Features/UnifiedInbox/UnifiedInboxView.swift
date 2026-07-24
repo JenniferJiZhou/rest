@@ -134,7 +134,7 @@ struct UnifiedInboxView: View {
             isPresented: $store.isShowingSendConfirmation,
             titleVisibility: .visible
         ) {
-            Button("确认发送") {
+            Button("确认模拟发送") {
                 store.confirmSend()
             }
             Button("取消", role: .cancel) {}
@@ -213,7 +213,7 @@ struct UnifiedInboxView: View {
                     sourceHeader(item)
 
                     VStack(alignment: .leading, spacing: HushSpacing.sm) {
-                        HushSectionLabel(text: "AI 摘要")
+                        HushSectionLabel(text: "演示摘要")
                         Text(item.summary)
                             .font(HushType.body)
                             .lineSpacing(5)
@@ -429,7 +429,7 @@ struct UnifiedInboxView: View {
                 )
 
             HStack(spacing: HushSpacing.sm) {
-                Button("重新生成") {
+                Button("重置演示草稿") {
                     store.regenerateDraft()
                 }
                 .buttonStyle(HushSecondaryButtonStyle())
@@ -440,7 +440,7 @@ struct UnifiedInboxView: View {
                 .buttonStyle(HushSecondaryButtonStyle())
             }
 
-            Button(store.sentItemIDs.contains(item.id) ? "演示已发送" : "检查并确认发送") {
+            Button(store.sentItemIDs.contains(item.id) ? "演示已发送" : "模拟确认发送") {
                 store.isShowingSendConfirmation = true
             }
             .buttonStyle(HushPrimaryButtonStyle())
