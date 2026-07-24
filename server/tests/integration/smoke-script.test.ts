@@ -10,6 +10,9 @@ const script = resolve(
   repositoryRoot,
   "scripts/smoke-https-staging.ps1"
 );
+const powershellExecutable =
+  process.platform === "win32" ? "powershell.exe" : "pwsh";
+const smokeTestTimeoutMs = 30_000;
 const fastifyServers: FastifyInstance[] = [];
 
 describe("HTTPS staging smoke script", () => {
@@ -24,7 +27,7 @@ describe("HTTPS staging smoke script", () => {
 
     expect(result.code).not.toBe(0);
     expect(result.output).toContain("no network request was made");
-  });
+  }, smokeTestTimeoutMs);
 
   it("rejects HTTP in HTTPS mode", async () => {
     const result = await runSmoke([
@@ -34,7 +37,7 @@ describe("HTTPS staging smoke script", () => {
 
     expect(result.code).not.toBe(0);
     expect(result.output).toContain("HTTPS smoke requires an https BaseUrl");
-  });
+  }, smokeTestTimeoutMs);
 
   it("passes all local payloads without printing the Demo Token", async () => {
     const demoToken = "nonprinting-demo-secret";
@@ -62,7 +65,7 @@ describe("HTTPS staging smoke script", () => {
     expect(result.code).toBe(0);
     expect(result.output).toContain("PASS smoke summary");
     expect(result.output).not.toContain(demoToken);
-  });
+  }, smokeTestTimeoutMs);
 
   it.each([
     ["header mismatch", "wrong-header", "request", 200],
@@ -130,7 +133,8 @@ describe("HTTPS staging smoke script", () => {
           });
         });
       }
-    }
+    },
+    smokeTestTimeoutMs
   );
 });
 
@@ -139,7 +143,7 @@ async function runSmoke(
 ): Promise<{ code: number | null; output: string }> {
   return await new Promise((resolveRun, reject) => {
     const child = spawn(
-      "powershell.exe",
+      powershellExecutable,
       [
         "-NoProfile",
         "-ExecutionPolicy",
