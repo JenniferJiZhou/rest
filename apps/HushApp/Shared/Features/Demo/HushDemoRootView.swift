@@ -2,17 +2,34 @@ import SwiftUI
 
 struct HushDemoRootView: View {
     @StateObject private var store: HushDemoStore
+    @ObservedObject private var sleepSchedule =
+        HushSleepScheduleController.shared
     @State private var isShowingSettings = false
+    private let onSettings: (() -> Void)?
+    private let onCompanion: (() -> Void)?
+    private let suggestedQuestID: String?
+    private let suggestionMessage: String?
+    private let suggestionEventID: String?
 
     @MainActor
     init(
         provider: any HushRestContentProviding = BundledHushRestContentProvider.automatic,
-        initialQuestID: String? = nil
+        initialQuestID: String? = nil,
+        onSettings: (() -> Void)? = nil,
+        onCompanion: (() -> Void)? = nil,
+        suggestedQuestID: String? = nil,
+        suggestionMessage: String? = nil,
+        suggestionEventID: String? = nil
     ) {
+        self.onSettings = onSettings
+        self.onCompanion = onCompanion
+        self.suggestedQuestID = suggestedQuestID
+        self.suggestionMessage = suggestionMessage
+        self.suggestionEventID = suggestionEventID
         _store = StateObject(
             wrappedValue: HushDemoStore(
                 provider: provider,
-                initialQuestID: initialQuestID
+                initialQuestID: initialQuestID ?? suggestedQuestID
             )
         )
     }
@@ -26,10 +43,19 @@ struct HushDemoRootView: View {
                     taskText: agentTaskText,
                     onOpenTask: store.openCurrentQuest,
                     onSettings: {
-                        isShowingSettings = true
-                    }
+                        if let onSettings {
+                            onSettings()
+                        } else {
+                            isShowingSettings = true
+                        }
+                    },
+                    onOpenInbox: store.openInbox,
+                    onOpenCompanion: onCompanion
                 )
                 .transition(.opacity)
+            } else if store.route == .inbox {
+                UnifiedInboxView(onClose: store.closeInbox)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 VStack(spacing: 0) {
                     topBar
@@ -46,10 +72,39 @@ struct HushDemoRootView: View {
                     .scrollIndicators(.hidden)
 
                 }
+                .transition(
+                    store.route == .sleepHandoff
+                        ? .move(edge: .top).combined(with: .opacity)
+                        : .opacity
+                )
             }
         }
-        .frame(minWidth: 380, idealWidth: 420, minHeight: 580, idealHeight: 700)
+        #if os(macOS)
+        .frame(
+            minWidth: 380,
+            idealWidth: 420,
+            minHeight: 580,
+            idealHeight: 700
+        )
+        #else
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #endif
         .preferredColorScheme(.dark)
+        .task {
+            if sleepSchedule.consumePendingRoute() {
+                store.startSleepHandoff()
+            }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .hushSleepHandoffRequested
+            )
+        ) { _ in
+            store.startSleepHandoff()
+        }
+        .onChange(of: suggestionEventID) { _, _ in
+            store.presentRestSuggestion(questID: suggestedQuestID)
+        }
         .sheet(isPresented: $isShowingSettings) {
             HushSettingsView(
                 degraded: store.content.status.isFallback,
@@ -61,10 +116,6 @@ struct HushDemoRootView: View {
                     store.startCheckIn()
                     isShowingSettings = false
                 },
-                onSleepHandoff: {
-                    store.startSleepHandoff()
-                    isShowingSettings = false
-                },
                 onDismiss: {
                     isShowingSettings = false
                 }
@@ -73,8 +124,27 @@ struct HushDemoRootView: View {
     }
 
     private var agentTaskText: String {
-        let steps = store.currentQuest.steps.prefix(2)
-        let task = steps.isEmpty ? store.currentQuest.title : steps.joined(separator: "\n")
+        if let suggestedQuestID,
+           let quest = store.content.quests.first(
+               where: { $0.id == suggestedQuestID }
+           )
+        {
+            return taskText(for: quest)
+        }
+
+        let trimmedMessage = suggestionMessage?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if let trimmedMessage, !trimmedMessage.isEmpty {
+            return trimmedMessage
+        }
+
+        return taskText(for: store.currentQuest)
+    }
+
+    private func taskText(for quest: HushQuestContent) -> String {
+        let steps = quest.steps.prefix(2)
+        let task = steps.isEmpty ? quest.title : steps.joined(separator: "\n")
         return task.hasSuffix("。") ? task : "\(task)。"
     }
 
@@ -147,9 +217,10 @@ struct HushDemoRootView: View {
             RestCompletionView(onDone: store.reset)
         case .sleepHandoff:
             SleepHandoffView(
-                openLoop: $store.openLoop,
-                includeGmail: $store.includeGmail,
-                onStart: store.submitHandoff
+                todaySummary: $store.sleepTodaySummary,
+                highlight: $store.sleepHighlight,
+                tomorrowFirstStep: $store.sleepTomorrowFirstStep,
+                onFinish: store.finishSleepHandoff
             )
         case .handoffRunning:
             HandoffRunningView(onShowResult: store.showPauseReceipt)
@@ -157,6 +228,8 @@ struct HushDemoRootView: View {
             PauseReceiptView(onBlueReset: store.startBlueReset)
         case .blueReset:
             BlueResetView(card: store.currentBlueBoxCard, onDone: store.reset)
+        case .inbox:
+            EmptyView()
         }
     }
 }
@@ -165,7 +238,6 @@ private struct HushSettingsView: View {
     let degraded: Bool
     let onSwapTask: () -> Void
     let onCheckIn: () -> Void
-    let onSleepHandoff: () -> Void
     let onDismiss: () -> Void
 
     var body: some View {
@@ -207,7 +279,6 @@ private struct HushSettingsView: View {
                 VStack(spacing: 0) {
                     settingsRow("换一个任务", systemImage: "arrow.triangle.2.circlepath", action: onSwapTask)
                     settingsRow("描述我的疲惫", systemImage: "text.bubble", action: onCheckIn)
-                    settingsRow("睡前交接", systemImage: "moon", action: onSleepHandoff)
                 }
             }
             .padding(HushSpacing.xl)

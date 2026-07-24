@@ -21,4 +21,24 @@ final class HushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     ) {
         completionHandler([.banner, .sound])
     }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        guard
+            userInfo[HushSleepScheduleController.routeUserInfoKey]
+                as? String == HushSleepScheduleController.sleepRouteValue
+        else {
+            completionHandler()
+            return
+        }
+
+        Task { @MainActor in
+            HushSleepScheduleController.shared.requestSleepHandoff()
+            completionHandler()
+        }
+    }
 }
