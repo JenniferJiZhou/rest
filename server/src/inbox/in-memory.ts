@@ -50,26 +50,52 @@ export class InMemoryInboxRepository implements InboxRepository {
 
     const normalizedEvent = structuredClone(event);
     const isGroupConversation = normalizedEvent.conversation_type === "group";
-    if (isGroupConversation) {
+    let sealNewDigest =
+      isGroupConversation && normalizedEvent.conversation_id === null;
+    if (isGroupConversation && normalizedEvent.conversation_id !== null) {
       const digestKey = this.digestKey(normalizedEvent);
       const openId = this.openDigestIds.get(digestKey);
       if (openId) {
         const current = this.items.get(openId)!;
-        const reachesMessageLimit = current.message_count >= 1_000;
+        const eventTime = Date.parse(normalizedEvent.received_at);
+        const currentStartTime = Date.parse(current.window_started_at);
+        const currentEndTime = Date.parse(current.window_ended_at);
+        const candidateStartTime = Math.min(currentStartTime, eventTime);
+        const candidateEndTime = Math.max(currentEndTime, eventTime);
         const reachesTimeLimit =
-          Date.parse(normalizedEvent.received_at) -
-            Date.parse(current.window_started_at) >=
+          candidateEndTime - candidateStartTime >=
           24 * 60 * 60 * 1_000;
-        if (reachesMessageLimit || reachesTimeLimit) {
+        if (reachesTimeLimit && eventTime < currentStartTime) {
+          sealNewDigest = true;
+        } else if (reachesTimeLimit) {
           this.sealOpenDigest(digestKey, current, now);
         } else {
+          const messageCount = current.message_count + 1;
+          const reachesMessageLimit = messageCount >= 1_000;
+          const eventIsLatest =
+            eventTime > currentEndTime ||
+            (eventTime === currentEndTime &&
+              normalizedEvent.provider_message_id >
+                current.provider_message_id);
           const updated: UnifiedInboxItem = {
             ...current,
-            provider_message_id: normalizedEvent.provider_message_id,
-            received_at: normalizedEvent.received_at,
+            provider_message_id: eventIsLatest
+              ? normalizedEvent.provider_message_id
+              : current.provider_message_id,
+            received_at: eventIsLatest
+              ? normalizedEvent.received_at
+              : current.received_at,
             revision: current.revision + 1,
-            message_count: current.message_count + 1,
-            window_ended_at: normalizedEvent.received_at,
+            message_count: messageCount,
+            window_started_at:
+              eventTime < currentStartTime
+                ? normalizedEvent.received_at
+                : current.window_started_at,
+            window_ended_at:
+              eventTime > currentEndTime
+                ? normalizedEvent.received_at
+                : current.window_ended_at,
+            sealed_at: reachesMessageLimit ? now : null,
             summary: null,
             important_points: [],
             todos: [],
@@ -84,6 +110,10 @@ export class InMemoryInboxRepository implements InboxRepository {
           this.sourceMessagesByItemId
             .get(openId)!
             .push(this.sourceMessage(normalizedEvent));
+          this.sortSourceMessages(openId);
+          if (reachesMessageLimit) {
+            this.openDigestIds.delete(digestKey);
+          }
           return {
             item: structuredClone(updated),
             created: false,
@@ -104,7 +134,7 @@ export class InMemoryInboxRepository implements InboxRepository {
       message_count: 1,
       window_started_at: event.received_at,
       window_ended_at: event.received_at,
-      sealed_at: null,
+      sealed_at: sealNewDigest ? now : null,
       acknowledged_at: null,
       summary: null,
       important_points: [],
@@ -120,7 +150,11 @@ export class InMemoryInboxRepository implements InboxRepository {
     this.sourceMessagesByItemId.set(item.id, [
       this.sourceMessage(normalizedEvent)
     ]);
-    if (isGroupConversation) {
+    if (
+      isGroupConversation &&
+      normalizedEvent.conversation_id !== null &&
+      !sealNewDigest
+    ) {
       this.openDigestIds.set(this.digestKey(normalizedEvent), item.id);
     }
     return {
@@ -227,11 +261,11 @@ export class InMemoryInboxRepository implements InboxRepository {
   }
 
   private dedupeKey(event: InboxEvent): string {
-    return [
+    return JSON.stringify([
       event.provider,
       event.account_id,
       event.provider_message_id
-    ].join("\u0000");
+    ]);
   }
 
   private digestKey(
@@ -240,11 +274,11 @@ export class InMemoryInboxRepository implements InboxRepository {
       "provider" | "account_id" | "conversation_id"
     >
   ): string {
-    return [
+    return JSON.stringify([
       event.provider,
       event.account_id,
       event.conversation_id
-    ].join("\u0000");
+    ]);
   }
 
   private sourceMessage(event: InboxEvent): InboxSourceMessage {
@@ -264,6 +298,23 @@ export class InMemoryInboxRepository implements InboxRepository {
   ): void {
     this.items.set(item.id, { ...item, sealed_at: now });
     this.openDigestIds.delete(digestKey);
+  }
+
+  private sortSourceMessages(id: string): void {
+    this.sourceMessagesByItemId.get(id)!.sort((left, right) => {
+      const receivedOrder =
+        Date.parse(left.receivedAt) - Date.parse(right.receivedAt);
+      if (receivedOrder !== 0) {
+        return receivedOrder;
+      }
+      if (left.providerMessageId < right.providerMessageId) {
+        return -1;
+      }
+      if (left.providerMessageId > right.providerMessageId) {
+        return 1;
+      }
+      return 0;
+    });
   }
 }
 
@@ -325,12 +376,12 @@ export class InMemoryInboxParticipantDirectory
     conversationId: string,
     participantRef: string
   ): string {
-    return [
+    return JSON.stringify([
       provider,
       accountId,
       conversationId,
       participantRef
-    ].join("\u0000");
+    ]);
   }
 }
 
@@ -524,7 +575,7 @@ export class InMemoryCheckpointStore implements CheckpointStore {
   }
 
   private key(provider: InboxProvider, accountId: string): string {
-    return `${provider}\u0000${accountId}`;
+    return JSON.stringify([provider, accountId]);
   }
 }
 

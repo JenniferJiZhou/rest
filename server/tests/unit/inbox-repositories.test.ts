@@ -70,6 +70,148 @@ describe("Unified Inbox in-memory repositories", () => {
     ]);
   });
 
+  it("creates independently sealed digests for group events without a conversation ID", async () => {
+    const repository = new InMemoryInboxRepository();
+    const first = await repository.upsert(
+      groupEvent({
+        messageId: "group-null-conversation-1",
+        receivedAt: "2026-07-24T00:00:00.000Z",
+        conversationId: null
+      }),
+      "2026-07-24T00:00:01.000Z"
+    );
+    const second = await repository.upsert(
+      groupEvent({
+        messageId: "group-null-conversation-2",
+        receivedAt: "2026-07-24T00:01:00.000Z",
+        conversationId: null
+      }),
+      "2026-07-24T00:01:01.000Z"
+    );
+
+    expect(first).toMatchObject({
+      created: true,
+      changed: true,
+      item: {
+        conversation_id: null,
+        message_count: 1,
+        sealed_at: "2026-07-24T00:00:01.000Z",
+        sender: null,
+        sender_ref: null,
+        content: null
+      }
+    });
+    expect(second).toMatchObject({
+      created: true,
+      changed: true,
+      item: {
+        conversation_id: null,
+        message_count: 1,
+        sealed_at: "2026-07-24T00:01:01.000Z",
+        sender: null,
+        sender_ref: null,
+        content: null
+      }
+    });
+    expect(second.item.id).not.toBe(first.item.id);
+  });
+
+  it("keeps an out-of-order group window chronological", async () => {
+    const repository = new InMemoryInboxRepository();
+    const first = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-10",
+        receivedAt: "2026-07-24T10:00:00.000Z"
+      })
+    );
+    const earlier = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-09",
+        receivedAt: "2026-07-24T09:00:00.000Z"
+      })
+    );
+
+    expect(earlier.item).toMatchObject({
+      id: first.item.id,
+      window_started_at: "2026-07-24T09:00:00.000Z",
+      window_ended_at: "2026-07-24T10:00:00.000Z",
+      received_at: "2026-07-24T10:00:00.000Z"
+    });
+    await expect(repository.sourceMessages(first.item.id)).resolves.toEqual([
+      expect.objectContaining({
+        providerMessageId: "group-message-09",
+        receivedAt: "2026-07-24T09:00:00.000Z"
+      }),
+      expect.objectContaining({
+        providerMessageId: "group-message-10",
+        receivedAt: "2026-07-24T10:00:00.000Z"
+      })
+    ]);
+  });
+
+  it("sorts equal-time source messages by provider message ID", async () => {
+    const repository = new InMemoryInboxRepository();
+    await repository.upsert(
+      groupEvent({
+        messageId: "group-message-b",
+        receivedAt: "2026-07-24T10:00:00.000Z"
+      })
+    );
+    const appended = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-a",
+        receivedAt: "2026-07-24T10:00:00.000Z"
+      })
+    );
+
+    expect(
+      (await repository.sourceMessages(appended.item.id)).map(
+        (message) => message.providerMessageId
+      )
+    ).toEqual(["group-message-a", "group-message-b"]);
+  });
+
+  it("keeps the current open window when an older message exceeds 24 hours", async () => {
+    const repository = new InMemoryInboxRepository();
+    const current = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-current",
+        receivedAt: "2026-07-25T10:00:00.000Z"
+      })
+    );
+    const late = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-late",
+        receivedAt: "2026-07-24T09:00:00.000Z"
+      }),
+      "2026-07-25T10:01:00.000Z"
+    );
+    const followUp = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-follow-up",
+        receivedAt: "2026-07-25T11:00:00.000Z"
+      })
+    );
+
+    expect(late).toMatchObject({
+      created: true,
+      item: {
+        message_count: 1,
+        sealed_at: "2026-07-25T10:01:00.000Z"
+      }
+    });
+    expect(late.item.id).not.toBe(current.item.id);
+    expect(followUp).toMatchObject({
+      created: false,
+      item: {
+        id: current.item.id,
+        message_count: 2,
+        window_started_at: "2026-07-25T10:00:00.000Z",
+        window_ended_at: "2026-07-25T11:00:00.000Z"
+      }
+    });
+  });
+
   it("does not append a duplicate group provider message", async () => {
     const repository = new InMemoryInboxRepository();
     const source = groupEvent({
@@ -117,6 +259,17 @@ describe("Unified Inbox in-memory repositories", () => {
       acknowledged_at: "2026-07-24T00:10:00.000Z",
       sealed_at: "2026-07-24T00:10:00.000Z"
     });
+    const duplicate = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-acknowledged",
+        receivedAt: "2026-07-24T00:00:00.000Z"
+      })
+    );
+    expect(duplicate).toMatchObject({
+      created: false,
+      changed: false,
+      item: { id: first.item.id }
+    });
     expect(next.created).toBe(true);
     expect(next.item.id).not.toBe(first.item.id);
   });
@@ -136,19 +289,23 @@ describe("Unified Inbox in-memory repositories", () => {
       })
     );
 
-    await expect(
-      repository.acknowledge(
+    const error = await repository
+      .acknowledge(
         first.item.id,
         first.item.revision,
         "2026-07-24T00:10:00.000Z"
       )
-    ).rejects.toMatchObject({
-      code: "INBOX_VERSION_CONFLICT",
-      details: { current_revision: 2 }
+      .then(
+        () => null,
+        (caught: unknown) => caught
+      );
+    expect(error).toMatchObject({ code: "INBOX_VERSION_CONFLICT" });
+    expect((error as { details: unknown }).details).toEqual({
+      current_revision: 2
     });
   });
 
-  it("rolls over a group digest after 1000 source messages", async () => {
+  it("seals a group digest as soon as it accepts source message 1000", async () => {
     const repository = new InMemoryInboxRepository();
     let firstItemId = "";
 
@@ -165,6 +322,28 @@ describe("Unified Inbox in-memory repositories", () => {
       firstItemId ||= result.item.id;
     }
 
+    expect(await repository.get(firstItemId)).toMatchObject({
+      message_count: 1_000,
+      sealed_at: "2026-07-24T01:00:00.000Z"
+    });
+    const duplicate = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-1000",
+        receivedAt: new Date(
+          Date.parse("2026-07-24T00:00:00.000Z") + 1_000 * 1_000
+        ).toISOString()
+      })
+    );
+    expect(duplicate).toMatchObject({
+      created: false,
+      changed: false,
+      item: {
+        id: firstItemId,
+        message_count: 1_000,
+        sealed_at: "2026-07-24T01:00:00.000Z"
+      }
+    });
+
     const overflow = await repository.upsert(
       groupEvent({
         messageId: "group-message-1001",
@@ -176,13 +355,9 @@ describe("Unified Inbox in-memory repositories", () => {
     expect(overflow.created).toBe(true);
     expect(overflow.item.id).not.toBe(firstItemId);
     expect(overflow.item.message_count).toBe(1);
-    expect(await repository.get(firstItemId)).toMatchObject({
-      message_count: 1_000,
-      sealed_at: "2026-07-24T01:00:01.000Z"
-    });
   });
 
-  it("rolls over a group digest at the 24 hour boundary", async () => {
+  it("keeps a group digest open just before 24 hours and rolls over at the boundary", async () => {
     const repository = new InMemoryInboxRepository();
     const first = await repository.upsert(
       groupEvent({
@@ -190,7 +365,23 @@ describe("Unified Inbox in-memory repositories", () => {
         receivedAt: "2026-07-24T00:00:00.000Z"
       })
     );
-    const next = await repository.upsert(
+    const justBefore = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-just-before-day-2",
+        receivedAt: "2026-07-24T23:59:59.999Z"
+      }),
+      "2026-07-24T23:59:59.999Z"
+    );
+    expect(justBefore).toMatchObject({
+      created: false,
+      item: {
+        id: first.item.id,
+        message_count: 2,
+        sealed_at: null
+      }
+    });
+
+    const boundary = await repository.upsert(
       groupEvent({
         messageId: "group-message-day-2",
         receivedAt: "2026-07-25T00:00:00.000Z"
@@ -198,11 +389,101 @@ describe("Unified Inbox in-memory repositories", () => {
       "2026-07-25T00:00:01.000Z"
     );
 
-    expect(next.created).toBe(true);
-    expect(next.item.id).not.toBe(first.item.id);
+    expect(boundary.created).toBe(true);
+    expect(boundary.item.id).not.toBe(first.item.id);
+    expect(boundary.item.sealed_at).toBeNull();
     expect(await repository.get(first.item.id)).toMatchObject({
       sealed_at: "2026-07-25T00:00:01.000Z"
     });
+    const duplicate = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-just-before-day-2",
+        receivedAt: "2026-07-24T23:59:59.999Z"
+      })
+    );
+    expect(duplicate).toMatchObject({
+      created: false,
+      changed: false,
+      item: { id: first.item.id }
+    });
+  });
+
+  it("isolates open digests by provider, account, and conversation", async () => {
+    const repository = new InMemoryInboxRepository();
+    const results = await Promise.all([
+      repository.upsert(
+        groupEvent({
+          messageId: "isolation-outlook-a-shared",
+          receivedAt: "2026-07-24T00:00:00.000Z",
+          provider: "outlook",
+          accountId: "account-a",
+          conversationId: "shared"
+        })
+      ),
+      repository.upsert(
+        groupEvent({
+          messageId: "isolation-outlook-b-shared",
+          receivedAt: "2026-07-24T00:00:00.000Z",
+          provider: "outlook",
+          accountId: "account-b",
+          conversationId: "shared"
+        })
+      ),
+      repository.upsert(
+        groupEvent({
+          messageId: "isolation-feishu-a-shared",
+          receivedAt: "2026-07-24T00:00:00.000Z",
+          provider: "feishu",
+          accountId: "account-a",
+          conversationId: "shared"
+        })
+      ),
+      repository.upsert(
+        groupEvent({
+          messageId: "isolation-outlook-a-other",
+          receivedAt: "2026-07-24T00:00:00.000Z",
+          provider: "outlook",
+          accountId: "account-a",
+          conversationId: "other"
+        })
+      )
+    ]);
+
+    expect(new Set(results.map((result) => result.item.id)).size).toBe(4);
+    expect(results.every((result) => result.created)).toBe(true);
+  });
+
+  it("uses collision-safe composite repository keys", async () => {
+    const repository = new InMemoryInboxRepository();
+    const firstDigest = await repository.upsert(
+      groupEvent({
+        messageId: "collision-group-1",
+        receivedAt: "2026-07-24T00:00:00.000Z",
+        accountId: "a\u0000b",
+        conversationId: "c"
+      })
+    );
+    const secondDigest = await repository.upsert(
+      groupEvent({
+        messageId: "collision-group-2",
+        receivedAt: "2026-07-24T00:00:00.000Z",
+        accountId: "a",
+        conversationId: "b\u0000c"
+      })
+    );
+    const firstMessage = await repository.upsert({
+      ...event("c"),
+      account_id: "a\u0000b"
+    });
+    const secondMessage = await repository.upsert({
+      ...event("b\u0000c"),
+      account_id: "a"
+    });
+
+    expect(secondDigest.created).toBe(true);
+    expect(secondDigest.item.id).not.toBe(firstDigest.item.id);
+    expect(secondMessage.created).toBe(true);
+    expect(secondMessage.item.id).not.toBe(firstMessage.item.id);
   });
 
   it("keeps direct messages in the same conversation independent", async () => {
@@ -239,15 +520,19 @@ describe("Unified Inbox in-memory repositories", () => {
       })
     );
 
-    await expect(
-      repository.saveEnrichment(
+    const error = await repository
+      .saveEnrichment(
         first.item.id,
         first.item.revision,
         enrichment()
       )
-    ).rejects.toMatchObject({
-      code: "INBOX_VERSION_CONFLICT",
-      details: { current_revision: 2 }
+      .then(
+        () => null,
+        (caught: unknown) => caught
+      );
+    expect(error).toMatchObject({ code: "INBOX_VERSION_CONFLICT" });
+    expect((error as { details: unknown }).details).toEqual({
+      current_revision: 2
     });
     expect(await repository.get(first.item.id)).toMatchObject({
       summary: null,
@@ -296,6 +581,32 @@ describe("Unified Inbox in-memory repositories", () => {
 
     expect((await repository.get(created.item.id))?.recipients).toEqual([
       "hush@example.com"
+    ]);
+  });
+
+  it("does not expose mutable private source-message state", async () => {
+    const repository = new InMemoryInboxRepository();
+    const created = await repository.upsert(
+      groupEvent({
+        messageId: "group-message-private-state",
+        receivedAt: "2026-07-24T00:00:00.000Z"
+      })
+    );
+    const messages = await repository.sourceMessages(created.item.id);
+    messages[0]!.content = "mutated";
+    messages.push({
+      providerMessageId: "injected",
+      senderRef: null,
+      senderDisplayName: null,
+      content: "injected",
+      receivedAt: "2026-07-24T00:00:01.000Z"
+    });
+
+    await expect(repository.sourceMessages(created.item.id)).resolves.toEqual([
+      expect.objectContaining({
+        providerMessageId: "group-message-private-state",
+        content: "请确认接口交付时间。"
+      })
     ]);
   });
 
@@ -400,10 +711,18 @@ function event(providerMessageId: string): InboxEvent {
 function groupEvent(input: {
   messageId: string;
   receivedAt: string;
+  provider?: InboxEvent["provider"];
+  accountId?: string;
+  conversationId?: string | null;
 }): InboxEvent {
   return {
     ...event(input.messageId),
-    conversation_id: "group-conversation-1",
+    provider: input.provider ?? "outlook",
+    account_id: input.accountId ?? "hush@example.com",
+    conversation_id:
+      input.conversationId === undefined
+        ? "group-conversation-1"
+        : input.conversationId,
     conversation_type: "group",
     conversation_name: "产品讨论组",
     sender: "王同学",

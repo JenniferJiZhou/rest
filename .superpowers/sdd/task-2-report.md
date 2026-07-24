@@ -140,3 +140,97 @@ affected Inbox suites were run directly.
 - Task 4 must consume `changed`, bind pulled participants, summarize
   `sourceMessages()` by exact revision, and expose the acknowledge service/API
   route.
+
+## Reviewer follow-up: window safety, immediate sealing, and key isolation
+
+### RED
+
+Added regression coverage for:
+
+- two group events with `conversation_id: null` creating independent,
+  immediately sealed, public-redacted digests;
+- out-of-order min/max windows and stable source-message ordering;
+- an older event spanning at least 24 hours becoming a separate sealed late
+  digest without replacing the current open digest;
+- immediate sealing on source message 1000;
+- just-before and exact 24-hour behavior;
+- duplicate delivery after acknowledgement and automatic sealing;
+- provider/account/conversation isolation;
+- cross-provider/account/conversation participant resolution rejection;
+- bound input, resolved output, and source-message mutation isolation;
+- exact stale-conflict details;
+- NUL-containing composite-key collision cases.
+
+```bash
+./node_modules/.bin/vitest run tests/unit/inbox-repositories.test.ts tests/unit/inbox-participants.test.ts
+```
+
+RED output: 2 files failed; 7 expected failures and 18 passes. The failures
+were null-ID sealing, chronological min/max updates, stable tie ordering,
+late-message window preservation, immediate message-1000 sealing, and
+repository/participant composite-key collisions.
+
+### GREEN
+
+The repository now:
+
+- immediately seals group digests without a stable conversation ID and never
+  adds them to the open index;
+- computes candidate windows with the minimum and maximum source timestamps;
+- keeps a too-old message as a separate sealed late digest while preserving the
+  current open index;
+- seals the current digest and opens a new one when a newer event reaches the
+  24-hour boundary;
+- sorts private source messages by timestamp and then provider message ID;
+- seals and removes the open index as soon as message 1000 is accepted;
+- uses `JSON.stringify([...])` for repository, participant, checkpoint, and
+  connector composite keys.
+
+Focused GREEN:
+
+```bash
+./node_modules/.bin/vitest run tests/unit/inbox-repositories.test.ts tests/unit/inbox-participants.test.ts
+```
+
+Output: 2 files passed; 25 tests passed.
+
+Affected Inbox verification:
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-repositories.test.ts \
+  tests/unit/inbox-participants.test.ts \
+  tests/unit/inbox-service.test.ts \
+  tests/unit/connector-host.test.ts \
+  tests/unit/inbox-intelligence.test.ts \
+  tests/unit/inbox-confirmation.test.ts \
+  tests/unit/inbox-cli-adapters.test.ts \
+  tests/unit/outlook-graph-adapter.test.ts \
+  tests/unit/qq-mail-adapter.test.ts \
+  tests/unit/composition.test.ts \
+  tests/provider-contracts/inbox-provider-kit.test.ts \
+  tests/integration/inbox-http.test.ts \
+  tests/vertical-slice/unified-inbox-vertical-slice.test.ts
+```
+
+Output: 13 files passed; 79 tests passed.
+
+```bash
+./node_modules/.bin/tsc --noEmit
+git diff --check
+```
+
+Output: both completed with exit code 0 and no diagnostics.
+
+### Follow-up self-review
+
+- Null conversation IDs cannot collide in an open-digest index because they
+  are never indexed.
+- A late digest stores and deduplicates its own raw source message without
+  sealing or replacing the current open digest.
+- Public `received_at` and `window_ended_at` stay at the chronological maximum;
+  `window_started_at` stays at the minimum.
+- All automatically or explicitly sealed source messages remain in the global
+  provider-message dedupe map, so replay does not create a new digest.
+- The changes remain in Task 2's repository/directory/source compatibility
+  scope; no Task 3–7 implementation was added.

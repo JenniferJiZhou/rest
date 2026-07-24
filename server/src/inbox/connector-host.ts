@@ -80,7 +80,10 @@ export class ConnectorHost {
   }
 
   private async syncAccount(account: ConnectorAccount): Promise<void> {
-    const key = `${account.source.provider}\u0000${account.accountId}`;
+    const key = JSON.stringify([
+      account.source.provider,
+      account.accountId
+    ]);
     const failure = this.failures.get(key);
     if (failure && failure.retryAt > this.now()) {
       return;
