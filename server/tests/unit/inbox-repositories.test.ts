@@ -28,6 +28,35 @@ describe("Unified Inbox in-memory repositories", () => {
     ]);
   });
 
+  it("redacts a group source event when creating and listing its public item", async () => {
+    const repository = new InMemoryInboxRepository();
+    const groupEvent: InboxEvent = {
+      ...event("group-message-1"),
+      conversation_id: "group-conversation-1",
+      conversation_type: "group",
+      conversation_name: "产品讨论组",
+      sender: "王同学",
+      sender_ref: "participant_demo_0002",
+      content: "请确认接口交付时间。"
+    };
+
+    const created = await repository.upsert(groupEvent);
+    const listed = await repository.list({ limit: 20 });
+
+    expect(created.item).toMatchObject({
+      item_kind: "conversation_digest",
+      sender: null,
+      sender_ref: null,
+      content: null
+    });
+    expect(listed.items[0]).toMatchObject({
+      item_kind: "conversation_digest",
+      sender: null,
+      sender_ref: null,
+      content: null
+    });
+  });
+
   it("rejects a stale draft version", async () => {
     const repository = new InMemoryInboxDraftRepository();
     const draft = await repository.create(draftInput());

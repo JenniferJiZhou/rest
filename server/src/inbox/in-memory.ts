@@ -37,10 +37,15 @@ export class InMemoryInboxRepository implements InboxRepository {
       };
     }
 
+    const normalizedEvent = structuredClone(event);
+    const isGroupConversation = normalizedEvent.conversation_type === "group";
     const item: UnifiedInboxItem = {
       id: `inbox_${randomUUID()}`,
-      ...structuredClone(event),
-      item_kind: "message",
+      ...normalizedEvent,
+      sender: isGroupConversation ? null : normalizedEvent.sender,
+      sender_ref: isGroupConversation ? null : normalizedEvent.sender_ref,
+      content: isGroupConversation ? null : normalizedEvent.content,
+      item_kind: isGroupConversation ? "conversation_digest" : "message",
       revision: 1,
       message_count: 1,
       window_started_at: event.received_at,

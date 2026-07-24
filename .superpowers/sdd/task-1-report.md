@@ -169,3 +169,39 @@ Output: contracts and affected unit tests passed; CLI/provider/integration: 3 fi
 - No unknown provider conversation type is presented as direct, and no participant binding, mentions, group aggregation, acknowledgement endpoint behavior, or StepFun work was added.
 - Group source events remain raw internal events; the test constructs a public `conversation_digest` and proves the existing Zod redaction constraint accepts only null sender/content fields.
 - Valid real-provider JSON with `reply_targets` parses, while an omitted field is rejected and sanitized without supplying a default.
+
+## Third re-review public-item redaction fix
+
+### RED → GREEN
+
+Added a real in-memory repository `upsert → list` regression using an adapter-shaped group event with raw sender, synthetic sender reference, and raw content:
+
+```bash
+./node_modules/.bin/vitest run tests/unit/inbox-repositories.test.ts
+```
+
+RED output: 1 expected failure. The created public item was `item_kind: "message"` and exposed `sender: "王同学"`, `sender_ref: "participant_demo_0002"`, and raw content.
+
+The repository now classifies only its public representation at creation time: group events become a single `conversation_digest` with all three fields set to `null`; direct events remain `message` items with their source fields intact. This adds no aggregation, revision incrementing, or open-digest state.
+
+GREEN output: 1 file passed, 5 tests passed.
+
+Focused verification:
+
+```bash
+./node_modules/.bin/vitest run tests/unit/inbox-repositories.test.ts tests/unit/inbox-service.test.ts tests/integration/inbox-http.test.ts tests/unit/inbox-cli-adapters.test.ts tests/contracts/fixtures.test.ts tests/contracts/openapi.test.ts
+./node_modules/.bin/vitest run --maxWorkers=1 --minWorkers=1 tests/integration/inbox-http.test.ts
+./node_modules/.bin/tsc --noEmit
+```
+
+Output: repository/service/CLI/contracts tests passed; integration passed 3/3; typecheck passed with no output.
+
+### Files
+
+- `server/src/inbox/in-memory.ts`
+- `server/tests/unit/inbox-repositories.test.ts`
+
+### Self-review
+
+- Redaction happens before the item enters the repository map, so both creation and list retrieval use the same non-leaking public value.
+- The direct path still copies raw source fields and remains `item_kind: "message"`.
