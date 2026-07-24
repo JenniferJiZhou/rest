@@ -10,6 +10,8 @@ const script = resolve(
   repositoryRoot,
   "scripts/smoke-https-staging.ps1"
 );
+const powershellExecutable =
+  process.platform === "win32" ? "powershell.exe" : "pwsh";
 const fastifyServers: FastifyInstance[] = [];
 
 describe("HTTPS staging smoke script", () => {
@@ -139,7 +141,7 @@ async function runSmoke(
 ): Promise<{ code: number | null; output: string }> {
   return await new Promise((resolveRun, reject) => {
     const child = spawn(
-      "powershell.exe",
+      powershellExecutable,
       [
         "-NoProfile",
         "-ExecutionPolicy",
