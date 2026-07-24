@@ -290,54 +290,53 @@ private struct HushPlaceholderView: View {
     }
 }
 
-private struct HushCompanionSnapshot {
-    let deviceName: String
-    let currentContext: String
-    let continuousMinutes: Int
-    let dailyMinutes: Int
-}
-
-private protocol HushCompanionSnapshotProviding {
-    func currentSnapshot() async -> HushCompanionSnapshot
-}
-
-private struct FixtureHushCompanionSnapshotProvider:
-    HushCompanionSnapshotProviding
-{
-    func currentSnapshot() async -> HushCompanionSnapshot {
-        HushCompanionSnapshot(
-            deviceName: "Jennifer 的 Mac",
-            currentContext: "Xcode · Hush",
-            continuousMinutes: 37,
-            dailyMinutes: 104
-        )
-    }
-}
-
 @MainActor
 private final class HushAlwaysOnCompanionModel: ObservableObject {
     enum Phase: Equatable {
         case idle
+        case connecting
         case working
-        case approachingRest
         case restSuggested
         case resting
     }
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var snapshot: HushCompanionSnapshot?
-    @Published private(set) var elapsedSeconds = 0
     @Published private(set) var restSeconds = 0
+    @Published private(set) var connectionText = "正在寻找 Mac…"
+    @Published private(set) var selectedQuest: HushQuestContent?
+    @Published private(set) var suggestionIntro: String?
+    @Published private(set) var agentErrorMessage: String?
+    @Published private(set) var isRequestingManualRest = false
 
-    private let provider: any HushCompanionSnapshotProviding
+    private let transport: HushCompanionPeerTransport
+    private let agentService: any HushCompanionRestAgentServing
+    private let content: HushDemoContentSnapshot
     private var timer: AnyCancellable?
-    private var nextOfferAtElapsedSeconds = 50 * 60
+    private var lastSnapshotReceivedAt: Date?
+    private var latestSequenceBySession: [String: Int] = [:]
+    private var handledDecisionIDs: Set<String> = []
+    private var activeDecisionID: String?
 
     init(
-        provider: any HushCompanionSnapshotProviding =
-            FixtureHushCompanionSnapshotProvider()
+        agentService: any HushCompanionRestAgentServing =
+            HTTPHushCompanionRestAgentService(),
+        contentProvider: any HushRestContentProviding =
+            BundledHushRestContentProvider.automatic
     ) {
-        self.provider = provider
+        self.agentService = agentService
+        content = HushDemoContentSnapshot.load(from: contentProvider)
+        transport = HushCompanionPeerTransport(
+            role: .phoneReceiver,
+            displayName: UIDevice.current.name
+        )
+
+        transport.onSnapshot = { [weak self] snapshot in
+            self?.receive(snapshot)
+        }
+        transport.onConnectionStateChanged = { [weak self] state in
+            self?.receiveConnectionState(state)
+        }
     }
 
     var isSessionActive: Bool {
@@ -345,40 +344,53 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     }
 
     var formattedElapsed: String {
-        format(seconds: elapsedSeconds)
+        format(seconds: snapshot?.continuousScreenSeconds ?? 0)
     }
 
     var formattedRest: String {
         format(seconds: restSeconds)
     }
 
+    var dailyMinutes: Int {
+        max(0, (snapshot?.dailySeconds ?? 0) / 60)
+    }
+
+    var appContinuousMinutes: Int {
+        max(0, (snapshot?.continuousAppSeconds ?? 0) / 60)
+    }
+
     var statusText: String {
         switch phase {
         case .idle:
             return "准备好后，让 Hush 在旁边陪你工作。"
+        case .connecting:
+            return "保持 Hush 打开，正在接续 Mac 的真实工作计时。"
         case .working:
-            return "节奏平稳，先继续手上的事情。"
-        case .approachingRest:
-            return "快到休息点了，把这一小段收个尾。"
+            return snapshot?.isMonitoring == true
+                ? "节奏平稳，Agent 会在 Mac 的检查点判断是否提醒。"
+                : "Mac 已连接，等待开始关注一项工作。"
         case .restSuggested:
-            return "该把注意力从屏幕上移开一会儿了。"
+            return suggestionIntro
+                ?? "如果方便，现在可以短暂离开屏幕。"
         case .resting:
             return "不用赶时间，慢慢回来。"
         }
     }
 
     func start() async {
-        snapshot = await provider.currentSnapshot()
-        elapsedSeconds = (snapshot?.continuousMinutes ?? 0) * 60
-        nextOfferAtElapsedSeconds = max(50 * 60, elapsedSeconds + 60)
-        phase = elapsedSeconds >= 45 * 60 ? .approachingRest : .working
+        guard phase == .idle else {
+            return
+        }
+        phase = .connecting
         setScreenAwake(true)
+        transport.start()
         startTimer()
     }
 
     func stop() {
         timer?.cancel()
         timer = nil
+        transport.stop()
         phase = .idle
         setScreenAwake(false)
     }
@@ -387,34 +399,59 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
         setScreenAwake(isSceneActive && isSessionActive)
     }
 
-    func simulateAgentRestDecision() {
-        guard phase == .working || phase == .approachingRest else {
+    func requestManualRest() async {
+        guard
+            let snapshot,
+            phase == .working,
+            !isRequestingManualRest
+        else {
             return
         }
 
-        offerRest()
+        isRequestingManualRest = true
+        agentErrorMessage = nil
+        defer { isRequestingManualRest = false }
+
+        do {
+            let recommendation = try await agentService.recommendManualRest(
+                from: snapshot,
+                content: content
+            )
+            selectedQuest = recommendation.quest
+            suggestionIntro =
+                recommendation.intro
+                ?? "按你现在的节奏，先做一个短而明确的恢复动作。"
+            activeDecisionID = nil
+            phase = .restSuggested
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        } catch {
+            agentErrorMessage = error.localizedDescription
+        }
     }
 
     func beginRest() {
         restSeconds = 0
         phase = .resting
+        sendCommand(.restStarted)
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
     func remindLater() {
-        nextOfferAtElapsedSeconds = elapsedSeconds + 5 * 60
+        sendCommand(.remindLater)
+        clearSuggestion()
         phase = .working
     }
 
     func skipCurrentSuggestion() {
-        nextOfferAtElapsedSeconds = elapsedSeconds + 30 * 60
+        sendCommand(.suggestionDismissed)
+        clearSuggestion()
         phase = .working
     }
 
     func finishRest() {
+        sendCommand(.restCompleted)
         restSeconds = 0
-        elapsedSeconds = 0
-        nextOfferAtElapsedSeconds = 50 * 60
+        clearSuggestion()
         phase = .working
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
@@ -429,26 +466,103 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     }
 
     private func tick() {
-        switch phase {
-        case .working, .approachingRest:
-            elapsedSeconds += 1
-            if elapsedSeconds >= nextOfferAtElapsedSeconds {
-                offerRest()
-            } else if elapsedSeconds >= nextOfferAtElapsedSeconds - 5 * 60,
-                      phase == .working
-            {
-                phase = .approachingRest
-            }
-        case .resting:
+        if phase == .resting {
             restSeconds += 1
-        case .idle, .restSuggested:
-            break
+        }
+
+        guard
+            phase != .resting,
+            phase != .restSuggested,
+            let lastSnapshotReceivedAt
+        else {
+            return
+        }
+        if Date().timeIntervalSince(lastSnapshotReceivedAt) > 3 {
+            phase = .connecting
+            connectionText = "Mac 连接中断，正在重新连接…"
         }
     }
 
-    private func offerRest() {
+    private func receive(_ snapshot: HushCompanionSnapshot) {
+        guard
+            snapshot.protocolVersion
+                == HushCompanionSnapshot.protocolVersion,
+            snapshot.sequence
+                > latestSequenceBySession[snapshot.sessionID, default: -1]
+        else {
+            return
+        }
+
+        latestSequenceBySession[snapshot.sessionID] = snapshot.sequence
+        self.snapshot = snapshot
+        lastSnapshotReceivedAt = Date()
+        connectionText = "已连接 \(snapshot.deviceName)"
+
+        if phase == .connecting {
+            phase = .working
+        }
+
+        guard
+            phase == .working,
+            let decision = snapshot.latestDecision,
+            decision.shouldOfferRest,
+            handledDecisionIDs.insert(decision.id).inserted
+        else {
+            return
+        }
+
+        activeDecisionID = decision.id
+        selectedQuest = quest(id: decision.defaultQuestID)
+        suggestionIntro = decision.message
         phase = .restSuggested
-        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        if snapshot.interruptionMode == "firm" {
+            UINotificationFeedbackGenerator()
+                .notificationOccurred(.warning)
+        } else {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    private func receiveConnectionState(
+        _ state: HushCompanionPeerTransport.ConnectionState
+    ) {
+        switch state {
+        case .stopped:
+            connectionText = "Mac 同步已停止"
+        case .searching:
+            if phase != .resting, phase != .restSuggested {
+                phase = .connecting
+            }
+            connectionText = "正在寻找 Mac…"
+        case let .connected(peerName):
+            connectionText = "已连接 \(peerName)"
+        }
+    }
+
+    private func quest(id: String?) -> HushQuestContent {
+        if
+            let id,
+            let matched = content.quests.first(where: { $0.id == id })
+        {
+            return matched
+        }
+        return content.quests.first ?? .emergencyFallback
+    }
+
+    private func sendCommand(_ kind: HushCompanionCommand.Kind) {
+        transport.send(
+            command: HushCompanionCommand(
+                kind: kind,
+                decisionID: activeDecisionID,
+                emittedAt: Date()
+            )
+        )
+    }
+
+    private func clearSuggestion() {
+        selectedQuest = nil
+        suggestionIntro = nil
+        activeDecisionID = nil
     }
 
     private func setScreenAwake(_ awake: Bool) {
@@ -560,7 +674,7 @@ private struct HushAlwaysOnCompanionView: View {
         VStack(spacing: 26) {
             HStack(spacing: 7) {
                 Image(systemName: "laptopcomputer")
-                Text(model.snapshot?.deviceName ?? "正在接续 Mac…")
+                Text(model.connectionText)
             }
             .font(.caption)
             .foregroundStyle(Color.white.opacity(0.52))
@@ -577,7 +691,7 @@ private struct HushAlwaysOnCompanionView: View {
                     )
                     .contentTransition(.numericText())
 
-                Text("连续工作")
+                Text("连续使用屏幕")
                     .font(.subheadline)
                     .tracking(1.4)
                     .foregroundStyle(.secondary)
@@ -593,7 +707,10 @@ private struct HushAlwaysOnCompanionView: View {
                     Text(snapshot.currentContext)
                     Text("·")
                         .foregroundStyle(Color.white.opacity(0.24))
-                    Text("今天 \(snapshot.dailyMinutes) 分钟")
+                    Text("当前任务 \(model.appContinuousMinutes) 分钟")
+                    Text("·")
+                        .foregroundStyle(Color.white.opacity(0.24))
+                    Text("此任务今日 \(model.dailyMinutes) 分钟")
                 }
                 .font(.caption)
                 .foregroundStyle(Color.white.opacity(0.48))
@@ -616,12 +733,27 @@ private struct HushAlwaysOnCompanionView: View {
                     Text(model.formattedRest)
                         .font(.system(size: 48, weight: .light, design: .rounded))
                         .monospacedDigit()
-                } else {
-                    Text("站起来，去窗边看一眼远处。\n慢慢呼吸三次。")
-                        .font(.title3)
-                        .multilineTextAlignment(.center)
+                } else if let quest = model.selectedQuest {
+                    VStack(spacing: 12) {
+                        Text(quest.title)
+                            .font(.title3.weight(.semibold))
+
+                        Text(quest.durationLabel)
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.5))
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(
+                                Array(quest.steps.enumerated()),
+                                id: \.offset
+                            ) { index, step in
+                                Text("\(index + 1). \(step)")
+                            }
+                        }
+                        .font(.body)
                         .foregroundStyle(Color.white.opacity(0.82))
-                        .lineSpacing(7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
 
@@ -660,26 +792,46 @@ private struct HushAlwaysOnCompanionView: View {
 
     private var footer: some View {
         VStack(spacing: 12) {
-            if model.phase == .working || model.phase == .approachingRest {
+            if model.phase == .working {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        model.simulateAgentRestDecision()
+                    Task {
+                        await model.requestManualRest()
                     }
                 } label: {
-                    Image(systemName: "bell.badge")
-                        .font(.system(size: 13, weight: .regular))
-                        .frame(width: 34, height: 34)
-                        .background(Color.white.opacity(0.045), in: Circle())
+                    if model.isRequestingManualRest {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("正在请 Agent 推荐…")
+                        }
+                    } else {
+                        Text("我现在想休息一下")
+                    }
                 }
-                .foregroundStyle(Color.white.opacity(0.68))
-                .accessibilityLabel("模拟 Agent 建议休息")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.white.opacity(0.82))
+                .disabled(
+                    model.snapshot == nil
+                        || model.isRequestingManualRest
+                )
+            }
+
+            if let agentErrorMessage = model.agentErrorMessage {
+                Text(agentErrorMessage)
+                    .font(.caption2)
+                    .foregroundStyle(Color.orange.opacity(0.9))
+                    .multilineTextAlignment(.center)
             }
 
             HStack(spacing: 7) {
                 Circle()
-                    .fill(Color.green.opacity(0.9))
+                    .fill(
+                        model.snapshot == nil
+                            ? Color.orange.opacity(0.9)
+                            : Color.green.opacity(0.9)
+                    )
                     .frame(width: 6, height: 6)
-                Text("屏幕保持常亮 · Mac / Agent Fixture")
+                Text("屏幕保持常亮 · Mac 实时同步")
                     .font(.caption2)
                     .foregroundStyle(Color.white.opacity(0.48))
             }

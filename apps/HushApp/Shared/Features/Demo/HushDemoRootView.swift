@@ -5,6 +5,9 @@ struct HushDemoRootView: View {
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
     @State private var isShowingSettings = false
+    @State private var inboxRevealProgress: CGFloat = 0
+    @State private var isRevealingInbox = false
+    @State private var inboxTransitionTask: Task<Void, Never>?
     private let onSettings: (() -> Void)?
     private let onCompanion: (() -> Void)?
     private let suggestedQuestID: String?
@@ -36,7 +39,7 @@ struct HushDemoRootView: View {
 
     var body: some View {
         ZStack {
-            HushWaveBackground()
+            HushWaveBackground(revealProgress: inboxRevealProgress)
 
             if store.route == .door {
                 HushDoorView(
@@ -49,13 +52,18 @@ struct HushDemoRootView: View {
                             isShowingSettings = true
                         }
                     },
-                    onOpenInbox: store.openInbox,
+                    onInboxSwipeChanged: updateInboxSwipe,
+                    onInboxSwipeEnded: finishInboxSwipe,
                     onOpenCompanion: onCompanion
                 )
+                .opacity(
+                    1 - min(inboxRevealProgress * 1.65, 1)
+                )
+                .allowsHitTesting(!isRevealingInbox)
                 .transition(.opacity)
             } else if store.route == .inbox {
                 UnifiedInboxView(onClose: store.closeInbox)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.opacity)
             } else {
                 VStack(spacing: 0) {
                     topBar
@@ -105,6 +113,9 @@ struct HushDemoRootView: View {
         .onChange(of: suggestionEventID) { _, _ in
             store.presentRestSuggestion(questID: suggestedQuestID)
         }
+        .onDisappear {
+            inboxTransitionTask?.cancel()
+        }
         .sheet(isPresented: $isShowingSettings) {
             HushSettingsView(
                 degraded: store.content.status.isFallback,
@@ -144,8 +155,60 @@ struct HushDemoRootView: View {
 
     private func taskText(for quest: HushQuestContent) -> String {
         let steps = quest.steps.prefix(2)
-        let task = steps.isEmpty ? quest.title : steps.joined(separator: "\n")
+        let task = (steps.isEmpty ? quest.title : steps.joined(separator: "\n"))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !task.isEmpty else {
+            return "先休息一下。"
+        }
         return task.hasSuffix("。") ? task : "\(task)。"
+    }
+
+    private func updateInboxSwipe(_ progress: CGFloat) {
+        guard !isRevealingInbox else { return }
+        inboxTransitionTask?.cancel()
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            inboxRevealProgress = min(0.96, max(0, progress))
+        }
+    }
+
+    private func finishInboxSwipe(_ shouldComplete: Bool) {
+        guard !isRevealingInbox else { return }
+        inboxTransitionTask?.cancel()
+
+        guard shouldComplete else {
+            withAnimation(
+                .timingCurve(0.22, 0.72, 0.28, 1, duration: 0.72)
+            ) {
+                inboxRevealProgress = 0
+            }
+            return
+        }
+
+        isRevealingInbox = true
+        let duration = 1.35
+        withAnimation(
+            .timingCurve(0.3, 0.02, 0.12, 1, duration: duration)
+        ) {
+            inboxRevealProgress = 1
+        }
+
+        inboxTransitionTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(duration * 1_000_000_000)
+            )
+            guard !Task.isCancelled else { return }
+
+            store.openInbox()
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                inboxRevealProgress = 0
+                isRevealingInbox = false
+            }
+        }
     }
 
     private var topBar: some View {
