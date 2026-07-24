@@ -187,3 +187,114 @@ and affected Inbox suites passed in that run.
   Task 8 supplies and validates StepFun environment configuration.
 - Tests use recording transports and stubbed native fetch only; no real
   network request or credential was used.
+
+## Reviewer follow-up — complete validation and bounded reduce
+
+### RED
+
+Added map and final-reduce regressions whose outputs contain 20 allowed
+targets followed by an invented target:
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-intelligence.test.ts -t "invented"
+```
+
+RED output: 2 tests failed because both promises incorrectly resolved after
+the target loop stopped at the 20-result cap.
+
+Added a 1000-message regression with 10 schema-valid maximal map outputs:
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-intelligence.test.ts -t "compacts large"
+```
+
+RED output: 1 test failed with sanitized `INBOX_AI_UNAVAILABLE`; no reduce
+request was sent because the uncompressed reduce prompt exceeded 60,000
+characters.
+
+Added native-fetch regressions for rejected `response.json()`, malformed
+fenced content, and an aborted request:
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-intelligence.test.ts -t "native fetch|AbortError"
+```
+
+RED output: 3 tests failed. The transport ignored the injected fetch
+implementation, so malformed responses were classified as generic provider
+errors and the asserted original signal never reached the recording fetch.
+
+The reduce privacy regression was characterization coverage: source canaries,
+raw-ID-shaped content, and instruction-like text remain in map data only;
+the existing map/reduce separation plus the new compact contract kept them
+out of the reduce prompt.
+
+### GREEN
+
+- Target validation now traverses every returned target reference before
+  first-seen de-duplication and the 20-result output cap.
+- Multi-map results are converted to a compact reduce-only contract containing
+  a non-empty summary, priority, needs-reply flag, and bounded points, todos,
+  and already validated targets.
+- The per-result content quota is derived from map-result count. A deterministic
+  binary search chooses the largest quota whose fully serialized reduce prompt
+  is at most the configured limit.
+- If even the minimum valid compact structure cannot fit, summarization returns
+  a sanitized invalid-output error before transport invocation.
+- Native fetch is injectable without a new dependency. Malformed
+  `response.json()`, malformed fenced JSON, and `AbortError` are sanitized;
+  the exact caller signal is forwarded unchanged.
+- Reduce prompts contain only compact validated map results, conversation name,
+  and allowed synthetic participants. The no-tools/no-send policy is repeated
+  on the reduce request.
+
+Focused follow-up GREEN:
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-intelligence.test.ts \
+  tests/unit/inbox-service.test.ts \
+  tests/unit/composition.test.ts
+```
+
+Output: 3 files passed; 34 tests passed.
+
+Broad Inbox GREEN:
+
+```bash
+./node_modules/.bin/vitest run \
+  tests/unit/inbox-intelligence.test.ts \
+  tests/unit/inbox-service.test.ts \
+  tests/unit/composition.test.ts \
+  tests/unit/inbox-confirmation.test.ts \
+  tests/unit/inbox-cli-adapters.test.ts \
+  tests/unit/inbox-repositories.test.ts \
+  tests/unit/inbox-participants.test.ts \
+  tests/integration/inbox-http.test.ts \
+  tests/provider-contracts/inbox-provider-kit.test.ts \
+  tests/vertical-slice/unified-inbox-vertical-slice.test.ts
+```
+
+Output: 10 files passed; 82 tests passed.
+
+```bash
+./node_modules/.bin/tsc --noEmit
+git diff --check
+```
+
+Output: both exited 0 with no diagnostics.
+
+```bash
+rg -n "Anthropic|CLAUDE_" src/inbox src/application/inbox
+```
+
+Output: no matches (`rg` exit 1).
+
+### Follow-up concern
+
+Task 4 still owns late-output orchestration. The repository revision check
+prevents a late summary from overwriting a newer digest revision, but Task 3
+does not add cancellation, changed-item rescheduling, acknowledgement, or
+send orchestration.

@@ -57,6 +57,10 @@ const stepFunResponseSchema = z
   .passthrough();
 
 export class FetchStepFunTransport implements StepFunTransport {
+  constructor(
+    private readonly fetchImpl: typeof fetch = fetch
+  ) {}
+
   async completeJson(input: {
     endpoint: string;
     apiKey: string;
@@ -80,7 +84,7 @@ export class FetchStepFunTransport implements StepFunTransport {
     if (input.signal) {
       request.signal = input.signal;
     }
-    const response = await fetch(input.endpoint, request);
+    const response = await this.fetchImpl(input.endpoint, request);
     if (!response.ok) {
       throw new StepFunProviderError();
     }
@@ -238,8 +242,13 @@ export class StepFunInboxIntelligenceProvider
       if (mapped.length === 1) {
         return mapped[0]!;
       }
+      const compactMapped = compactMapResults(
+        input,
+        mapped,
+        this.maxPromptCharacters
+      );
       return await this.completeSummary(
-        reducePrompt(input, mapped),
+        reducePrompt(input, compactMapped),
         input.allowedParticipants,
         options
       );
@@ -307,7 +316,7 @@ function mapPrompt(
 
 function reducePrompt(
   input: InboxSummaryInput,
-  mapped: InboxSummaryResult[]
+  mapped: CompactMapResult[]
 ): string {
   return summaryPolicy(
     JSON.stringify({
@@ -319,6 +328,129 @@ function reducePrompt(
       map_results: mapped
     })
   );
+}
+
+interface CompactMapResult {
+  summary: string;
+  important_points: string[];
+  todos: string[];
+  priority: InboxSummaryResult["priority"];
+  needs_reply: boolean;
+  reply_targets: Array<{
+    target_id: string;
+    reason: string;
+  }>;
+}
+
+function compactMapResults(
+  input: InboxSummaryInput,
+  mapped: InboxSummaryResult[],
+  maxCharacters: number
+): CompactMapResult[] {
+  let low = 1;
+  let high = Math.max(
+    1,
+    Math.floor(maxCharacters / mapped.length)
+  );
+  let accepted: CompactMapResult[] | null = null;
+  while (low <= high) {
+    const quota = Math.floor((low + high) / 2);
+    const candidate = mapped.map((result) =>
+      compactMapResult(result, quota)
+    );
+    if (reducePrompt(input, candidate).length <= maxCharacters) {
+      accepted = candidate;
+      low = quota + 1;
+    } else {
+      high = quota - 1;
+    }
+  }
+  if (accepted === null) {
+    throw new StepFunInvalidOutputError();
+  }
+  assertPromptWithinLimit(
+    reducePrompt(input, accepted),
+    maxCharacters
+  );
+  return accepted;
+}
+
+function compactMapResult(
+  result: InboxSummaryResult,
+  quota: number
+): CompactMapResult {
+  const summaryBudget = Math.max(1, Math.floor(quota * 0.4));
+  const pointsBudget = Math.floor(quota * 0.2);
+  const todosBudget = Math.floor(quota * 0.2);
+  const targetsBudget =
+    quota - summaryBudget - pointsBudget - todosBudget;
+  return {
+    summary: clipText(result.summary, summaryBudget),
+    important_points: clipTextList(
+      result.important_points,
+      3,
+      pointsBudget
+    ),
+    todos: clipTextList(result.todos, 3, todosBudget),
+    priority: result.priority,
+    needs_reply: result.needs_reply,
+    reply_targets: compactTargets(
+      result.reply_targets,
+      targetsBudget
+    )
+  };
+}
+
+function clipTextList(
+  values: string[],
+  maxItems: number,
+  budget: number
+): string[] {
+  const selected = values.slice(0, maxItems);
+  const result: string[] = [];
+  let remaining = budget;
+  for (let index = 0; index < selected.length; index += 1) {
+    if (remaining <= 0) {
+      break;
+    }
+    const remainingItems = selected.length - index;
+    const share = Math.max(
+      1,
+      Math.floor(remaining / remainingItems)
+    );
+    const clipped = clipText(selected[index]!, Math.min(200, share));
+    result.push(clipped);
+    remaining -= Array.from(clipped).length;
+  }
+  return result;
+}
+
+function compactTargets(
+  targets: InboxSummaryResult["reply_targets"],
+  budget: number
+): CompactMapResult["reply_targets"] {
+  const result: CompactMapResult["reply_targets"] = [];
+  let remaining = budget;
+  for (const target of targets.slice(0, 5)) {
+    const targetIdLength = Array.from(target.target_id).length;
+    if (remaining <= targetIdLength) {
+      break;
+    }
+    const reason = clipText(
+      target.reason,
+      Math.min(120, remaining - targetIdLength)
+    );
+    result.push({
+      target_id: target.target_id,
+      reason
+    });
+    remaining -= targetIdLength + Array.from(reason).length;
+  }
+  return result;
+}
+
+function clipText(value: string, maxCharacters: number): string {
+  return Array.from(value).slice(0, Math.max(1, maxCharacters)).join("");
 }
 
 function summaryPolicy(serializedInput: string): string {
@@ -484,13 +616,12 @@ function validateSummary(
       continue;
     }
     seen.add(target.target_id);
-    replyTargets.push({
-      target_id: target.target_id,
-      display_name: participant.displayName,
-      reason: target.reason
-    });
-    if (replyTargets.length === 20) {
-      break;
+    if (replyTargets.length < 20) {
+      replyTargets.push({
+        target_id: target.target_id,
+        display_name: participant.displayName,
+        reason: target.reason
+      });
     }
   }
   return inboxSummaryResultSchema.parse({
