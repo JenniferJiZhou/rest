@@ -13,7 +13,14 @@ const environmentSchema = z
     NODE_ENV: z
       .enum(["development", "test", "demo", "production"])
       .default("development"),
-    PUBLIC_BASE_URL: z.url().default("http://localhost:3000"),
+    PUBLIC_BASE_URL: z.url(),
+    TRUST_PROXY: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    HUSH_REST_DECISION_PROVIDER: z
+      .enum(["canned", "unavailable"])
+      .default("canned"),
     CLAUDE_API_KEY: z.string().min(1).optional(),
     CLAUDE_MODEL: z.string().min(1).optional(),
     LLM_TIMEOUT_MS: z.coerce
@@ -45,9 +52,6 @@ const environmentSchema = z
       .default("false")
       .transform((value) => value === "true"),
     HUSH_DEMO_TOKEN: z.string().min(8).optional(),
-    HUSH_REST_DECISION_PROVIDER: z
-      .enum(["canned", "unavailable"])
-      .default("canned"),
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info")
@@ -59,7 +63,14 @@ export type AppConfig = z.infer<typeof environmentSchema>;
 export function loadConfig(
   environment: NodeJS.ProcessEnv = process.env
 ): AppConfig {
-  const result = environmentSchema.safeParse(environment);
+  const environmentWithLocalDefaults = {
+    ...environment,
+    ...((environment.NODE_ENV ?? "development") !== "production" &&
+    environment.PUBLIC_BASE_URL === undefined
+      ? { PUBLIC_BASE_URL: "http://localhost:3000" }
+      : {})
+  };
+  const result = environmentSchema.safeParse(environmentWithLocalDefaults);
   if (!result.success) {
     const issues = result.error.issues
       .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
@@ -71,5 +82,31 @@ export function loadConfig(
       "Invalid server configuration: HUSH_DEMO_TOKEN is required when HUSH_DEMO_MODE=true"
     );
   }
+  result.data.PUBLIC_BASE_URL = validateAndNormalizePublicBaseUrl(
+    result.data.PUBLIC_BASE_URL,
+    result.data.NODE_ENV
+  );
   return result.data;
+}
+
+function validateAndNormalizePublicBaseUrl(
+  value: string,
+  nodeEnvironment: AppConfig["NODE_ENV"]
+): string {
+  const url = new URL(value);
+  if (
+    nodeEnvironment === "production" &&
+    (url.protocol !== "https:" ||
+      ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
+      url.search.length > 0 ||
+      url.hash.length > 0 ||
+      url.username.length > 0 ||
+      url.password.length > 0)
+  ) {
+    throw new Error(
+      "Invalid server configuration: PUBLIC_BASE_URL must be a public HTTPS URL without credentials, query, or fragment in production"
+    );
+  }
+  url.pathname = url.pathname.replace(/\/+$/u, "");
+  return url.toString().replace(/\/$/u, "");
 }

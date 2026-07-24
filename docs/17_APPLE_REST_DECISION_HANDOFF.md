@@ -1,12 +1,13 @@
-# Apple Rest Decision Handoff
+# Apple Rest Decision HTTPS Handoff
 
-Status: phase 1 protocol ready; Apple device and HTTPS staging verification
-remain manual.  
-Owner: W1 / P2
+Status: phase 1 protocol and HTTPS deployment readiness are complete. The
+actual HTTPS staging URL has not been created, and Apple iPhone/Mac device
+verification remains manual.
+Owner: W1 / P2 -> Apple Owner
 
 ## Runtime matrix
 
-| Request | Trigger | Continuous field | Estimated |
+| Request | `trigger_source` | Continuous field | Estimated |
 |---|---|---|---:|
 | iOS App | `device_activity_threshold` | `estimated_continuous_app_usage_minutes` | true |
 | Mac App | `macos_usage_checkpoint` | `continuous_app_usage_minutes` | false |
@@ -14,7 +15,8 @@ Owner: W1 / P2
 | Legacy | legacy trigger, including deprecated `macos_rule` | `continuous_screen_minutes` | false |
 
 `macos_rules` is not a Contract value. Current Apple code does not send
-`macos_rule`.
+deprecated `macos_rule`. Current and legacy usage fields are mutually
+exclusive.
 
 The three current shapes normalize to one Provider context:
 
@@ -24,66 +26,118 @@ monitoredContext: user label + label source + hostname + privacy flags
 usage: dailyMinutes + continuousMinutes + continuousIsEstimated
 ```
 
-No raw App identity, full URL, URL path/query, search term, or page title is
-available to the Provider.
+Estimated iOS continuous usage must not be described as exact foreground
+time. No raw App identity, full URL, URL path/query, search term, or page
+title is available to the Provider.
 
 ## HTTP behavior
 
-| Result | Behavior |
+| Result | Apple behavior |
 |---|---|
 | `200`, `should_offer_rest=true` | Apple may notify or apply Shield according to local settings |
-| `200`, `should_offer_rest=false` | Apple continues observing |
-| `400` | malformed/unknown/mixed fields, unsafe privacy flag, or Header/body ID mismatch |
-| `403` | supplied Demo Token is disabled or invalid |
-| `409` | unsupported Contract version, or request ID reused with different content |
-| `503` | Rest Decision Provider unavailable; body is ErrorResponse, never RestSuggestion |
+| `200`, `should_offer_rest=false` | Do not create a new reminder; continue observing |
+| `400` | Do not remind; malformed/unknown/mixed fields, unsafe privacy flag, or Header/body ID mismatch |
+| `403` | Do not remind; supplied Demo Token is disabled or invalid |
+| `409` | Do not remind; unsupported Contract version or request ID reused with different content |
+| `503` | Do not remind; Provider unavailable and body is ErrorResponse, never RestSuggestion |
+
+For `/v1/rest/evaluate`, the Header `X-Request-ID` must equal
+`body.request_id`. An identical retry with the same ID and content returns
+the stored compatible decision. Reusing the ID with different content returns
+`409 INVALID_REQUEST` with `details.reason=REQUEST_ID_REUSED`.
 
 The backend never activates Shield and never returns or changes the next
 checkpoint.
 
-An identical retry with the same `request_id` returns the stored compatible
-decision. A different payload with that ID returns `409 INVALID_REQUEST` with
-`details.reason=REQUEST_ID_REUSED`.
-
 ## Hostname rules
 
-- trim, lowercase, and remove one leading `www.`;
-- keep `m.` and every other subdomain distinct;
+- trim and lowercase the hostname;
+- remove one leading `www.`;
+- keep `m.`, `music.`, and all other subdomains distinct;
 - reject scheme, path, query, fragment, userinfo, port, empty labels, and
   invalid DNS label syntax;
 - `label_source=user` requires a non-empty user label;
-- `label_source=domain` accepts an omitted or explicit-null user label.
+- `label_source=domain` accepts an omitted or explicit-null user label and
+  rejects a non-null user label;
+- do not perform eTLD+1 or registrable-domain merging.
+
+## HTTPS client contract
+
+Apple configures the platform-provided root HTTPS Base URL:
+
+```text
+https://<deployed-origin>
+```
+
+The Base URL does not include `/v1/rest/evaluate`; current Swift clients append
+that path. Current iOS DeviceActivity, Mac App, and Mac website clients reject
+non-HTTPS URLs. Localhost and trusted-LAN HTTP are only for backend and manual
+smoke tools, not current Apple client configuration.
+
+Normal graph requests do not send `X-Hush-Demo-Token`. Keep:
+
+```text
+Content-Type: application/json
+X-Request-ID: <same as body request_id>
+X-Client-Version: <Apple app version>
+X-Contract-Version: 1.0
+```
+
+Keep the current Swift timeout of 5 seconds. On `200 true`, Apple decides
+whether to notify or apply Shield. On `200 false`, `400`, `403`, `409`, `503`,
+timeout, malformed JSON, or response Contract mismatch, Apple creates no new
+reminder. The backend does not control Shield and does not modify the next
+checkpoint.
+
+Canned staging returns `X-Hush-Data-Origin: mock`; it is not a Real Agent.
+The HTTPS staging URL remains pending.
 
 ## Configuration
 
-Required/default server variables:
+Local defaults:
 
 ```text
 HOST=127.0.0.1
 PORT=3000
+NODE_ENV=development
+PUBLIC_BASE_URL=http://localhost:3000
+TRUST_PROXY=false
 HUSH_DEMO_MODE=false
 HUSH_DEMO_TOKEN=
 HUSH_REST_DECISION_PROVIDER=canned
 ```
 
-Use `HUSH_REST_DECISION_PROVIDER=unavailable` only to exercise the immediate
-503 path. It does not call a network service.
+Cloud staging:
 
-Normal requests do not need a Demo Token. A request selects Demo only when:
+```text
+HOST=0.0.0.0
+PORT=<platform-supplied>
+NODE_ENV=production
+PUBLIC_BASE_URL=https://<deployed-origin>
+TRUST_PROXY=true
+HUSH_DEMO_MODE=false
+HUSH_REST_DECISION_PROVIDER=canned
+```
+
+Production requires an explicit public HTTPS `PUBLIC_BASE_URL`. Normal does
+not need a Demo Token. Set `HUSH_REST_DECISION_PROVIDER=unavailable` only for
+the immediate 503 failure-injection path; it does not call a network service.
+Normal Canned and Demo Canned both report origin `mock`.
+
+Demo is selected only when server configuration and request Header all match:
 
 ```text
 HUSH_DEMO_MODE=true
 HUSH_DEMO_TOKEN=<at least 8 characters>
-X-Hush-Demo-Token=<matching value>
+X-Hush-Demo-Token=<matching runtime value>
 ```
 
-No token selects Normal even while Demo is enabled. Current Swift checkpoint
-code does not send the Demo header, so it uses Normal Canned in this phase.
-Normal Canned and Demo Canned both return `X-Hush-Data-Origin: mock`.
+No token selects Normal even when Demo is enabled. Do not commit or print the
+runtime token.
 
 ## Start and health
 
-With the repository-standard Node 20 and pnpm 9 toolchain:
+With the repository-standard Node 20.19.5 and pnpm 9.15.9 toolchain:
 
 ```powershell
 Set-Location .\server
@@ -93,36 +147,30 @@ $env:HUSH_REST_DECISION_PROVIDER = "canned"
 pnpm dev
 ```
 
-Health:
+Local health:
 
 ```powershell
 curl.exe -i http://127.0.0.1:3000/v1/health
 ```
 
-For a temporary trusted-LAN protocol smoke:
+HTTPS staging health:
 
-```powershell
-$env:HOST = "0.0.0.0"
-pnpm dev
+```bash
+BASE_URL="https://<deployed-origin>"
+curl -i "$BASE_URL/v1/health"
 ```
 
-The address format is `http://<windows-lan-ipv4>:3000`. Allow only the chosen
-TCP port on the Private Windows Firewall profile and remove the temporary
-rule afterward. Do not change the default HOST.
-
-The current Apple clients require an HTTPS origin, so their Base URL must be:
-
-```text
-https://<staging-host>
-```
-
-Do not append `/v1/rest/evaluate`; the clients append that path.  
-HTTPS staging pending.
+Apple receives only the root Base URL and does not add an API path during
+configuration. Swift appends the endpoint path. The actual staging URL is
+pending. A trusted-LAN HTTP address such as
+`http://<windows-lan-ipv4>:3000` is only for manual smoke.
 
 ## curl examples
 
-Run from the repository root. Each fixture's `request_id` matches its Header.
-Omit `X-Hush-Demo-Token` for Normal.
+Run from the repository root. Each fixture request ID matches its Header.
+These examples exercise the local manual harness; replace
+`http://127.0.0.1:3000` with `https://<deployed-origin>` to run the same
+fixture request against staging.
 
 ### iOS App (Canned false)
 
@@ -159,30 +207,29 @@ curl.exe -i -X POST http://127.0.0.1:3000/v1/rest/evaluate `
 
 ### Demo
 
-Add this header only when the server Demo variables match:
+Only after enabling Demo with a private runtime value, add:
 
 ```powershell
 -H "X-Hush-Demo-Token: <private-runtime-token>"
 ```
 
-Never commit or print the runtime token.
-
 ### Provider unavailable (503)
 
-Restart locally with:
+Restart locally or redeploy staging with:
 
 ```powershell
 $env:HUSH_REST_DECISION_PROVIDER = "unavailable"
 pnpm dev
 ```
 
-Then repeat the iOS request. Expected: HTTP 503, the three response headers,
-and an ErrorResponse whose `details.reason` is
-`REST_DECISION_PROVIDER_UNAVAILABLE`; no `should_offer_rest` field.
+Repeat the iOS request. Expected: HTTP 503, the three Contract response
+headers, and ErrorResponse `details.reason` equal to
+`REST_DECISION_PROVIDER_UNAVAILABLE`; no `should_offer_rest` field. Restore
+`canned` afterward.
 
 ## PowerShell smoke
 
-Normal:
+Local protocol smoke:
 
 ```powershell
 .\scripts\smoke-apple-rest-decision.ps1 `
@@ -191,7 +238,7 @@ Normal:
   -Payload All
 ```
 
-Demo:
+Optional local Demo:
 
 ```powershell
 .\scripts\smoke-apple-rest-decision.ps1 `
@@ -201,32 +248,44 @@ Demo:
   -Payload All
 ```
 
-The script prints status, request ID, decision, message, and data origin. It
-validates `X-Request-ID`, `X-Contract-Version`, and
-`X-Hush-Data-Origin`; any non-2xx response exits non-zero.
+HTTPS staging:
+
+```powershell
+.\scripts\smoke-https-staging.ps1 `
+  -BaseUrl "https://<deployed-origin>" `
+  -Mode Https `
+  -ExpectedDataOrigin mock
+```
+
+The HTTPS smoke validates health, all three Payload types, HTTP status,
+Content-Type, `X-Request-ID`, `X-Contract-Version`,
+`X-Hush-Data-Origin`, `response.request_id`, `should_offer_rest`, and message
+type. It exits non-zero on mismatch or timeout and does not print the Demo
+Token or complete user Payload.
 
 ## Apple handoff
 
-Set an HTTPS Base URL and keep the currently implemented headers:
+The Apple Owner must:
 
-```text
-Content-Type: application/json
-X-Request-ID: <same as body request_id>
-X-Client-Version: 1.0.0
-X-Contract-Version: 1.0
-```
+1. set the platform-provided root HTTPS Base URL;
+2. keep the current Headers and Header/body request ID equality;
+3. keep the 5-second timeout;
+4. verify true, false, 503, timeout, and malformed JSON behavior;
+5. keep notification and Shield decisions Apple-owned for true;
+6. create no new reminder for false or any error;
+7. leave the confirmed Swift Payload and Codable models unchanged;
+8. omit the Demo Token for Normal.
 
-The current 5-second timeout is the integration budget. On timeout, 503, or
-undecodable JSON, do not notify and do not apply Shield.
+## Manual remaining checks
 
-No confirmed Swift payload or response Codable field needs to change. The
-current app cannot select Demo without a future Header-only change; a Demo
-Token is not required for Normal.
-
-Manual remaining checks:
-
-1. deploy or provide the real HTTPS staging Base URL;
-2. run `/v1/health` and all three checkpoint types against staging;
-3. verify true, false, timeout, 503, and malformed-response behavior on a real
-   iPhone and Mac;
-4. confirm local notification/Shield policy remains entirely Apple-owned.
+1. Create Render or an equivalent cloud service.
+2. Obtain the real HTTPS staging URL.
+3. Run `/v1/health` against staging.
+4. Run all three checkpoint types against staging.
+5. Verify true, false, 503, timeout, and malformed JSON on iPhone and Mac.
+6. Confirm notifications and Shield remain entirely Apple-controlled.
+7. Run standard CI with Node 20.19.5 and pnpm 9.15.9.
+8. When Docker daemon is available, verify build, health, and SIGTERM.
+9. Integrate a Real Rest Decision Provider in a separate task.
+10. Add production client authentication, abuse protection, and rate limiting
+    only through a later Contract Change.
