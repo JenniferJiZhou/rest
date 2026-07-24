@@ -5,16 +5,16 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
 describe("deployment artifacts", () => {
-  it("defines a safe ClawCloud Run OCI image pipeline", () => {
+  it("defines a safe Zeabur OCI image pipeline", () => {
     const workflow = readFileSync(
       resolve(
         repositoryRoot,
-        ".github/workflows/publish-clawcloud-image.yml"
+        ".github/workflows/publish-staging-image.yml"
       ),
       "utf8"
     );
     const environment = readFileSync(
-      resolve(repositoryRoot, "deploy/clawcloud-run.env.example"),
+      resolve(repositoryRoot, "deploy/zeabur.env.example"),
       "utf8"
     );
     const env = new Map(
@@ -32,17 +32,21 @@ describe("deployment artifacts", () => {
 
     expect(workflow).toContain("ghcr.io/");
     expect(workflow).toContain("hush-server-staging");
-    expect(workflow).toContain("docker build");
+    expect(workflow).toContain("docker/setup-buildx-action@");
+    expect(workflow).toContain("docker/build-push-action@");
+    expect(workflow).toContain("docker/login-action@");
+    expect(workflow).toContain("load: true");
     expect(workflow).toContain("docker push");
     expect(workflow).toContain("GITHUB_SHA");
     expect(workflow).toContain("packages: write");
     expect(workflow).toContain("http://127.0.0.1:3000/v1/health");
     expect(workflow).toContain("github.ref == 'refs/heads/main'");
-    expect(workflow).toContain(
-      "github.event_name != 'pull_request'"
-    );
+    expect(workflow).toContain("workflow_dispatch");
+    expect(workflow).toContain("inputs.publish");
     expect(workflow).not.toContain("CLAUDE_API_KEY");
     expect(workflow).not.toContain("HUSH_DEMO_TOKEN");
+    expect(workflow.toLowerCase()).not.toContain("clawcloud");
+    expect(environment.toLowerCase()).not.toContain("clawcloud");
     expect(env.get("NODE_ENV")).toBe("production");
     expect(env.get("HOST")).toBe("0.0.0.0");
     expect(env.get("TRUST_PROXY")).toBe("true");

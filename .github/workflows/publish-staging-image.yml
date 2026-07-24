@@ -1,31 +1,42 @@
-name: ClawCloud Staging Image
+name: HTTPS Staging Image
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the immutable SHA tag to GHCR
+        required: true
+        default: false
+        type: boolean
   pull_request:
     paths:
-      - ".github/workflows/publish-clawcloud-image.yml"
+      - ".github/workflows/publish-staging-image.yml"
       - ".dockerignore"
       - "Dockerfile"
       - "server/**"
       - "content/rest-quests.json"
       - "contracts/fixtures/mail-items-demo.json"
+      - "contracts/fixtures/unified-inbox-items.json"
   push:
     branches:
       - main
     paths:
-      - ".github/workflows/publish-clawcloud-image.yml"
+      - ".github/workflows/publish-staging-image.yml"
       - ".dockerignore"
       - "Dockerfile"
       - "server/**"
       - "content/rest-quests.json"
       - "contracts/fixtures/mail-items-demo.json"
+      - "contracts/fixtures/unified-inbox-items.json"
 
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 concurrency:
-  group: clawcloud-image-${{ github.ref }}
+  group: staging-image-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,7 +48,10 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Resolve image name
         id: image
@@ -47,13 +61,17 @@ jobs:
           echo "name=ghcr.io/$owner/hush-server-staging" >> "$GITHUB_OUTPUT"
 
       - name: Build immutable staging image
-        shell: bash
-        run: |
-          docker build \
-            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --tag "${{ steps.image.outputs.name }}:$GITHUB_SHA" \
-            .
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Smoke container health
         shell: bash
@@ -84,17 +102,28 @@ jobs:
           exit 1
 
       - name: Log in to GitHub Container Registry
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        shell: bash
-        run: |
-          printf '%s' "${{ secrets.GITHUB_TOKEN }}" |
-            docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.publish)
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
-      - name: Publish immutable and main tags
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      - name: Publish immutable SHA tag
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.publish)
         shell: bash
         run: |
           image="${{ steps.image.outputs.name }}"
           docker push "$image:$GITHUB_SHA"
+
+      - name: Publish moving main tag
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        shell: bash
+        run: |
+          image="${{ steps.image.outputs.name }}"
           docker tag "$image:$GITHUB_SHA" "$image:main"
           docker push "$image:main"

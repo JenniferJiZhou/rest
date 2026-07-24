@@ -292,8 +292,8 @@ The Apple Owner must:
 
 ## Manual remaining checks
 
-1. Publish the immutable GHCR image and create the ClawCloud Run App
-   Launchpad service.
+1. Publish the immutable GHCR image and create the Zeabur Docker Image
+   service.
 2. Obtain the real HTTPS staging URL.
 3. Run `/v1/health` against staging.
 4. Run all three checkpoint types against staging.
