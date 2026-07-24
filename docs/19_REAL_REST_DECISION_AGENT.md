@@ -238,11 +238,12 @@ real model network.
 
 ## Manual HTTPS staging handoff
 
-After the separate HTTPS deployment work is merged:
+With the repository's HTTPS deployment readiness in place:
 
 1. configure the five variable names above in the staging secret manager;
 2. keep the public listener and TLS settings owned by the deployment change;
-3. call `/v1/health` and confirm `providers.rest_decision=ready`;
+3. call `/v1/health` and confirm process liveness without invoking any
+   Provider or model;
 4. send iOS App, Mac App, and Mac website fixtures to
    `POST /v1/rest/evaluate`;
 5. confirm successful Real responses carry

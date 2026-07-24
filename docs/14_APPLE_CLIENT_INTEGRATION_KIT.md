@@ -14,13 +14,17 @@ The focused Rest Decision runbook and Apple handoff are in
 
 | Environment | Base URL |
 |---|---|
-| Windows-local smoke client | `http://127.0.0.1:3000` |
-| Trusted-LAN HTTP smoke client | `http://<windows-lan-ipv4>:<port>` |
-| Current Apple clients | `https://<staging-host>` |
+| Windows-local backend smoke | `http://127.0.0.1:3000` |
+| Trusted-LAN HTTP smoke for manual tools | `http://<windows-lan-ipv4>:<port>` |
+| Current Apple clients / HTTPS staging | pending (`https://<staging-host>`) |
 
-HTTPS staging pending. The current iOS DeviceActivity, Mac App, and Mac
-website implementations all reject non-HTTPS Base URLs. Keep the Base URL in
-client configuration, not inside feature views.
+The current iOS DeviceActivity, Mac App, and Mac website clients reject
+non-HTTPS Base URLs. Localhost and trusted-LAN HTTP are only for backend or
+manual smoke tools; they are not Base URLs that the current Apple clients can
+use. After staging deployment, configure Apple with the platform-provided
+root HTTPS origin. It must not include `/v1/rest/evaluate`, because the Swift
+clients append that path. Keep the Base URL in the client configuration layer,
+not inside feature views. The real HTTPS staging URL remains pending.
 
 An iPhone or a different Mac must not use `127.0.0.1`; that address points
 back to the Apple device itself. The HTTP LAN URL is for the PowerShell/curl
@@ -60,6 +64,8 @@ X-Hush-Demo-Token: <private runtime token>
 ```
 
 Do not ship a production demo token in the repository or App binary.
+The normal Canned staging graph does not send this token; it is identified
+by `X-Hush-Data-Origin: mock`.
 `GET /v1/health` does not require client headers, but it returns the same
 three Contract response headers.
 
@@ -367,7 +373,7 @@ the live runtime rules described in this document.
 | Endpoint | Client timeout |
 |---|---:|
 | `/v1/health` | 3 s |
-| `/v1/rest/evaluate` | 5 s |
+| `/v1/rest/evaluate` | 5 s (current Swift implementation) |
 | `/v1/rest/check-in` | 12 s |
 | `/v1/rest/recommend` | 8 s |
 | `/v1/rest/feedback` | 5 s |

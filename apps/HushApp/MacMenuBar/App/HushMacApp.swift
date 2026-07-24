@@ -1,20 +1,182 @@
 import AppKit
 import SwiftUI
+import UserNotifications
+
+struct HushMacRestSuggestion: Codable, Equatable, Sendable {
+    let requestID: String
+    let message: String
+    let questID: String?
+}
+
+extension Notification.Name {
+    static let hushMacRestNotificationOpened = Notification.Name(
+        "hush.mac.rest-notification-opened"
+    )
+}
+
+final class HushMacRestNotificationController:
+    NSObject,
+    UNUserNotificationCenterDelegate
+{
+    static let shared = HushMacRestNotificationController()
+
+    private static let storedSuggestionKey =
+        "mac.notifications.lastOpenedRestSuggestion"
+    private static let requestIDKey = "request_id"
+    private static let messageKey = "message"
+    private static let questIDKey = "quest_id"
+
+    private override init() {
+        super.init()
+    }
+
+    func configure() {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    func sendRestSuggestion(
+        message: String,
+        questID: String?,
+        requestID: String
+    ) {
+        let trimmedMessage = message.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let content = UNMutableNotificationContent()
+        content.title = "Hush 提醒你休息一下"
+        content.body = trimmedMessage.isEmpty
+            ? "有一个很短的休息任务在等你。"
+            : trimmedMessage
+        content.sound = .default
+        content.userInfo = [
+            Self.requestIDKey: requestID,
+            Self.messageKey: trimmedMessage,
+            Self.questIDKey: questID ?? ""
+        ]
+
+        let request = UNNotificationRequest(
+            identifier: "hush-rest-\(requestID)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func sendTestSuggestion() {
+        sendRestSuggestion(
+            message: "先把手机留在这里，去洗一把脸。",
+            questID: "wash_face_01",
+            requestID: "req_mac_notification_test_\(UUID().uuidString)"
+        )
+    }
+
+    func lastOpenedSuggestion() -> HushMacRestSuggestion? {
+        guard
+            let data = UserDefaults.standard.data(
+                forKey: Self.storedSuggestionKey
+            )
+        else {
+            return nil
+        }
+
+        return try? JSONDecoder().decode(
+            HushMacRestSuggestion.self,
+            from: data
+        )
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler:
+            @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if userInfo[HushSleepScheduleController.routeUserInfoKey]
+            as? String == HushSleepScheduleController.sleepRouteValue
+        {
+            DispatchQueue.main.async {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                HushSleepScheduleController.shared
+                    .requestSleepHandoff()
+                completionHandler()
+            }
+            return
+        }
+
+        let suggestion = Self.suggestion(
+            from: userInfo
+        )
+
+        if let suggestion,
+           let data = try? JSONEncoder().encode(suggestion)
+        {
+            UserDefaults.standard.set(
+                data,
+                forKey: Self.storedSuggestionKey
+            )
+        }
+
+        DispatchQueue.main.async {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            NotificationCenter.default.post(
+                name: .hushMacRestNotificationOpened,
+                object: suggestion
+            )
+            completionHandler()
+        }
+    }
+
+    private static func suggestion(
+        from userInfo: [AnyHashable: Any]
+    ) -> HushMacRestSuggestion? {
+        guard let requestID = userInfo[requestIDKey] as? String else {
+            return nil
+        }
+
+        let message = userInfo[messageKey] as? String ?? ""
+        let rawQuestID = userInfo[questIDKey] as? String
+        return HushMacRestSuggestion(
+            requestID: requestID,
+            message: message,
+            questID: rawQuestID?.isEmpty == false ? rawQuestID : nil
+        )
+    }
+}
 
 @main
 struct HushMacApp: App {
     @StateObject private var model = MacUsageMonitoringModel()
     @StateObject private var websiteModel = MacWebsiteMonitoringModel()
 
+    init() {
+        HushMacRestNotificationController.shared.configure()
+    }
+
     var body: some Scene {
-        MenuBarExtra(
-            HushProduct.displayName,
-            systemImage: "waveform.path"
-        ) {
+        MenuBarExtra {
             HushMacMenuView(model: model)
+        } label: {
+            HushMacMenuBarLabel()
         }
 
-        Window("Hush", id: "dashboard") {
+        Window("Hush", id: "main") {
+            HushMacHomeView()
+        }
+        .defaultSize(width: 900, height: 680)
+        .windowStyle(.hiddenTitleBar)
+
+        Window("Hush 设置", id: "settings") {
             HushMacDashboardView(
                 model: model,
                 websiteModel: websiteModel
@@ -23,6 +185,38 @@ struct HushMacApp: App {
         }
         .defaultSize(width: 860, height: 610)
         .windowStyle(.hiddenTitleBar)
+    }
+}
+
+private struct HushMacMenuBarLabel: View {
+    @Environment(\.openWindow) private var openWindow
+    @State private var didOpenMainWindow = false
+
+    var body: some View {
+        Image(systemName: "waveform.path")
+            .accessibilityLabel(HushProduct.displayName)
+            .task {
+                guard !didOpenMainWindow else { return }
+                didOpenMainWindow = true
+                openWindow(id: "main")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .hushMacRestNotificationOpened
+                )
+            ) { _ in
+                openWindow(id: "main")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: .hushSleepHandoffRequested
+                )
+            ) { _ in
+                openWindow(id: "main")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
     }
 }
 
@@ -64,10 +258,16 @@ private struct HushMacMenuView: View {
             Divider()
 
             Button("打开 Hush") {
-                openWindow(id: "dashboard")
+                openWindow(id: "main")
                 NSApplication.shared.activate(ignoringOtherApps: true)
             }
             .keyboardShortcut("o")
+
+            Button("设置") {
+                openWindow(id: "settings")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+            .keyboardShortcut(",")
 
             Button("退出 Hush") {
                 NSApplication.shared.terminate(nil)
@@ -79,9 +279,39 @@ private struct HushMacMenuView: View {
     }
 }
 
+private struct HushMacHomeView: View {
+    @Environment(\.openWindow) private var openWindow
+    @State private var suggestion =
+        HushMacRestNotificationController.shared.lastOpenedSuggestion()
+
+    var body: some View {
+        HushDemoRootView(
+            onSettings: {
+                openWindow(id: "settings")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            },
+            suggestedQuestID: suggestion?.questID,
+            suggestionMessage: suggestion?.message,
+            suggestionEventID: suggestion?.requestID
+        )
+        .frame(minWidth: 620, minHeight: 560)
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .hushMacRestNotificationOpened
+            )
+        ) { notification in
+            suggestion = notification.object as? HushMacRestSuggestion
+                ?? HushMacRestNotificationController.shared
+                    .lastOpenedSuggestion()
+        }
+    }
+}
+
 private struct HushMacDashboardView: View {
     @ObservedObject var model: MacUsageMonitoringModel
     @ObservedObject var websiteModel: MacWebsiteMonitoringModel
+    @ObservedObject private var sleepSchedule =
+        HushSleepScheduleController.shared
     @State private var isShowingAppPicker = false
 
     var body: some View {
@@ -101,6 +331,7 @@ private struct HushMacDashboardView: View {
                         .frame(maxWidth: .infinity)
 
                         VStack(spacing: 18) {
+                            sleepScheduleCard
                             interruptionCard
                             agentCard
                             privacyCard
@@ -512,6 +743,35 @@ private struct HushMacDashboardView: View {
         .hushMacPanel()
     }
 
+    private var sleepScheduleCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionLabel("睡前模式")
+
+            Toggle(
+                "按时间自动进入",
+                isOn: $sleepSchedule.isEnabled
+            )
+            .toggleStyle(.switch)
+
+            DatePicker(
+                "通常几点睡觉",
+                selection: $sleepSchedule.sleepTime,
+                displayedComponents: .hourAndMinute
+            )
+            .disabled(!sleepSchedule.isEnabled)
+
+            Button("立即预览睡前模式") {
+                sleepSchedule.previewNow()
+            }
+            .buttonStyle(.bordered)
+
+            Text("到点后，Hush 会打开波浪主页并向下进入睡前交接。")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.52))
+        }
+        .hushMacPanel()
+    }
+
     private var agentCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -553,6 +813,12 @@ private struct HushMacDashboardView: View {
 
             Button("记录刚刚完成休息") {
                 model.recordRestCompleted()
+            }
+            .buttonStyle(.bordered)
+
+            Button("发送测试通知") {
+                HushMacRestNotificationController.shared
+                    .sendTestSuggestion()
             }
             .buttonStyle(.bordered)
 
