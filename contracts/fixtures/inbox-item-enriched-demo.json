@@ -1,0 +1,24 @@
+{
+  "id": "inbox-item-demo-001",
+  "provider": "outlook",
+  "account_id": "demo@example.com",
+  "conversation_id": "conversation-demo-001",
+  "provider_message_id": "message-demo-001",
+  "sender": "colleague@example.com",
+  "recipients": ["demo@example.com"],
+  "subject": "周五演示确认",
+  "content": "请在周五上午十点前确认演示材料，并回复最终版本。",
+  "received_at": "2026-07-24T09:30:00+08:00",
+  "coverage": {
+    "source": "official_api",
+    "complete": true,
+    "note": null
+  },
+  "summary": "同事要求在周五上午十点前确认演示材料并回复最终版本。",
+  "important_points": ["截止时间为周五上午十点"],
+  "todos": ["检查并确认演示材料"],
+  "priority": "urgent",
+  "needs_reply": true,
+  "draft_id": "inbox-draft-demo-001",
+  "sync_status": "ready"
+}

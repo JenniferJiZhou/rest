@@ -57,6 +57,28 @@ describe("OpenAPI contract", () => {
       }
     }
   });
+
+  it("declares the Unified Inbox API surface", () => {
+    const document = parse(
+      readFileSync(openApiPath, "utf8")
+    ) as OpenApiDocument;
+    const operations = [
+      ["/v1/inbox/events:batch", "post"],
+      ["/v1/inbox/items", "get"],
+      ["/v1/inbox/items/{itemId}", "get"],
+      ["/v1/inbox/items/{itemId}/summary", "post"],
+      ["/v1/inbox/items/{itemId}/draft", "post"],
+      ["/v1/inbox/drafts/{draftId}", "get"],
+      ["/v1/inbox/drafts/{draftId}", "patch"],
+      ["/v1/inbox/drafts/{draftId}/confirmation", "post"],
+      ["/v1/inbox/drafts/{draftId}:send", "post"],
+      ["/v1/inbox/sync-status", "get"]
+    ] as const;
+
+    for (const [path, method] of operations) {
+      expect(document.paths[path]?.[method]).toBeDefined();
+    }
+  });
 });
 
 interface OpenApiResponse {

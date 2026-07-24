@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InboxDraft",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "inbox_item_id",
+    "content",
+    "content_type",
+    "version",
+    "origin",
+    "status",
+    "provider_draft_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inbox_item_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000
+    },
+    "content_type": {
+      "type": "string",
+      "enum": ["text", "html"]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "origin": {
+      "type": "string",
+      "enum": ["ai", "user"]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "generating",
+        "ready",
+        "edited",
+        "sending",
+        "sent",
+        "failed",
+        "unknown"
+      ]
+    },
+    "provider_draft_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "InboxDraftPatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "content",
+        "content_type",
+        "expected_version"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1.0"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        },
+        "content_type": {
+          "type": "string",
+          "enum": ["text", "html"]
+        },
+        "expected_version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

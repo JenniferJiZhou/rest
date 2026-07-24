@@ -76,6 +76,18 @@ export const FIXTURE_CONTRACTS: FixtureContract[] = [
   {
     fixture: "error-llm-invalid-output.json",
     schema: "error-response.schema.json"
+  },
+  {
+    fixture: "inbox-event-batch-demo.json",
+    schema: "inbox-event-batch.schema.json"
+  },
+  {
+    fixture: "inbox-item-enriched-demo.json",
+    schema: "inbox-item.schema.json"
+  },
+  {
+    fixture: "inbox-draft-edited-demo.json",
+    schema: "inbox-draft.schema.json"
   }
 ];
 

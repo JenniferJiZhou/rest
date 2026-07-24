@@ -1,0 +1,12 @@
+{
+  "id": "inbox-draft-demo-001",
+  "inbox_item_id": "inbox-item-demo-001",
+  "content": "收到，我会在周五上午十点前确认并发送最终版本。",
+  "content_type": "text",
+  "version": 2,
+  "origin": "user",
+  "status": "edited",
+  "provider_draft_id": null,
+  "created_at": "2026-07-24T09:31:00+08:00",
+  "updated_at": "2026-07-24T09:35:00+08:00"
+}
