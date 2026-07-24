@@ -1,47 +1,54 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
 describe("deployment artifacts", () => {
-  it("defines a safe Render native Node staging service", () => {
-    const document = parse(
-      readFileSync(resolve(repositoryRoot, "render.yaml"), "utf8")
-    ) as {
-      services: Array<Record<string, unknown>>;
-    };
-    const service = document.services[0] as {
-      type: string;
-      runtime: string;
-      rootDir: string;
-      buildCommand: string;
-      startCommand: string;
-      healthCheckPath: string;
-      envVars: Array<{ key: string; value?: string; sync?: boolean }>;
-    };
+  it("defines a safe ClawCloud Run OCI image pipeline", () => {
+    const workflow = readFileSync(
+      resolve(
+        repositoryRoot,
+        ".github/workflows/publish-clawcloud-image.yml"
+      ),
+      "utf8"
+    );
+    const environment = readFileSync(
+      resolve(repositoryRoot, "deploy/clawcloud-run.env.example"),
+      "utf8"
+    );
     const env = new Map(
-      service.envVars.map((item) => [item.key, item])
+      environment
+        .trim()
+        .split("\n")
+        .map((line) => {
+          const separator = line.indexOf("=");
+          return [
+            line.slice(0, separator),
+            line.slice(separator + 1)
+          ] as const;
+        })
     );
 
-    expect(service).toMatchObject({
-      type: "web",
-      runtime: "node",
-      rootDir: ".",
-      healthCheckPath: "/v1/health",
-      startCommand: "cd server && pnpm start"
-    });
-    expect(service.buildCommand).toContain("corepack enable");
-    expect(service.buildCommand).toContain("pnpm@9.15.9");
-    expect(service.buildCommand).toContain(
-      "pnpm install --frozen-lockfile"
+    expect(workflow).toContain("ghcr.io/");
+    expect(workflow).toContain("hush-server-staging");
+    expect(workflow).toContain("docker build");
+    expect(workflow).toContain("docker push");
+    expect(workflow).toContain("GITHUB_SHA");
+    expect(workflow).toContain("packages: write");
+    expect(workflow).toContain("http://127.0.0.1:3000/v1/health");
+    expect(workflow).toContain("github.ref == 'refs/heads/main'");
+    expect(workflow).toContain(
+      "github.event_name != 'pull_request'"
     );
-    expect(service.buildCommand).toContain("pnpm build");
-    expect(env.get("NODE_VERSION")?.value).toBe("20.19.5");
-    expect(env.get("HOST")?.value).toBe("0.0.0.0");
-    expect(env.get("TRUST_PROXY")?.value).toBe("true");
-    expect(env.get("PUBLIC_BASE_URL")?.sync).toBe(false);
+    expect(workflow).not.toContain("CLAUDE_API_KEY");
+    expect(workflow).not.toContain("HUSH_DEMO_TOKEN");
+    expect(env.get("NODE_ENV")).toBe("production");
+    expect(env.get("HOST")).toBe("0.0.0.0");
+    expect(env.get("TRUST_PROXY")).toBe("true");
+    expect(env.get("PUBLIC_BASE_URL")).toMatch(/^https:\/\//u);
+    expect(env.get("HUSH_REST_DECISION_PROVIDER")).toBe("canned");
+    expect(env.get("HUSH_DEMO_MODE")).toBe("false");
     expect(env.has("PORT")).toBe(false);
     expect(env.has("HUSH_DEMO_TOKEN")).toBe(false);
     expect(env.has("CLAUDE_API_KEY")).toBe(false);
@@ -70,6 +77,8 @@ describe("deployment artifacts", () => {
     expect(dockerfile).toContain(
       'CMD ["node", "dist/bootstrap.js"]'
     );
+    expect(dockerfile).toContain("HEALTHCHECK");
+    expect(dockerfile).toContain("http://127.0.0.1:3000/v1/health");
     expect(dockerignore).toContain(".env");
     expect(dockerignore).toContain(".git");
     expect(dockerignore).toContain("*.pem");

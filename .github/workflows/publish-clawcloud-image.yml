@@ -1,0 +1,100 @@
+name: ClawCloud Staging Image
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/publish-clawcloud-image.yml"
+      - ".dockerignore"
+      - "Dockerfile"
+      - "server/**"
+      - "content/rest-quests.json"
+      - "contracts/fixtures/mail-items-demo.json"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publish-clawcloud-image.yml"
+      - ".dockerignore"
+      - "Dockerfile"
+      - "server/**"
+      - "content/rest-quests.json"
+      - "contracts/fixtures/mail-items-demo.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clawcloud-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image name
+        id: image
+        shell: bash
+        run: |
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "name=ghcr.io/$owner/hush-server-staging" >> "$GITHUB_OUTPUT"
+
+      - name: Build immutable staging image
+        shell: bash
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "${{ steps.image.outputs.name }}:$GITHUB_SHA" \
+            .
+
+      - name: Smoke container health
+        shell: bash
+        run: |
+          container_name="hush-server-image-smoke"
+          cleanup() {
+            docker rm -f "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run --detach \
+            --name "$container_name" \
+            --publish 127.0.0.1:3000:3000 \
+            --env NODE_ENV=production \
+            --env PUBLIC_BASE_URL=https://hush-server-staging.example.com \
+            --env TRUST_PROXY=true \
+            --env HUSH_REST_DECISION_PROVIDER=canned \
+            --env HUSH_DEMO_MODE=false \
+            --env LOG_LEVEL=silent \
+            "${{ steps.image.outputs.name }}:$GITHUB_SHA"
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error \
+              http://127.0.0.1:3000/v1/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$container_name"
+          exit 1
+
+      - name: Log in to GitHub Container Registry
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" |
+            docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Publish immutable and main tags
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          image="${{ steps.image.outputs.name }}"
+          docker push "$image:$GITHUB_SHA"
+          docker tag "$image:$GITHUB_SHA" "$image:main"
+          docker push "$image:main"
