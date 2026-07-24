@@ -18,19 +18,26 @@ import {
   type UsageSummary
 } from "../../domain/contracts.js";
 import { AppError } from "../../domain/errors.js";
+import { canonicalRequestHash } from "../../domain/request-hash.js";
 import type {
   AgentLLM,
   FeedbackRepository,
   IdempotencyStore,
   RestContentRepository
 } from "../../domain/ports.js";
+import { withProviderTimeout } from "../../infra/provider-call.js";
+
+export interface RestServiceOptions {
+  llmTimeoutMs?: number;
+}
 
 export class RestService {
   constructor(
     private readonly agent: AgentLLM,
     private readonly content: RestContentRepository,
     private readonly feedback: FeedbackRepository,
-    private readonly feedbackIdempotency: IdempotencyStore<boolean>
+    private readonly feedbackIdempotency: IdempotencyStore<boolean>,
+    private readonly options: RestServiceOptions = {}
   ) {}
 
   evaluate(input: UsageSummary): RestSuggestion {
@@ -100,7 +107,12 @@ export class RestService {
   async checkIn(input: FatigueCheckIn): Promise<FatigueReflection> {
     const request = fatigueCheckInSchema.parse(input);
     const result = fatigueReflectionSchema.parse(
-      await this.agent.reflectFatigue(request)
+      await withProviderTimeout({
+        timeoutMs: this.options.llmTimeoutMs ?? 15_000,
+        timeoutError: () => this.llmTimeoutError("reflect_fatigue"),
+        operation: (signal) =>
+          this.agent.reflectFatigue(request, { signal })
+      })
     );
     if (request.follow_up_answer && result.needs_follow_up) {
       throw new AppError({
@@ -147,7 +159,12 @@ export class RestService {
     }
 
     const recommendation = restQuestRecommendationSchema.parse(
-      await this.agent.chooseQuest(request, eligible)
+      await withProviderTimeout({
+        timeoutMs: this.options.llmTimeoutMs ?? 15_000,
+        timeoutError: () => this.llmTimeoutError("choose_quest"),
+        operation: (signal) =>
+          this.agent.chooseQuest(request, eligible, { signal })
+      })
     );
     if (!eligible.some((quest) => quest.id === recommendation.quest_id)) {
       throw new AppError({
@@ -166,11 +183,29 @@ export class RestService {
     idempotencyKey: string
   ): Promise<void> {
     const feedback = restFeedbackSchema.parse(input);
-    if (await this.feedbackIdempotency.get(idempotencyKey)) {
-      return;
+    await this.feedbackIdempotency.deleteExpired(
+      new Date().toISOString()
+    );
+    const result = await this.feedbackIdempotency.claimOrGet({
+      key: idempotencyKey,
+      requestHash: canonicalRequestHash(feedback),
+      ttlSeconds: 24 * 60 * 60,
+      create: async () => {
+        await this.feedback.record(feedback);
+        return true;
+      }
+    });
+    if (result.kind === "conflict_different_request") {
+      throw new AppError({
+        code: "INVALID_REQUEST",
+        message: "该 Idempotency-Key 已用于不同的反馈内容。",
+        statusCode: 409,
+        retryable: false,
+        details: {
+          reason: "IDEMPOTENCY_KEY_REUSED"
+        }
+      });
     }
-    await this.feedback.record(feedback);
-    await this.feedbackIdempotency.put(idempotencyKey, true, 24 * 60 * 60);
   }
 
   private eligibleQuests(
@@ -197,6 +232,17 @@ export class RestService {
         (quest.fatigue_types.includes(request.fatigue_type) ||
           request.fatigue_type === "unknown")
       );
+    });
+  }
+
+  private llmTimeoutError(operation: string): AppError {
+    return new AppError({
+      code: "LLM_TIMEOUT",
+      message: "Model provider timed out.",
+      statusCode: 503,
+      retryable: true,
+      fallback: "LOCAL_RULES",
+      details: { reason: "timeout", operation }
     });
   }
 

@@ -10,23 +10,35 @@ import {
 } from "../domain/contracts.js";
 import type {
   AgentLLM,
+  DataOrigin,
   HandoffAgentInput,
   HandoffSummaryDraft,
+  ProviderCallOptions,
   ProviderHealth
 } from "../domain/ports.js";
+import { AppError } from "../domain/errors.js";
 
 const includesAny = (text: string, words: string[]): boolean =>
   words.some((word) => text.includes(word));
 
 export class CannedAgentLLM implements AgentLLM {
+  readonly dataOrigin: DataOrigin = "mock";
+
   async health(): Promise<ProviderHealth> {
     return "ready";
   }
 
-  async reflectFatigue(input: FatigueCheckIn): Promise<FatigueReflection> {
+  async reflectFatigue(
+    input: FatigueCheckIn,
+    options?: ProviderCallOptions
+  ): Promise<FatigueReflection> {
+    assertNotAborted(options);
     const description = input.description.toLowerCase();
+    const hasFollowUpAnswer =
+      input.follow_up_answer !== null &&
+      input.follow_up_answer !== undefined;
     const needsFollowUp =
-      !input.follow_up_answer &&
+      !hasFollowUpAnswer &&
       !includesAny(description, [
         "眼",
         "屏幕",
@@ -68,14 +80,29 @@ export class CannedAgentLLM implements AgentLLM {
     ) {
       fatigueType = "cognitive_overload";
       reflection = "更像认知负荷过高，先把未完成事项放下，再离开当前任务。";
-    } else if (input.follow_up_answer) {
-      const answer = input.follow_up_answer.toLowerCase();
-      fatigueType = includesAny(answer, ["身体", "酸", "僵"])
-        ? "physical"
-        : includesAny(answer, ["情绪", "烦", "焦虑"])
-          ? "emotional_social"
-          : "cognitive_overload";
-      reflection = "先选择一个低负担、可随时停止的恢复动作。";
+    } else if (hasFollowUpAnswer) {
+      const answer = (input.follow_up_answer ?? "").toLowerCase();
+      if (includesAny(answer, ["身体", "酸", "僵", "肩", "腰", "疼"])) {
+        fatigueType = "physical";
+      } else if (
+        includesAny(answer, ["情绪", "烦", "焦虑", "社交", "委屈"])
+      ) {
+        fatigueType = "emotional_social";
+      } else if (
+        includesAny(answer, ["眼", "屏幕", "亮", "吵", "感官"])
+      ) {
+        fatigueType = "sensory_overload";
+      } else if (includesAny(answer, ["困", "睡", "夜", "入睡"])) {
+        fatigueType = "bedtime_arousal";
+      } else if (
+        includesAny(answer, ["脑", "想不动", "卡住", "注意力", "转不动"])
+      ) {
+        fatigueType = "cognitive_overload";
+      }
+      reflection =
+        fatigueType === "unknown"
+          ? "信息仍然不够明确，先选择一个低负担、可随时停止的恢复动作。"
+          : "先选择一个低负担、可随时停止的恢复动作。";
     }
 
     return fatigueReflectionSchema.parse({
@@ -96,8 +123,10 @@ export class CannedAgentLLM implements AgentLLM {
 
   async chooseQuest(
     input: RestRecommendationRequest,
-    allowedQuests: RestQuest[]
+    allowedQuests: RestQuest[],
+    options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation> {
+    assertNotAborted(options);
     const selected =
       allowedQuests.find((quest) =>
         quest.fatigue_types.includes(input.fatigue_type)
@@ -119,8 +148,10 @@ export class CannedAgentLLM implements AgentLLM {
   }
 
   async summarizeHandoff(
-    input: HandoffAgentInput
+    input: HandoffAgentInput,
+    options?: ProviderCallOptions
   ): Promise<HandoffSummaryDraft> {
+    assertNotAborted(options);
     const classifications = input.mail.map((mail) => {
       const content = `${mail.subject}\n${mail.plainText}`.toLowerCase();
       const tonight = includesAny(content, [
@@ -177,4 +208,18 @@ export class CannedAgentLLM implements AgentLLM {
         null
     };
   }
+}
+
+function assertNotAborted(options?: ProviderCallOptions): void {
+  if (!options?.signal?.aborted) {
+    return;
+  }
+  throw new AppError({
+    code: "INTERNAL_ERROR",
+    message: "Agent operation was aborted.",
+    statusCode: 503,
+    retryable: false,
+    fallback: "LOCAL_RULES",
+    details: { reason: "aborted" }
+  });
 }

@@ -25,6 +25,13 @@ paths:
       responses:
         "200":
           description: Healthy
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
           content:
             application/json:
               schema:
@@ -70,6 +77,8 @@ paths:
                 $ref: "./schemas/rest-suggestion.schema.json"
         "400":
           $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
 
   /v1/rest/check-in:
     post:
@@ -102,6 +111,8 @@ paths:
                 $ref: "./schemas/fatigue-reflection.schema.json"
         "400":
           $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
 
   /v1/rest/recommend:
     post:
@@ -132,6 +143,8 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/rest-recommendation.schema.json#/$defs/RestQuestRecommendation"
+        "400":
+          $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
 
@@ -154,7 +167,16 @@ paths:
       responses:
         "202":
           description: Accepted
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
         "400":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
 
   /v1/handoff/start:
@@ -189,6 +211,8 @@ paths:
                 $ref: "./schemas/handoff-job.schema.json#/$defs/HandoffJob"
         "400":
           $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
 
   /v1/handoff/{jobId}:
     get:
@@ -219,6 +243,10 @@ paths:
                 $ref: "./schemas/handoff-job.schema.json#/$defs/HandoffJobState"
         "404":
           $ref: "#/components/responses/Error"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
 
   /v1/handoff/{jobId}/cancel:
     post:
@@ -236,7 +264,18 @@ paths:
       responses:
         "202":
           description: Cancellation requested
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
         "404":
+          $ref: "#/components/responses/Error"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
 
   /v1/auth/gmail/start:
@@ -359,6 +398,8 @@ components:
       schema:
         type: string
         minLength: 8
+        maxLength: 128
+        pattern: '^(?!\s)(?!.*\s$)[^\x00-\x1F\x7F-\x9F]+$'
 
   headers:
     RequestId:
@@ -376,6 +417,13 @@ components:
   responses:
     Error:
       description: Error
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        X-Contract-Version:
+          $ref: "#/components/headers/ContractVersion"
+        X-Hush-Data-Origin:
+          $ref: "#/components/headers/DataOrigin"
       content:
         application/json:
           schema:

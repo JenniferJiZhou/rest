@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@9.15.9",
   "engines": {
-    "node": ">=20 <21",
+    "node": ">=20.19 <21",
     "pnpm": ">=9 <10"
   },
   "scripts": {
@@ -17,6 +17,7 @@
     "test:contracts": "vitest run tests/contracts",
     "test:providers": "vitest run tests/provider-contracts",
     "test:integration": "vitest run tests/integration",
+    "test:vertical": "vitest run tests/vertical-slice",
     "smoke": "vitest run tests/integration/server.test.ts",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },

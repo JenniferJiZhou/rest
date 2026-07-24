@@ -1,0 +1,814 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* iOSApp/App/HushApp.swift */; };
+		A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* Shared/Core/HushProduct.swift */; };
+		A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */; };
+		A00000000000000000000004 /* Shared/Core/HushProduct.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* Shared/Core/HushProduct.swift */; };
+		A00000000000000000000005 /* DeviceActivityMonitorExt/HushDeviceActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000005 /* DeviceActivityMonitorExt/HushDeviceActivityMonitor.swift */; };
+		A00000000000000000000006 /* RestLiveActivityWidget/HushRestLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000008 /* RestLiveActivityWidget/HushRestLiveActivity.swift */; };
+		A00000000000000000000007 /* HushDeviceActivityMonitor.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = B00000000000000000000103 /* HushDeviceActivityMonitor.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A00000000000000000000008 /* HushRestLiveActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = B00000000000000000000104 /* HushRestLiveActivity.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A00000000000000000000009 /* iOSApp/Platform/FamilyControlsAuthorizationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000010 /* iOSApp/Platform/FamilyControlsAuthorizationModel.swift */; };
+		A00000000000000000000010 /* iOSApp/Platform/FamilyActivitySelectionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* iOSApp/Platform/FamilyActivitySelectionStore.swift */; };
+		A00000000000000000000011 /* iOSApp/Platform/DeviceActivityMonitoringModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* iOSApp/Platform/DeviceActivityMonitoringModel.swift */; };
+		A00000000000000000000012 /* iOSApp/Platform/NotificationAuthorizationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013 /* iOSApp/Platform/NotificationAuthorizationModel.swift */; };
+		A00000000000000000000013 /* iOSApp/Platform/HushAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000014 /* iOSApp/Platform/HushAppDelegate.swift */; };
+		A00000000000000000000014 /* Shared/Core/HushRestActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift */; };
+		A00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift */; };
+		A00000000000000000000016 /* iOSApp/Platform/RestSessionLiveActivityModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* iOSApp/Platform/RestSessionLiveActivityModel.swift */; };
+		A00000000000000000000017 /* iOSApp/Platform/InterruptionModeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000017 /* iOSApp/Platform/InterruptionModeModel.swift */; };
+		A00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift */; };
+		A00000000000000000000019 /* DeviceActivityMonitorExt/HTTPRestDecisionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000019 /* DeviceActivityMonitorExt/HTTPRestDecisionProvider.swift */; };
+		A00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift */; };
+		A00000000000000000000021 /* Shared/Core/HushLockdownState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */; };
+		A00000000000000000000022 /* Shared/Core/HushLockdownState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */; };
+		A00000000000000000000023 /* iOSApp/Platform/LockdownCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */; };
+		A00000000000000000000024 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		I00000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E00000000000000000000003;
+			remoteInfo = HushDeviceActivityMonitor;
+		};
+		I00000000000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E00000000000000000000004;
+			remoteInfo = HushRestLiveActivity;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D00000000000000000000004 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A00000000000000000000007 /* HushDeviceActivityMonitor.appex in Embed App Extensions */,
+				A00000000000000000000008 /* HushRestLiveActivity.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		B00000000000000000000001 /* iOSApp/App/HushApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/App/HushApp.swift; sourceTree = "<group>"; };
+		B00000000000000000000002 /* iOSApp/Hush.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iOSApp/Hush.entitlements; sourceTree = "<group>"; };
+		B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/App/HushMacApp.swift; sourceTree = "<group>"; };
+		B00000000000000000000004 /* Shared/Core/HushProduct.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Core/HushProduct.swift; sourceTree = "<group>"; };
+		B00000000000000000000005 /* DeviceActivityMonitorExt/HushDeviceActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceActivityMonitorExt/HushDeviceActivityMonitor.swift; sourceTree = "<group>"; };
+		B00000000000000000000006 /* DeviceActivityMonitorExt/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = DeviceActivityMonitorExt/Info.plist; sourceTree = "<group>"; };
+		B00000000000000000000007 /* DeviceActivityMonitorExt/HushDeviceActivityMonitor.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DeviceActivityMonitorExt/HushDeviceActivityMonitor.entitlements; sourceTree = "<group>"; };
+		B00000000000000000000008 /* RestLiveActivityWidget/HushRestLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestLiveActivityWidget/HushRestLiveActivity.swift; sourceTree = "<group>"; };
+		B00000000000000000000009 /* RestLiveActivityWidget/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = RestLiveActivityWidget/Info.plist; sourceTree = "<group>"; };
+		B00000000000000000000010 /* iOSApp/Platform/FamilyControlsAuthorizationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/FamilyControlsAuthorizationModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000011 /* iOSApp/Platform/FamilyActivitySelectionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/FamilyActivitySelectionStore.swift; sourceTree = "<group>"; };
+		B00000000000000000000012 /* iOSApp/Platform/DeviceActivityMonitoringModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/DeviceActivityMonitoringModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000013 /* iOSApp/Platform/NotificationAuthorizationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/NotificationAuthorizationModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000014 /* iOSApp/Platform/HushAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/HushAppDelegate.swift; sourceTree = "<group>"; };
+		B00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Core/HushRestActivityAttributes.swift; sourceTree = "<group>"; };
+		B00000000000000000000016 /* iOSApp/Platform/RestSessionLiveActivityModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/RestSessionLiveActivityModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000017 /* iOSApp/Platform/InterruptionModeModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/InterruptionModeModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/AgentConnectionSettingsModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000019 /* DeviceActivityMonitorExt/HTTPRestDecisionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceActivityMonitorExt/HTTPRestDecisionProvider.swift; sourceTree = "<group>"; };
+		B00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/Platform/MacUsageMonitoringModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Core/HushLockdownState.swift; sourceTree = "<group>"; };
+		B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/LockdownCoordinator.swift; sourceTree = "<group>"; };
+		B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/Platform/MacWebsiteMonitoringModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000101 /* Hush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hush.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000102 /* HushMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HushMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000103 /* HushDeviceActivityMonitor.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushDeviceActivityMonitor.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000104 /* HushRestLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushRestLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D00000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000102 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000202 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000302 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C00000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				C00000000000000000000003 /* Shared */,
+				C00000000000000000000004 /* iOSApp */,
+				C00000000000000000000005 /* MacMenuBar */,
+				C00000000000000000000006 /* DeviceActivityMonitorExt */,
+				C00000000000000000000007 /* RestLiveActivityWidget */,
+				C00000000000000000000002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C00000000000000000000002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000101 /* Hush.app */,
+				B00000000000000000000102 /* HushMac.app */,
+				B00000000000000000000103 /* HushDeviceActivityMonitor.appex */,
+				B00000000000000000000104 /* HushRestLiveActivity.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000003 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000004 /* Shared/Core/HushProduct.swift */,
+				B00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift */,
+				B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */,
+			);
+			name = Shared;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000004 /* iOSApp */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000001 /* iOSApp/App/HushApp.swift */,
+				B00000000000000000000010 /* iOSApp/Platform/FamilyControlsAuthorizationModel.swift */,
+				B00000000000000000000011 /* iOSApp/Platform/FamilyActivitySelectionStore.swift */,
+				B00000000000000000000012 /* iOSApp/Platform/DeviceActivityMonitoringModel.swift */,
+				B00000000000000000000013 /* iOSApp/Platform/NotificationAuthorizationModel.swift */,
+				B00000000000000000000014 /* iOSApp/Platform/HushAppDelegate.swift */,
+				B00000000000000000000016 /* iOSApp/Platform/RestSessionLiveActivityModel.swift */,
+				B00000000000000000000017 /* iOSApp/Platform/InterruptionModeModel.swift */,
+				B00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift */,
+				B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */,
+				B00000000000000000000002 /* iOSApp/Hush.entitlements */,
+			);
+			name = iOSApp;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000005 /* MacMenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */,
+				B00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift */,
+				B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */,
+			);
+			name = MacMenuBar;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000006 /* DeviceActivityMonitorExt */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000005 /* DeviceActivityMonitorExt/HushDeviceActivityMonitor.swift */,
+				B00000000000000000000019 /* DeviceActivityMonitorExt/HTTPRestDecisionProvider.swift */,
+				B00000000000000000000006 /* DeviceActivityMonitorExt/Info.plist */,
+				B00000000000000000000007 /* DeviceActivityMonitorExt/HushDeviceActivityMonitor.entitlements */,
+			);
+			name = DeviceActivityMonitorExt;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000007 /* RestLiveActivityWidget */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000008 /* RestLiveActivityWidget/HushRestLiveActivity.swift */,
+				B00000000000000000000009 /* RestLiveActivityWidget/Info.plist */,
+			);
+			name = RestLiveActivityWidget;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E00000000000000000000001 /* Hush */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = G00000000000000000000103 /* Build configuration list for PBXNativeTarget "Hush" */;
+			buildPhases = (
+				D00000000000000000000001 /* Sources */,
+				D00000000000000000000002 /* Frameworks */,
+				D00000000000000000000003 /* Resources */,
+				D00000000000000000000004 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				H00000000000000000000001 /* PBXTargetDependency */,
+				H00000000000000000000002 /* PBXTargetDependency */,
+			);
+			name = Hush;
+			productName = Hush;
+			productReference = B00000000000000000000101 /* Hush.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E00000000000000000000002 /* HushMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = G00000000000000000000203 /* Build configuration list for PBXNativeTarget "HushMac" */;
+			buildPhases = (
+				D00000000000000000000101 /* Sources */,
+				D00000000000000000000102 /* Frameworks */,
+				D00000000000000000000103 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HushMac;
+			productName = HushMac;
+			productReference = B00000000000000000000102 /* HushMac.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E00000000000000000000003 /* HushDeviceActivityMonitor */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = G00000000000000000000303 /* Build configuration list for PBXNativeTarget "HushDeviceActivityMonitor" */;
+			buildPhases = (
+				D00000000000000000000201 /* Sources */,
+				D00000000000000000000202 /* Frameworks */,
+				D00000000000000000000203 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HushDeviceActivityMonitor;
+			productName = HushDeviceActivityMonitor;
+			productReference = B00000000000000000000103 /* HushDeviceActivityMonitor.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		E00000000000000000000004 /* HushRestLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = G00000000000000000000403 /* Build configuration list for PBXNativeTarget "HushRestLiveActivity" */;
+			buildPhases = (
+				D00000000000000000000301 /* Sources */,
+				D00000000000000000000302 /* Frameworks */,
+				D00000000000000000000303 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HushRestLiveActivity;
+			productName = HushRestLiveActivity;
+			productReference = B00000000000000000000104 /* HushRestLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F00000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					E00000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+							com.apple.FamilyControls = {
+								enabled = 1;
+							};
+						};
+					};
+					E00000000000000000000002 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					E00000000000000000000003 = {
+						CreatedOnToolsVersion = 16.0;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+							com.apple.FamilyControls = {
+								enabled = 1;
+							};
+						};
+					};
+					E00000000000000000000004 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = G00000000000000000000003 /* Build configuration list for PBXProject "Hush" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = C00000000000000000000001;
+			productRefGroup = C00000000000000000000002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E00000000000000000000001 /* Hush */,
+				E00000000000000000000002 /* HushMac */,
+				E00000000000000000000003 /* HushDeviceActivityMonitor */,
+				E00000000000000000000004 /* HushRestLiveActivity */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D00000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000103 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000203 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000303 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D00000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */,
+				A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */,
+				A00000000000000000000009 /* iOSApp/Platform/FamilyControlsAuthorizationModel.swift in Sources */,
+				A00000000000000000000010 /* iOSApp/Platform/FamilyActivitySelectionStore.swift in Sources */,
+				A00000000000000000000011 /* iOSApp/Platform/DeviceActivityMonitoringModel.swift in Sources */,
+				A00000000000000000000012 /* iOSApp/Platform/NotificationAuthorizationModel.swift in Sources */,
+				A00000000000000000000013 /* iOSApp/Platform/HushAppDelegate.swift in Sources */,
+				A00000000000000000000014 /* Shared/Core/HushRestActivityAttributes.swift in Sources */,
+				A00000000000000000000016 /* iOSApp/Platform/RestSessionLiveActivityModel.swift in Sources */,
+				A00000000000000000000017 /* iOSApp/Platform/InterruptionModeModel.swift in Sources */,
+				A00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift in Sources */,
+				A00000000000000000000021 /* Shared/Core/HushLockdownState.swift in Sources */,
+				A00000000000000000000023 /* iOSApp/Platform/LockdownCoordinator.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000101 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */,
+				A00000000000000000000004 /* Shared/Core/HushProduct.swift in Sources */,
+				A00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift in Sources */,
+				A00000000000000000000024 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000201 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000005 /* DeviceActivityMonitorExt/HushDeviceActivityMonitor.swift in Sources */,
+				A00000000000000000000019 /* DeviceActivityMonitorExt/HTTPRestDecisionProvider.swift in Sources */,
+				A00000000000000000000022 /* Shared/Core/HushLockdownState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000301 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000006 /* RestLiveActivityWidget/HushRestLiveActivity.swift in Sources */,
+				A00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		H00000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E00000000000000000000003 /* HushDeviceActivityMonitor */;
+			targetProxy = I00000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		H00000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E00000000000000000000004 /* HushRestLiveActivity */;
+			targetProxy = I00000000000000000000002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		G00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		G00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		G00000000000000000000101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = iOSApp/Hush.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K85XR4H88D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Hush;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JenniferJi.Hush;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		G00000000000000000000102 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = iOSApp/Hush.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K85XR4H88D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Hush;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JenniferJi.Hush;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		G00000000000000000000201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K85XR4H88D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Hush;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Hush 只读取 Safari 和 Chrome 当前标签页的域名，用于统计网站使用时间；不会读取完整网址、搜索词或页面标题。";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JenniferJi.Hush.mac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		G00000000000000000000202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K85XR4H88D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Hush;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Hush 只读取 Safari 和 Chrome 当前标签页的域名，用于统计网站使用时间；不会读取完整网址、搜索词或页面标题。";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JenniferJi.Hush.mac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		G00000000000000000000301 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = DeviceActivityMonitorExt/HushDeviceActivityMonitor.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K85XR4H88D;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DeviceActivityMonitorExt/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JenniferJi.Hush.DeviceActivityMonitor;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		G00000000000000000000302 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = DeviceActivityMonitorExt/HushDeviceActivityMonitor.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K85XR4H88D;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = DeviceActivityMonitorExt/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JenniferJi.Hush.DeviceActivityMonitor;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		G00000000000000000000401 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K85XR4H88D;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RestLiveActivityWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JenniferJi.Hush.RestLiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		G00000000000000000000402 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K85XR4H88D;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RestLiveActivityWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.JenniferJi.Hush.RestLiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		G00000000000000000000003 /* Build configuration list for PBXProject "Hush" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G00000000000000000000001 /* Debug */,
+				G00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		G00000000000000000000103 /* Build configuration list for PBXNativeTarget "Hush" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G00000000000000000000101 /* Debug */,
+				G00000000000000000000102 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		G00000000000000000000203 /* Build configuration list for PBXNativeTarget "HushMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G00000000000000000000201 /* Debug */,
+				G00000000000000000000202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		G00000000000000000000303 /* Build configuration list for PBXNativeTarget "HushDeviceActivityMonitor" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G00000000000000000000301 /* Debug */,
+				G00000000000000000000302 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		G00000000000000000000403 /* Build configuration list for PBXNativeTarget "HushRestLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G00000000000000000000401 /* Debug */,
+				G00000000000000000000402 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = F00000000000000000000001 /* Project object */;
+}

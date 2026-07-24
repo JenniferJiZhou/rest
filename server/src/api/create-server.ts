@@ -1,4 +1,8 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  randomUUID,
+  timingSafeEqual
+} from "node:crypto";
 import Fastify, {
   LogController,
   type FastifyInstance,
@@ -20,14 +24,19 @@ import {
   toErrorResponse,
   unknownToAppError
 } from "../domain/errors.js";
-import type { ProviderHealth } from "../domain/ports.js";
+import type {
+  DataOrigin,
+  ProviderHealth
+} from "../domain/ports.js";
 import type { HandoffService } from "../application/handoff/handoff-service.js";
 import type { RestService } from "../application/rest/rest-service.js";
 
-type DataOrigin = "real" | "mock" | "cached";
-
 export interface ServerDependencies {
   config: AppConfig;
+  restOrigin: DataOrigin;
+  handoffOrigin: DataOrigin;
+  demoRestOrigin: DataOrigin;
+  demoHandoffOrigin: DataOrigin;
   rest: RestService;
   handoff: HandoffService;
   demoRest: RestService;
@@ -41,6 +50,8 @@ interface RequestContext {
   rest: RestService;
   handoff: HandoffService;
 }
+
+type GraphKind = "rest" | "handoff";
 
 export function createServer(
   dependencies: ServerDependencies
@@ -81,6 +92,14 @@ export function createServer(
               }))
             }
           })
+        : isMalformedJsonError(error)
+          ? new AppError({
+              code: "INVALID_REQUEST",
+              message: "请求正文不是有效 JSON。",
+              statusCode: 400,
+              retryable: false,
+              details: { reason: "MALFORMED_JSON" }
+            })
         : unknownToAppError(error);
     request.log.error(
       {
@@ -91,24 +110,33 @@ export function createServer(
       "request failed"
     );
     const suppliedDemoToken = header(request, "x-hush-demo-token");
-    const origin: DataOrigin =
+    const demo =
       dependencies.config.HUSH_DEMO_MODE &&
       suppliedDemoToken !== null &&
       dependencies.config.HUSH_DEMO_TOKEN !== undefined &&
       safeTokenEqual(
         suppliedDemoToken,
         dependencies.config.HUSH_DEMO_TOKEN
-      )
-        ? "mock"
-        : "real";
+      );
+    const origin = graphOrigin(
+      dependencies,
+      demo,
+      request.url.startsWith("/v1/handoff") ? "handoff" : "rest"
+    );
     setResponseHeaders(reply, requestId, origin);
     void reply
       .status(appError.statusCode)
       .send(toErrorResponse(appError, requestId));
   });
 
-  server.get("/v1/health", async (_request, reply) => {
-    reply.header("X-Contract-Version", CONTRACT_VERSION);
+  server.get("/v1/health", async (request, reply) => {
+    const requestId = header(request, "x-request-id") ?? request.id;
+    const origin =
+      dependencies.restOrigin === "real" &&
+      dependencies.handoffOrigin === "real"
+        ? "real"
+        : "mock";
+    setResponseHeaders(reply, requestId, origin);
     return {
       status: "ok",
       contract_version: CONTRACT_VERSION,
@@ -117,29 +145,53 @@ export function createServer(
   });
 
   server.post("/v1/rest/evaluate", async (request, reply) => {
-    const context = requestContext(request, reply, dependencies, true);
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "rest"
+    );
     const input = usageSummarySchema.parse(request.body);
     assertBodyRequestId(input.request_id, context.requestId);
     return context.rest.evaluate(input);
   });
 
   server.post("/v1/rest/check-in", async (request, reply) => {
-    const context = requestContext(request, reply, dependencies, true);
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "rest"
+    );
     const input = fatigueCheckInSchema.parse(request.body);
     assertBodyRequestId(input.request_id, context.requestId);
     return context.rest.checkIn(input);
   });
 
   server.post("/v1/rest/recommend", async (request, reply) => {
-    const context = requestContext(request, reply, dependencies, true);
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "rest"
+    );
     const input = restRecommendationRequestSchema.parse(request.body);
     assertBodyRequestId(input.request_id, context.requestId);
     return context.rest.recommend(input);
   });
 
   server.post("/v1/rest/feedback", async (request, reply) => {
-    const context = requestContext(request, reply, dependencies, true);
-    const idempotencyKey = requiredHeader(request, "idempotency-key");
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "rest"
+    );
+    const idempotencyKey = requiredIdempotencyKey(request);
     const input = restFeedbackSchema.parse(request.body);
     assertBodyRequestId(input.request_id, context.requestId);
     await context.rest.recordFeedback(input, idempotencyKey);
@@ -147,8 +199,14 @@ export function createServer(
   });
 
   server.post("/v1/handoff/start", async (request, reply) => {
-    const context = requestContext(request, reply, dependencies, true);
-    const idempotencyKey = requiredHeader(request, "idempotency-key");
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      true,
+      "handoff"
+    );
+    const idempotencyKey = requiredIdempotencyKey(request);
     const input = handoffStartRequestSchema.parse(request.body);
     assertBodyRequestId(input.request_id, context.requestId);
     const job = await context.handoff.start(input, idempotencyKey);
@@ -158,14 +216,26 @@ export function createServer(
   server.get<{
     Params: { jobId: string };
   }>("/v1/handoff/:jobId", async (request, reply) => {
-    const context = requestContext(request, reply, dependencies, false);
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      false,
+      "handoff"
+    );
     return context.handoff.get(request.params.jobId, context.requestId);
   });
 
   server.post<{
     Params: { jobId: string };
   }>("/v1/handoff/:jobId/cancel", async (request, reply) => {
-    const context = requestContext(request, reply, dependencies, false);
+    const context = requestContext(
+      request,
+      reply,
+      dependencies,
+      false,
+      "handoff"
+    );
     await context.handoff.cancel(request.params.jobId);
     return reply.status(202).send();
   });
@@ -177,7 +247,8 @@ function requestContext(
   request: FastifyRequest,
   reply: FastifyReply,
   dependencies: ServerDependencies,
-  hasBody: boolean
+  hasBody: boolean,
+  graph: GraphKind
 ): RequestContext {
   const requestId = requiredHeader(request, "x-request-id");
   requiredHeader(request, "x-client-version");
@@ -195,9 +266,11 @@ function requestContext(
     });
   }
 
+  const demoHeaderValue = request.headers["x-hush-demo-token"];
   const demoToken = header(request, "x-hush-demo-token");
+  const demoTokenSupplied = demoHeaderValue !== undefined;
   let demo = false;
-  if (demoToken) {
+  if (demoTokenSupplied) {
     if (
       !dependencies.config.HUSH_DEMO_MODE ||
       dependencies.config.HUSH_DEMO_TOKEN === undefined ||
@@ -224,7 +297,7 @@ function requestContext(
     });
   }
 
-  const origin: DataOrigin = demo ? "mock" : "real";
+  const origin = graphOrigin(dependencies, demo, graph);
   setResponseHeaders(reply, requestId, origin);
   return {
     requestId,
@@ -232,6 +305,21 @@ function requestContext(
     rest: demo ? dependencies.demoRest : dependencies.rest,
     handoff: demo ? dependencies.demoHandoff : dependencies.handoff
   };
+}
+
+function graphOrigin(
+  dependencies: ServerDependencies,
+  demo: boolean,
+  graph: GraphKind
+): DataOrigin {
+  if (demo) {
+    return graph === "rest"
+      ? dependencies.demoRestOrigin
+      : dependencies.demoHandoffOrigin;
+  }
+  return graph === "rest"
+    ? dependencies.restOrigin
+    : dependencies.handoffOrigin;
 }
 
 function assertBodyRequestId(
@@ -264,6 +352,26 @@ function requiredHeader(
   return value;
 }
 
+function requiredIdempotencyKey(request: FastifyRequest): string {
+  const value = requiredHeader(request, "idempotency-key");
+  const normalized = value.trim();
+  const length = Array.from(normalized).length;
+  if (
+    length < 8 ||
+    length > 128 ||
+    /[\u0000-\u001F\u007F-\u009F]/u.test(value)
+  ) {
+    throw new AppError({
+      code: "INVALID_REQUEST",
+      message: "Idempotency-Key 必须为 8 到 128 个字符且不得包含控制字符。",
+      statusCode: 400,
+      retryable: false,
+      details: { reason: "INVALID_IDEMPOTENCY_KEY" }
+    });
+  }
+  return normalized;
+}
+
 function header(request: FastifyRequest, name: string): string | null {
   const value = request.headers[name];
   if (Array.isArray(value)) {
@@ -282,11 +390,26 @@ function setResponseHeaders(
   reply.header("X-Hush-Data-Origin", origin);
 }
 
-function safeTokenEqual(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
+function isMalformedJsonError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
   return (
-    leftBuffer.length === rightBuffer.length &&
-    timingSafeEqual(leftBuffer, rightBuffer)
+    ("code" in error &&
+      error.code === "FST_ERR_CTP_INVALID_JSON_BODY") ||
+    (error instanceof SyntaxError &&
+      "statusCode" in error &&
+      error.statusCode === 400)
   );
+}
+
+export function safeTokenEqual(
+  left: string | null | undefined,
+  right: string
+): boolean {
+  const leftDigest = createHash("sha256")
+    .update(left ?? "")
+    .digest();
+  const rightDigest = createHash("sha256").update(right).digest();
+  return timingSafeEqual(leftDigest, rightDigest);
 }

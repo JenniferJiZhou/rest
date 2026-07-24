@@ -3,7 +3,8 @@ import { AppError } from "../../src/domain/errors.js";
 import type {
   DraftRequest,
   MailItem,
-  MailProvider
+  MailProvider,
+  ProviderCallOptions
 } from "../../src/domain/ports.js";
 
 export type MailProviderScenario =
@@ -136,7 +137,37 @@ export function defineMailProviderContractTests(
         )
       ).resolves.toBe(1);
     });
+
+    it("honors an already-aborted fetch signal", async () => {
+      const options = abortedOptions();
+      await expect(
+        harness.provider.fetchUnread(
+          {
+            accountId: "contract-account",
+            since: "2026-07-24T20:00:00+08:00",
+            maxItems: 10
+          },
+          options
+        )
+      ).rejects.toMatchObject({
+        details: { reason: "aborted" }
+      });
+    });
+
+    it("honors an already-aborted draft signal", async () => {
+      await expect(
+        harness.provider.createDraft(sampleDraft, abortedOptions())
+      ).rejects.toMatchObject({
+        details: { reason: "aborted" }
+      });
+    });
   });
+}
+
+function abortedOptions(): ProviderCallOptions {
+  const controller = new AbortController();
+  controller.abort();
+  return { signal: controller.signal };
 }
 
 function assertMailItem(item: MailItem): void {

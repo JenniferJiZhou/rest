@@ -25,6 +25,10 @@
 | `09_AGENT_TASK_PROTOCOL.md` | 如何给 Coding Agent 派活 | 各 Owner |
 | `10_DECISION_LOG_TEMPLATE.md` | 重大改变如何记录 | P4 |
 | `11_FIRST_3_HOURS_CHECKLIST.md` | 开工前 3 小时具体行动 | 全员 |
+| `12_W1_BACKEND_FOUNDATION.md` | W1 后端基础设施、边界与运行方式 | P2 |
+| `13_PROVIDER_INTEGRATION_KIT.md` | Gmail/Photon Provider 接入边界 | P2 |
+| `14_APPLE_CLIENT_INTEGRATION_KIT.md` | Contract v1 的 Apple HTTP 联调 | P1+P2 |
+| `15_APPLE_MOCK_INTEGRATION_RELEASE.md` | Windows Mock Server 的可信 LAN 发布与撤销 | P1+P2 |
 | `contracts/openapi.yaml` | HTTP 接口唯一事实源 | P2，P1审 |
 | `contracts/schemas/` | 双端共享数据结构 | P2，P1审 |
 | `contracts/fixtures/` | Mock 与契约测试唯一样例 | P2，P1/P4审 |

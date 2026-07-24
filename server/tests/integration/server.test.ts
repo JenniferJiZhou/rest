@@ -105,6 +105,43 @@ describe("Hush API", () => {
     expect(response.headers["x-hush-data-origin"]).toBe("mock");
   });
 
+  it("returns HTTP 409 for a feedback key reused with different content", async () => {
+    const firstRequestId = "req_feedback_http_a";
+    const secondRequestId = "req_feedback_http_b";
+    const payload = (requestId: string, helpfulness: string) => ({
+      schema_version: "1.0",
+      request_id: requestId,
+      session_id: "session_feedback_http",
+      quest_id: "look_far_01",
+      helpfulness,
+      timing: "right",
+      recorded_at: "2026-07-24T15:24:00+08:00",
+      notes: null
+    });
+    const first = await server.inject({
+      method: "POST",
+      url: "/v1/rest/feedback",
+      headers: {
+        ...baseHeaders(firstRequestId),
+        "idempotency-key": "idem-feedback-http-conflict"
+      },
+      payload: payload(firstRequestId, "helped")
+    });
+    const conflict = await server.inject({
+      method: "POST",
+      url: "/v1/rest/feedback",
+      headers: {
+        ...baseHeaders(secondRequestId),
+        "idempotency-key": "idem-feedback-http-conflict"
+      },
+      payload: payload(secondRequestId, "no_change")
+    });
+
+    expect(first.statusCode).toBe(202);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error.code).toBe("INVALID_REQUEST");
+  });
+
   it("completes open-loop handoff when Gmail is unavailable", async () => {
     const requestId = "req_handoff_real";
     const startResponse = await server.inject({
@@ -199,6 +236,51 @@ describe("Hush API", () => {
       ])
     );
     expect(state.summary?.uncertain).toHaveLength(1);
+  });
+
+  it("returns HTTP 409 for an idempotency key reused by another Handoff request", async () => {
+    const firstRequestId = "req_handoff_conflict_a";
+    const secondRequestId = "req_handoff_conflict_b";
+    const idempotencyKey = "idem-handoff-http-conflict";
+    const payload = (requestId: string, text: string) => ({
+      schema_version: "1.0",
+      request_id: requestId,
+      source: "ios_app",
+      include_gmail: false,
+      gmail_account_id: null,
+      open_loops: [
+        {
+          id: "ol_http_conflict",
+          text,
+          desired_time: "tomorrow"
+        }
+      ],
+      response_channel: "app",
+      timezone: "Asia/Shanghai",
+      locale: "zh-CN"
+    });
+    const first = await server.inject({
+      method: "POST",
+      url: "/v1/handoff/start",
+      headers: {
+        ...baseHeaders(firstRequestId),
+        "idempotency-key": idempotencyKey
+      },
+      payload: payload(firstRequestId, "回复李老师")
+    });
+    const conflict = await server.inject({
+      method: "POST",
+      url: "/v1/handoff/start",
+      headers: {
+        ...baseHeaders(secondRequestId),
+        "idempotency-key": idempotencyKey
+      },
+      payload: payload(secondRequestId, "准备演示材料")
+    });
+
+    expect(first.statusCode).toBe(202);
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error.code).toBe("INVALID_REQUEST");
   });
 
   it("completes a handoff without invoking Gmail when include_gmail is false", async () => {

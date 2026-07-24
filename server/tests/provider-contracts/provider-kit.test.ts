@@ -39,8 +39,9 @@ class ContractMailProvider implements MailProvider {
 
   async fetchUnread(
     _context: MailFetchContext,
-    _options?: ProviderCallOptions
+    options?: ProviderCallOptions
   ): Promise<MailItem[]> {
+    assertMailNotAborted(options, "OPEN_LOOPS_ONLY");
     if (this.scenario === "empty") {
       return [];
     }
@@ -75,8 +76,9 @@ class ContractMailProvider implements MailProvider {
 
   async createDraft(
     request: DraftRequest,
-    _options?: ProviderCallOptions
+    options?: ProviderCallOptions
   ): Promise<DraftResult> {
+    assertMailNotAborted(options, "SUMMARY_ONLY");
     if (this.scenario === "draft_failure") {
       throw new AppError({
         code: "GMAIL_DRAFT_FAILED",
@@ -98,6 +100,26 @@ class ContractMailProvider implements MailProvider {
     );
     return result;
   }
+}
+
+function assertMailNotAborted(
+  options: ProviderCallOptions | undefined,
+  fallback: "OPEN_LOOPS_ONLY" | "SUMMARY_ONLY"
+): void {
+  if (!options?.signal?.aborted) {
+    return;
+  }
+  throw new AppError({
+    code:
+      fallback === "OPEN_LOOPS_ONLY"
+        ? "GMAIL_UNAVAILABLE"
+        : "GMAIL_DRAFT_FAILED",
+    message: "Mail provider operation was aborted.",
+    statusCode: 503,
+    retryable: true,
+    fallback,
+    details: { reason: "aborted" }
+  });
 }
 
 class ContractMailHarness implements MailProviderContractHarness {

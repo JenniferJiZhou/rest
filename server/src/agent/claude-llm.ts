@@ -13,8 +13,10 @@ import {
 import { AppError } from "../domain/errors.js";
 import type {
   AgentLLM,
+  DataOrigin,
   HandoffAgentInput,
   HandoffSummaryDraft,
+  ProviderCallOptions,
   ProviderHealth
 } from "../domain/ports.js";
 import { z } from "zod";
@@ -42,6 +44,7 @@ const handoffDraftSchema = z
   .strict();
 
 export class ClaudeAgentLLM implements AgentLLM {
+  readonly dataOrigin: DataOrigin = "real";
   private readonly client: Anthropic;
 
   constructor(
@@ -55,7 +58,10 @@ export class ClaudeAgentLLM implements AgentLLM {
     return "ready";
   }
 
-  async reflectFatigue(input: FatigueCheckIn): Promise<FatigueReflection> {
+  async reflectFatigue(
+    input: FatigueCheckIn,
+    options?: ProviderCallOptions
+  ): Promise<FatigueReflection> {
     return this.completeJson(
       [
         "You classify a user's self-described tiredness for a rest product.",
@@ -65,13 +71,15 @@ export class ClaudeAgentLLM implements AgentLLM {
         `schema_version must be "${CONTRACT_VERSION}" and request_id must be "${input.request_id}".`,
         `Input: ${JSON.stringify(input)}`
       ].join("\n"),
-      fatigueReflectionSchema
+      fatigueReflectionSchema,
+      options
     );
   }
 
   async chooseQuest(
     input: RestRecommendationRequest,
-    allowedQuests: RestQuest[]
+    allowedQuests: RestQuest[],
+    options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation> {
     return this.completeJson(
       [
@@ -89,12 +97,14 @@ export class ClaudeAgentLLM implements AgentLLM {
           }))
         )}`
       ].join("\n"),
-      restQuestRecommendationSchema
+      restQuestRecommendationSchema,
+      options
     );
   }
 
   async summarizeHandoff(
-    input: HandoffAgentInput
+    input: HandoffAgentInput,
+    options?: ProviderCallOptions
   ): Promise<HandoffSummaryDraft> {
     return this.completeJson(
       [
@@ -106,21 +116,26 @@ export class ClaudeAgentLLM implements AgentLLM {
         "A suggestedDraft is only proposed text; the application decides whether it is written.",
         `Input: ${JSON.stringify(input)}`
       ].join("\n"),
-      handoffDraftSchema
+      handoffDraftSchema,
+      options
     );
   }
 
   private async completeJson<T>(
     prompt: string,
-    schema: ZodType<T>
+    schema: ZodType<T>,
+    options?: ProviderCallOptions
   ): Promise<T> {
     try {
-      const response = await this.client.messages.create({
-        model: this.model,
-        max_tokens: 1800,
-        temperature: 0,
-        messages: [{ role: "user", content: prompt }]
-      });
+      const response = await this.client.messages.create(
+        {
+          model: this.model,
+          max_tokens: 1800,
+          temperature: 0,
+          messages: [{ role: "user", content: prompt }]
+        },
+        { signal: options?.signal }
+      );
       const text = response.content
         .filter((block) => block.type === "text")
         .map((block) => block.text)
@@ -131,21 +146,130 @@ export class ClaudeAgentLLM implements AgentLLM {
         .replace(/\s*```$/i, "");
       return schema.parse(JSON.parse(candidate));
     } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
-      const invalidOutput =
-        error instanceof SyntaxError || error instanceof ZodError;
-      throw new AppError({
-        code: invalidOutput ? "LLM_INVALID_OUTPUT" : "LLM_TIMEOUT",
-        message:
-          invalidOutput
-            ? "模型返回了无法验证的结构。"
-            : "模型服务暂时不可用。",
-        statusCode: 503,
-        retryable: true,
-        fallback: "LOCAL_RULES"
-      });
+      throw classifyAgentFailure(error);
     }
   }
+}
+
+export function classifyAgentFailure(error: unknown): AppError {
+  if (error instanceof AppError) {
+    return error;
+  }
+  if (error instanceof SyntaxError) {
+    return agentError(
+      "LLM_INVALID_OUTPUT",
+      "Model output was not valid JSON.",
+      "invalid_json",
+      true,
+      error
+    );
+  }
+  if (error instanceof ZodError) {
+    return agentError(
+      "LLM_INVALID_OUTPUT",
+      "Model output did not match the required schema.",
+      "invalid_schema",
+      true,
+      error
+    );
+  }
+
+  const status = errorStatus(error);
+  const name = errorStringProperty(error, "name");
+  const code = errorStringProperty(error, "code");
+  if (
+    name.includes("timeout") ||
+    code.includes("timeout") ||
+    code === "etimedout"
+  ) {
+    return agentError(
+      "LLM_TIMEOUT",
+      "Model provider timed out.",
+      "timeout",
+      true,
+      error
+    );
+  }
+  if (status === 401 || status === 403) {
+    return agentError(
+      "INTERNAL_ERROR",
+      "Model provider authentication failed.",
+      "authentication",
+      false,
+      error
+    );
+  }
+  if (status === 400 || status === 404) {
+    return agentError(
+      "INTERNAL_ERROR",
+      "Model provider configuration is invalid.",
+      "configuration",
+      false,
+      error
+    );
+  }
+  if (
+    status === 429 ||
+    (status !== undefined && status >= 500) ||
+    ["econnreset", "econnrefused", "enotfound"].includes(code)
+  ) {
+    return agentError(
+      "INTERNAL_ERROR",
+      "Model provider is unavailable.",
+      "unavailable",
+      true,
+      error
+    );
+  }
+  return agentError(
+    "INTERNAL_ERROR",
+    "Model provider failed unexpectedly.",
+    "generic",
+    true,
+    error
+  );
+}
+
+function agentError(
+  code: "LLM_INVALID_OUTPUT" | "LLM_TIMEOUT" | "INTERNAL_ERROR",
+  message: string,
+  reason: string,
+  retryable: boolean,
+  cause: unknown
+): AppError {
+  return new AppError({
+    code,
+    message,
+    statusCode: 503,
+    retryable,
+    fallback: "LOCAL_RULES",
+    details: { reason },
+    cause
+  });
+}
+
+function errorStringProperty(
+  error: unknown,
+  property: "name" | "code"
+): string {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !(property in error)
+  ) {
+    return "";
+  }
+  const value = (error as Record<string, unknown>)[property];
+  return typeof value === "string" ? value.toLowerCase() : "";
+}
+
+function errorStatus(error: unknown): number | undefined {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("status" in error)
+  ) {
+    return undefined;
+  }
+  return typeof error.status === "number" ? error.status : undefined;
 }

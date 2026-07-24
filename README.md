@@ -1,6 +1,6 @@
 # Hush Development Protocol Pack v1
 
-本仓库骨架依据《Hush — An Ambient Rest Agent（最终整合版 v3.0）》拆解，服务于 **4 人 + Coding Agent、2.5 天黑客松并行开发**。
+本仓库依据《Hush — An Ambient Rest Agent（最终整合版 v3.0）》拆解，服务于 **4 人 + Coding Agent、2.5 天黑客松并行开发**。当前已包含可执行的 W1 Fastify 后端、Contract v1、Provider Integration Kit、Mock Vertical Slice 与 Apple Mock Integration Release；其余平台模块仍按 Owner 任务卡推进。
 
 ## 先读顺序
 
@@ -30,4 +30,4 @@
 
 ## 当前包的性质
 
-这是**协议与目录骨架**，不是完整实现。空目录使用 `.gitkeep` 保留，后续由负责人或 Coding Agent 按任务卡填充。
+这是**协议、可执行后端和分阶段客户端工程并存的开发仓库**，不是已完成的生产系统。真实 Gmail/Photon Adapter、Apple 真机最后一跳和 HTTPS staging 仍需各 Owner 完成；空目录继续使用 `.gitkeep` 保留。

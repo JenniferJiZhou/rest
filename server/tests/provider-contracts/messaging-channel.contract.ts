@@ -80,6 +80,19 @@ export function defineMessagingProviderContractTests<Payload>(
       await harness.setScenario("ready");
       await expect(harness.channel.health()).resolves.toBe("ready");
     });
+
+    it("honors an already-aborted send signal", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        harness.channel.send(sampleOutbound, {
+          signal: controller.signal
+        })
+      ).rejects.toMatchObject({
+        details: { reason: "aborted" }
+      });
+    });
   });
 }
 

@@ -20,9 +20,13 @@ process.on("SIGTERM", () => {
 
 try {
   await server.listen({
-    host: "0.0.0.0",
+    host: config.HOST,
     port: config.PORT
   });
+  server.log.info(
+    { host: config.HOST, port: config.PORT },
+    "server listening"
+  );
 } catch (error) {
   server.log.error(error);
   process.exit(1);

@@ -8,6 +8,7 @@ loadDotEnv({ path: resolve(sourceDirectory, "../../.env"), quiet: true });
 
 const environmentSchema = z
   .object({
+    HOST: z.string().trim().min(1).default("127.0.0.1"),
     PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
     NODE_ENV: z
       .enum(["development", "test", "demo", "production"])
@@ -15,6 +16,30 @@ const environmentSchema = z
     PUBLIC_BASE_URL: z.url().default("http://localhost:3000"),
     CLAUDE_API_KEY: z.string().min(1).optional(),
     CLAUDE_MODEL: z.string().min(1).optional(),
+    LLM_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(120_000)
+      .default(15_000),
+    MAIL_FETCH_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(120_000)
+      .default(10_000),
+    DRAFT_CREATE_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(120_000)
+      .default(10_000),
+    COMPLETION_SEND_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(120_000)
+      .default(5_000),
     HUSH_DEMO_MODE: z
       .enum(["true", "false"])
       .default("false")

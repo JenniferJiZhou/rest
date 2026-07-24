@@ -15,6 +15,21 @@ const createService = (): RestService =>
     new InMemoryIdempotencyStore<boolean>()
   );
 
+const feedbackInput = (
+  requestId: string,
+  overrides: Partial<Parameters<RestService["recordFeedback"]>[0]> = {}
+): Parameters<RestService["recordFeedback"]>[0] => ({
+  schema_version: "1.0",
+  request_id: requestId,
+  session_id: "session_feedback",
+  quest_id: "look_far_01",
+  helpfulness: "helped",
+  timing: "right",
+  recorded_at: "2026-07-24T15:24:00+08:00",
+  notes: null,
+  ...overrides
+});
+
 describe("RestService", () => {
   it("offers a rest immediately for a manual trigger", () => {
     const result = createService().evaluate({
@@ -91,5 +106,73 @@ describe("RestService", () => {
 
     expect(result.needs_follow_up).toBe(false);
     expect(result.follow_up).toBeNull();
+  });
+
+  it("records concurrent identical feedback only once", async () => {
+    const repository = new InMemoryFeedbackRepository();
+    const service = new RestService(
+      new CannedAgentLLM(),
+      new FileRestContentRepository(),
+      repository,
+      new InMemoryIdempotencyStore<boolean>()
+    );
+    const feedback = feedbackInput("req_feedback_concurrent");
+
+    await Promise.all(
+      Array.from({ length: 20 }, () =>
+        service.recordFeedback(feedback, "idem-feedback-concurrent")
+      )
+    );
+
+    expect(repository.all()).toEqual([feedback]);
+  });
+
+  it("rejects the same feedback key with different content", async () => {
+    const repository = new InMemoryFeedbackRepository();
+    const service = new RestService(
+      new CannedAgentLLM(),
+      new FileRestContentRepository(),
+      repository,
+      new InMemoryIdempotencyStore<boolean>()
+    );
+    await service.recordFeedback(
+      feedbackInput("req_feedback_a"),
+      "idem-feedback-conflict"
+    );
+
+    await expect(
+      service.recordFeedback(
+        feedbackInput("req_feedback_b", {
+          helpfulness: "no_change"
+        }),
+        "idem-feedback-conflict"
+      )
+    ).rejects.toMatchObject({
+      statusCode: 409
+    });
+    expect(repository.all()).toHaveLength(1);
+  });
+
+  it("treats request metadata as non-business feedback identity", async () => {
+    const repository = new InMemoryFeedbackRepository();
+    const service = new RestService(
+      new CannedAgentLLM(),
+      new FileRestContentRepository(),
+      repository,
+      new InMemoryIdempotencyStore<boolean>()
+    );
+
+    await service.recordFeedback(
+      feedbackInput("req_feedback_metadata_a"),
+      "idem-feedback-metadata"
+    );
+    await service.recordFeedback(
+      feedbackInput("req_feedback_metadata_b", {
+        recorded_at: "2026-07-24T15:25:00+08:00"
+      }),
+      "idem-feedback-metadata"
+    );
+
+    expect(repository.all()).toHaveLength(1);
   });
 });

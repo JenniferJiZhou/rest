@@ -44,6 +44,7 @@ export interface ProviderCallOptions {
 }
 
 export interface MailProvider {
+  readonly dataOrigin?: DataOrigin;
   health(): Promise<ProviderHealth>;
   fetchUnread(
     context: MailFetchContext,
@@ -56,6 +57,7 @@ export interface MailProvider {
 }
 
 export interface MessagingChannel {
+  readonly dataOrigin?: DataOrigin;
   health(): Promise<ProviderHealth>;
   send(
     message: OutboundMessage,
@@ -92,14 +94,24 @@ export type ProviderHealth =
   | "unavailable"
   | "unknown";
 
+export type DataOrigin = "real" | "mock" | "cached";
+
 export interface AgentLLM {
+  readonly dataOrigin?: DataOrigin;
   health(): Promise<ProviderHealth>;
-  reflectFatigue(input: FatigueCheckIn): Promise<FatigueReflection>;
+  reflectFatigue(
+    input: FatigueCheckIn,
+    options?: ProviderCallOptions
+  ): Promise<FatigueReflection>;
   chooseQuest(
     input: RestRecommendationRequest,
-    allowedQuests: RestQuest[]
+    allowedQuests: RestQuest[],
+    options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation>;
-  summarizeHandoff(input: HandoffAgentInput): Promise<HandoffSummaryDraft>;
+  summarizeHandoff(
+    input: HandoffAgentInput,
+    options?: ProviderCallOptions
+  ): Promise<HandoffSummaryDraft>;
 }
 
 export interface HandoffAgentInput {
@@ -146,21 +158,51 @@ export interface HandoffJobRecord {
 export interface HandoffJobRepository {
   create(record: HandoffJobRecord): Promise<void>;
   get(id: string): Promise<HandoffJobRecord | null>;
-  update(id: string, patch: Partial<HandoffJobRecord>): Promise<void>;
+  transition(
+    id: string,
+    input: HandoffJobTransition
+  ): Promise<HandoffJobTransitionResult>;
   deleteExpired(before: string): Promise<number>;
 }
 
-export interface IdempotencyStore<T = unknown> {
-  get(key: string): Promise<T | null>;
-  put(key: string, value: T, ttlSeconds: number): Promise<void>;
+export interface HandoffJobTransition {
+  expectedStatuses: HandoffJobState["status"][];
+  nextState: HandoffJobState;
+  updatedAt: string;
 }
+
+export type HandoffJobTransitionResult =
+  | { kind: "updated"; record: HandoffJobRecord }
+  | { kind: "status_mismatch"; record: HandoffJobRecord }
+  | { kind: "not_found" };
+
+export interface IdempotencyStore<T = unknown> {
+  claimOrGet(input: IdempotencyClaimInput<T>): Promise<IdempotencyClaimResult<T>>;
+  deleteExpired(before: string): Promise<number>;
+}
+
+export interface IdempotencyClaimInput<T> {
+  key: string;
+  requestHash: string;
+  ttlSeconds: number;
+  create(): Promise<T>;
+}
+
+export type IdempotencyClaimResult<T> =
+  | { kind: "created"; value: T }
+  | { kind: "existing_same_request"; value: T }
+  | { kind: "conflict_different_request" };
 
 export interface FeedbackRepository {
   record(feedback: RestFeedback): Promise<void>;
 }
 
 export interface HandoffCompletionSink {
-  notify(record: HandoffJobRecord): Promise<void>;
+  readonly dataOrigin?: DataOrigin;
+  notify(
+    record: HandoffJobRecord,
+    options?: ProviderCallOptions
+  ): Promise<void>;
 }
 
 export interface Clock {

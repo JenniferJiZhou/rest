@@ -33,8 +33,9 @@ Gmail OAuth、Photon SDK 或 Photon Webhook 的具体实现。
 3. `handoff-job-failed-gmail.json` 仍保留“Gmail 失败导致 Job failed”的通用
    负面 fixture；当前 Handoff Application 对 fetch failure 的真实策略是
    `OPEN_LOOPS_ONLY` 并成功完成。该 fixture 仅用于终态错误结构覆盖。
-4. Handoff 取消目前会阻止结果落库，但尚未把 `AbortSignal` 传播到已经开始的
-   Provider 调用。端口已支持可选 signal；Application 传播应作为单独 PR。
+4. Handoff Application 已将 Job-scoped `AbortSignal` 传播到 Agent、Mail、
+   Draft 与 Completion 边界；Provider 仍必须把 optional signal 继续传给
+   自己的 SDK/HTTP 调用。
 
 若决定收紧 1 或 2，必须发起 Contract Change PR、更新契约版本并协调 Apple
 镜像；本次不修改。
@@ -146,6 +147,8 @@ Application。
 - 超时或 fetch 失败不得令整个 Handoff 失败；Application 会继续
   `OPEN_LOOPS_ONLY`。
 - 草稿创建逐封独立失败，不能回滚已成功创建且幂等的草稿。
+- 草稿失败会保留 `drafts.saved=false`，并在 Pause Receipt 中显示
+  `held_items:not_saved`；不得把失败隐藏或误标成 `uncertain`。
 
 ### 3.6 环境变量
 
@@ -294,6 +297,8 @@ receivedAt
   `correlationId` 防止重试造成重复发送。
 - Provider 自身设置有限超时；超时映射为 `PHOTON_UNAVAILABLE`。
 - 超时状态未知时不得盲目生成新 correlation ID 重试。
+- Completion notification 只在核心 summary 已以 `succeeded` 落库后发送。
+  发送失败或超时不得把核心 Job 改成 `failed`，也不得清空 summary。
 
 ### 4.6 幂等与去重
 

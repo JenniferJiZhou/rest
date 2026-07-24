@@ -7,8 +7,10 @@ import type {
 } from "../domain/contracts.js";
 import type {
   AgentLLM,
+  DataOrigin,
   HandoffAgentInput,
   HandoffSummaryDraft,
+  ProviderCallOptions,
   ProviderHealth
 } from "../domain/ports.js";
 
@@ -18,44 +20,63 @@ export class ResilientAgentLLM implements AgentLLM {
     private readonly fallback: AgentLLM
   ) {}
 
+  get dataOrigin(): DataOrigin {
+    return this.primary.dataOrigin === "real" &&
+      this.fallback.dataOrigin === "real"
+      ? "real"
+      : "mock";
+  }
+
   async health(): Promise<ProviderHealth> {
     const health = await this.primary.health();
     return health === "ready" ? "ready" : "degraded";
   }
 
-  async reflectFatigue(input: FatigueCheckIn): Promise<FatigueReflection> {
+  async reflectFatigue(
+    input: FatigueCheckIn,
+    options?: ProviderCallOptions
+  ): Promise<FatigueReflection> {
     return this.withFallback(
-      () => this.primary.reflectFatigue(input),
-      () => this.fallback.reflectFatigue(input)
+      () => this.primary.reflectFatigue(input, options),
+      () => this.fallback.reflectFatigue(input, options),
+      options
     );
   }
 
   async chooseQuest(
     input: RestRecommendationRequest,
-    allowedQuests: RestQuest[]
+    allowedQuests: RestQuest[],
+    options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation> {
     return this.withFallback(
-      () => this.primary.chooseQuest(input, allowedQuests),
-      () => this.fallback.chooseQuest(input, allowedQuests)
+      () => this.primary.chooseQuest(input, allowedQuests, options),
+      () => this.fallback.chooseQuest(input, allowedQuests, options),
+      options
     );
   }
 
   async summarizeHandoff(
-    input: HandoffAgentInput
+    input: HandoffAgentInput,
+    options?: ProviderCallOptions
   ): Promise<HandoffSummaryDraft> {
     return this.withFallback(
-      () => this.primary.summarizeHandoff(input),
-      () => this.fallback.summarizeHandoff(input)
+      () => this.primary.summarizeHandoff(input, options),
+      () => this.fallback.summarizeHandoff(input, options),
+      options
     );
   }
 
   private async withFallback<T>(
     primary: () => Promise<T>,
-    fallback: () => Promise<T>
+    fallback: () => Promise<T>,
+    options?: ProviderCallOptions
   ): Promise<T> {
     try {
       return await primary();
-    } catch {
+    } catch (error) {
+      if (options?.signal?.aborted) {
+        throw error;
+      }
       return fallback();
     }
   }

@@ -24,7 +24,55 @@ describe("OpenAPI contract", () => {
       ).not.toThrow();
     }
   });
+
+  it("declares Contract headers and version mismatch responses for W1 APIs", () => {
+    const document = parse(
+      readFileSync(openApiPath, "utf8")
+    ) as OpenApiDocument;
+    const operations = [
+      ["/v1/rest/evaluate", "post"],
+      ["/v1/rest/check-in", "post"],
+      ["/v1/rest/recommend", "post"],
+      ["/v1/rest/feedback", "post"],
+      ["/v1/handoff/start", "post"],
+      ["/v1/handoff/{jobId}", "get"],
+      ["/v1/handoff/{jobId}/cancel", "post"]
+    ] as const;
+
+    for (const [path, method] of operations) {
+      const responses = document.paths[path]![method]!.responses;
+      expect(responses["409"]).toEqual({
+        $ref: "#/components/responses/Error"
+      });
+      for (const response of Object.values(responses)) {
+        const definition =
+          "$ref" in response
+            ? document.components.responses.Error
+            : response;
+        expect(definition.headers).toMatchObject({
+          "X-Request-ID": expect.any(Object),
+          "X-Contract-Version": expect.any(Object),
+          "X-Hush-Data-Origin": expect.any(Object)
+        });
+      }
+    }
+  });
 });
+
+interface OpenApiResponse {
+  $ref?: string;
+  headers?: Record<string, unknown>;
+}
+
+interface OpenApiDocument {
+  paths: Record<
+    string,
+    Record<string, { responses: Record<string, OpenApiResponse> }>
+  >;
+  components: {
+    responses: { Error: OpenApiResponse };
+  };
+}
 
 function collectReferences(value: unknown): string[] {
   if (Array.isArray(value)) {

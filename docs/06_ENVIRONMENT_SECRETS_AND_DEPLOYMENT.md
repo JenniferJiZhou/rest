@@ -2,8 +2,8 @@
 
 ## 1. 固定版本
 
-- Node.js 20.x
-- pnpm 9.x
+- Node.js `>=20.19 <21`（仓库固定 `20.19.5`）
+- pnpm `>=9 <10`（`packageManager` 固定 `9.15.9`）
 - TypeScript 5.x
 - Swift 5.10+
 - Xcode 16
@@ -23,6 +23,21 @@
 - Demo Gmail 账号密码不进仓库和群聊明文。
 - 生产/演示 token 使用托管平台 Secret。
 - 服务器日志不得打印邮件正文、OAuth token、Guided Drift 内容。
+
+Provider 调用的部署参数：
+
+```text
+LLM_TIMEOUT_MS=15000
+MAIL_FETCH_TIMEOUT_MS=10000
+DRAFT_CREATE_TIMEOUT_MS=10000
+COMPLETION_SEND_TIMEOUT_MS=5000
+```
+
+四项均只接受 `100..120000` 毫秒内的整数；`0`、负数、`NaN` 和超大值会令
+启动配置校验失败。`.env.example` 只保存安全示例，不保存真实 Secret。
+
+`PUBLIC_BASE_URL` 当前仅被校验并预留给未来 OAuth/外部 callback URL；
+现有 W1 listener、路由和响应不会读取它来改变行为。
 
 ## 3. Gmail
 
@@ -68,6 +83,8 @@ demo
 - 每次部署保留上一可用版本。
 - Demo 前冻结部署；Photon line 与 webhook 路由不再修改。
 - 保存一份本地 ConsoleChannel 启动方式。
+- 使用 `.github/workflows/server-ci.yml` 的 Node 20.19.5 / pnpm 9.15.9
+  frozen-lockfile 检查作为合并门槛。
 
 ## 6. 日志
 
@@ -95,9 +112,13 @@ demo
 建议：
 
 ```text
-Backend: 3000
+Backend: 127.0.0.1:3000（安全默认）
 Contract docs: 3001（可选）
 Apple Client: 连接配置中的 base URL
 ```
+
+只有在可信局域网进行跨机器 Apple 联调时，才显式设置
+`HOST=0.0.0.0`；结束后恢复 `127.0.0.1` 并撤销临时防火墙规则。详细流程见
+`15_APPLE_MOCK_INTEGRATION_RELEASE.md`。
 
 实际端口在开工时冻结。
