@@ -621,6 +621,18 @@ export const inboxPrioritySchema = z.enum([
   "uncertain"
 ]);
 
+export const inboxConversationTypeSchema = z.enum(["direct", "group"]);
+
+export const inboxItemKindSchema = z.enum(["message", "conversation_digest"]);
+
+export const inboxReplyTargetSchema = z
+  .object({
+    target_id: z.string().regex(/^participant_[a-zA-Z0-9_-]{8,64}$/),
+    display_name: z.string().min(1).max(120),
+    reason: z.string().min(1).max(500)
+  })
+  .strict();
+
 export const inboxDraftStatusSchema = z.enum([
   "generating",
   "ready",
@@ -644,8 +656,14 @@ export const inboxEventSchema = z
     provider: inboxProviderSchema,
     account_id: z.string().min(1),
     conversation_id: z.string().min(1).nullable(),
+    conversation_type: inboxConversationTypeSchema,
+    conversation_name: z.string().min(1).max(200),
     provider_message_id: z.string().min(1),
     sender: z.string().min(1),
+    sender_ref: z
+      .string()
+      .regex(/^participant_[a-zA-Z0-9_-]{8,64}$/)
+      .nullable(),
     recipients: z.array(z.string().min(1)),
     subject: z.string().nullable(),
     content: z.string().min(1),
@@ -663,28 +681,67 @@ export const inboxEventBatchSchema = z
   })
   .strict();
 
+export const inboxAcknowledgeRequestSchema = z
+  .object({
+    schema_version: schemaVersion,
+    request_id: requestId,
+    expected_revision: z.number().int().min(1)
+  })
+  .strict();
+
 export const inboxSummaryResultSchema = z
   .object({
     summary: z.string().min(1).max(4_000),
     important_points: z.array(z.string().min(1).max(1_000)).max(20),
     todos: z.array(z.string().min(1).max(1_000)).max(20),
     priority: inboxPrioritySchema,
-    needs_reply: z.boolean()
+    needs_reply: z.boolean(),
+    reply_targets: z.array(inboxReplyTargetSchema).max(20)
   })
   .strict();
 
 export const unifiedInboxItemSchema = inboxEventSchema
   .extend({
     id: z.string().min(1),
+    sender: z.string().min(1).max(120).nullable(),
+    sender_ref: z
+      .string()
+      .regex(/^participant_[a-zA-Z0-9_-]{8,64}$/)
+      .nullable(),
+    content: z.string().min(1).nullable(),
+    item_kind: inboxItemKindSchema,
+    revision: z.number().int().min(1),
+    message_count: z.number().int().min(1).max(1_000),
+    window_started_at: z.iso.datetime({ offset: true }),
+    window_ended_at: z.iso.datetime({ offset: true }),
+    sealed_at: z.iso.datetime({ offset: true }).nullable(),
+    acknowledged_at: z.iso.datetime({ offset: true }).nullable(),
     summary: z.string().min(1).max(4_000).nullable(),
     important_points: z.array(z.string().min(1).max(1_000)).max(20),
     todos: z.array(z.string().min(1).max(1_000)).max(20),
     priority: inboxPrioritySchema,
     needs_reply: z.boolean().nullable(),
+    reply_targets: z.array(inboxReplyTargetSchema).max(20),
     draft_id: z.string().min(1).nullable(),
     sync_status: z.enum(["pending", "ready", "failed"])
   })
-  .strict();
+  .strict()
+  .superRefine((item, context) => {
+    if (
+      item.conversation_type === "group" &&
+      item.item_kind === "conversation_digest"
+    ) {
+      for (const field of ["sender", "sender_ref", "content"] as const) {
+        if (item[field] !== null) {
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: "Group conversation digests must not expose source message fields."
+          });
+        }
+      }
+    }
+  });
 
 export const inboxDraftSchema = z
   .object({
@@ -837,10 +894,16 @@ export type HandoffJob = z.infer<typeof handoffJobSchema>;
 export type HandoffJobState = z.infer<typeof handoffJobStateSchema>;
 export type InboxProvider = z.infer<typeof inboxProviderSchema>;
 export type InboxPriority = z.infer<typeof inboxPrioritySchema>;
+export type InboxConversationType = z.infer<typeof inboxConversationTypeSchema>;
+export type InboxItemKind = z.infer<typeof inboxItemKindSchema>;
+export type InboxReplyTarget = z.infer<typeof inboxReplyTargetSchema>;
 export type InboxDraftStatus = z.infer<typeof inboxDraftStatusSchema>;
 export type InboxCoverage = z.infer<typeof inboxCoverageSchema>;
 export type InboxEvent = z.infer<typeof inboxEventSchema>;
 export type InboxEventBatch = z.infer<typeof inboxEventBatchSchema>;
+export type InboxAcknowledgeRequest = z.infer<
+  typeof inboxAcknowledgeRequestSchema
+>;
 export type InboxSummaryResult = z.infer<typeof inboxSummaryResultSchema>;
 export type UnifiedInboxItem = z.infer<typeof unifiedInboxItemSchema>;
 export type InboxDraft = z.infer<typeof inboxDraftSchema>;

@@ -66,6 +66,7 @@ describe("OpenAPI contract", () => {
       ["/v1/inbox/events:batch", "post"],
       ["/v1/inbox/items", "get"],
       ["/v1/inbox/items/{itemId}", "get"],
+      ["/v1/inbox/items/{itemId}:acknowledge", "post"],
       ["/v1/inbox/items/{itemId}/summary", "post"],
       ["/v1/inbox/items/{itemId}/draft", "post"],
       ["/v1/inbox/drafts/{draftId}", "get"],
@@ -78,6 +79,11 @@ describe("OpenAPI contract", () => {
     for (const [path, method] of operations) {
       expect(document.paths[path]?.[method]).toBeDefined();
     }
+
+    expect(
+      document.paths["/v1/inbox/items/{itemId}:acknowledge"]!.post!
+        .requestBody!.content["application/json"]!.schema
+    ).toEqual({ $ref: "./schemas/inbox-acknowledge.schema.json" });
   });
 
   it("declares Provider unavailable for Rest evaluate", () => {
@@ -101,7 +107,15 @@ interface OpenApiResponse {
 interface OpenApiDocument {
   paths: Record<
     string,
-    Record<string, { responses: Record<string, OpenApiResponse> }>
+    Record<
+      string,
+      {
+        responses: Record<string, OpenApiResponse>;
+        requestBody?: {
+          content: Record<string, { schema: unknown }>;
+        };
+      }
+    >
   >;
   components: {
     responses: { Error: OpenApiResponse };

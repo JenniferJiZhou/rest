@@ -33,8 +33,11 @@
         "provider",
         "account_id",
         "conversation_id",
+        "conversation_type",
+        "conversation_name",
         "provider_message_id",
         "sender",
+        "sender_ref",
         "recipients",
         "subject",
         "content",
@@ -54,6 +57,15 @@
           "type": ["string", "null"],
           "minLength": 1
         },
+        "conversation_type": {
+          "type": "string",
+          "enum": ["direct", "group"]
+        },
+        "conversation_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
         "provider_message_id": {
           "type": "string",
           "minLength": 1
@@ -61,6 +73,10 @@
         "sender": {
           "type": "string",
           "minLength": 1
+        },
+        "sender_ref": {
+          "type": ["string", "null"],
+          "pattern": "^participant_[a-zA-Z0-9_-]{8,64}$"
         },
         "recipients": {
           "type": "array",

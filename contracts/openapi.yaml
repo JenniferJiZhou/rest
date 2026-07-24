@@ -418,6 +418,46 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
 
+  /v1/inbox/items/{itemId}:acknowledge:
+    post:
+      tags: [Inbox]
+      operationId: acknowledgeInboxItem
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientVersion"
+        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/inbox-acknowledge.schema.json"
+      responses:
+        "200":
+          description: Exact digest revision acknowledged
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/inbox-item.schema.json"
+        "409":
+          $ref: "#/components/responses/Error"
+
   /v1/inbox/items/{itemId}/summary:
     post:
       tags: [Inbox]

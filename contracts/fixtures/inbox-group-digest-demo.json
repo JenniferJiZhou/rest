@@ -1,0 +1,41 @@
+{
+  "id": "inbox-group-digest-demo-001",
+  "provider": "dingtalk",
+  "account_id": "dingtalk-demo-account",
+  "conversation_id": "conversation-group-demo-001",
+  "conversation_type": "group",
+  "conversation_name": "产品讨论组",
+  "provider_message_id": "message-group-demo-018",
+  "sender": null,
+  "sender_ref": null,
+  "recipients": ["dingtalk-demo-account"],
+  "subject": "产品讨论组会话摘要",
+  "content": null,
+  "received_at": "2026-07-24T10:30:00+08:00",
+  "coverage": {
+    "source": "official_api",
+    "complete": true,
+    "note": null
+  },
+  "item_kind": "conversation_digest",
+  "revision": 3,
+  "message_count": 18,
+  "window_started_at": "2026-07-24T09:00:00+08:00",
+  "window_ended_at": "2026-07-24T10:30:00+08:00",
+  "sealed_at": "2026-07-24T10:31:00+08:00",
+  "acknowledged_at": null,
+  "summary": "讨论聚焦接口交付时间，需要确认负责人的承诺。",
+  "important_points": ["接口交付时间尚待确认"],
+  "todos": ["确认接口交付时间"],
+  "priority": "urgent",
+  "needs_reply": true,
+  "reply_targets": [
+    {
+      "target_id": "participant_demo_0001",
+      "display_name": "王同学",
+      "reason": "需要确认接口交付时间"
+    }
+  ],
+  "draft_id": null,
+  "sync_status": "ready"
+}

@@ -8,18 +8,29 @@
     "provider",
     "account_id",
     "conversation_id",
+    "conversation_type",
+    "conversation_name",
     "provider_message_id",
     "sender",
+    "sender_ref",
     "recipients",
     "subject",
     "content",
     "received_at",
     "coverage",
+    "item_kind",
+    "revision",
+    "message_count",
+    "window_started_at",
+    "window_ended_at",
+    "sealed_at",
+    "acknowledged_at",
     "summary",
     "important_points",
     "todos",
     "priority",
     "needs_reply",
+    "reply_targets",
     "draft_id",
     "sync_status"
   ],
@@ -40,13 +51,27 @@
       "type": ["string", "null"],
       "minLength": 1
     },
+    "conversation_type": {
+      "type": "string",
+      "enum": ["direct", "group"]
+    },
+    "conversation_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
     "provider_message_id": {
       "type": "string",
       "minLength": 1
     },
     "sender": {
-      "type": "string",
-      "minLength": 1
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "sender_ref": {
+      "type": ["string", "null"],
+      "pattern": "^participant_[a-zA-Z0-9_-]{8,64}$"
     },
     "recipients": {
       "type": "array",
@@ -59,7 +84,7 @@
       "type": ["string", "null"]
     },
     "content": {
-      "type": "string",
+      "type": ["string", "null"],
       "minLength": 1
     },
     "received_at": {
@@ -82,6 +107,35 @@
           "type": ["string", "null"]
         }
       }
+    },
+    "item_kind": {
+      "type": "string",
+      "enum": ["message", "conversation_digest"]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "message_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "window_started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "window_ended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sealed_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "acknowledged_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
     },
     "summary": {
       "type": ["string", "null"],
@@ -113,6 +167,13 @@
     "needs_reply": {
       "type": ["boolean", "null"]
     },
+    "reply_targets": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/$defs/InboxReplyTarget"
+      }
+    },
     "draft_id": {
       "type": ["string", "null"],
       "minLength": 1
@@ -120,6 +181,47 @@
     "sync_status": {
       "type": "string",
       "enum": ["pending", "ready", "failed"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "conversation_type": { "const": "group" },
+          "item_kind": { "const": "conversation_digest" }
+        },
+        "required": ["conversation_type", "item_kind"]
+      },
+      "then": {
+        "properties": {
+          "sender": { "type": "null" },
+          "sender_ref": { "type": "null" },
+          "content": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "InboxReplyTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "display_name", "reason"],
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "pattern": "^participant_[a-zA-Z0-9_-]{8,64}$"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
     }
   }
 }
