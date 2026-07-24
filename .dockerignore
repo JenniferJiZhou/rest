@@ -6,6 +6,7 @@
 !server/src/**
 !content/rest-quests.json
 !contracts/fixtures/mail-items-demo.json
+!contracts/fixtures/unified-inbox-items.json
 
 .git
 .git/**

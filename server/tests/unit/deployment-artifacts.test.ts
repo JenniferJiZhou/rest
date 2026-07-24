@@ -77,6 +77,9 @@ describe("deployment artifacts", () => {
     expect(dockerfile).toContain(
       "contracts/fixtures/unified-inbox-items.json"
     );
+    expect(dockerignore).toContain(
+      "!contracts/fixtures/unified-inbox-items.json"
+    );
     expect(dockerfile).toContain(
       'CMD ["node", "dist/bootstrap.js"]'
     );
