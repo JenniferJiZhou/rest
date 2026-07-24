@@ -50,6 +50,7 @@ final class MacUsageMonitoringModel: ObservableObject {
         let userProvidedContextLabel: String
         let dailyAppUsageMinutes: Int
         let continuousAppUsageMinutes: Int
+        let continuousScreenUsageMinutes: Int
         let continuousUsageIsEstimated = false
         let appSwitchesLast10Minutes: Int
         let localHour: Int
@@ -68,6 +69,8 @@ final class MacUsageMonitoringModel: ObservableObject {
             case dailyAppUsageMinutes = "daily_app_usage_minutes"
             case continuousAppUsageMinutes =
                 "continuous_app_usage_minutes"
+            case continuousScreenUsageMinutes =
+                "continuous_screen_usage_minutes"
             case continuousUsageIsEstimated =
                 "continuous_usage_is_estimated"
             case appSwitchesLast10Minutes =
@@ -83,12 +86,14 @@ final class MacUsageMonitoringModel: ObservableObject {
     private struct RestSuggestionResponse: Decodable {
         let requestID: String
         let shouldOfferRest: Bool
+        let reasonCode: String
         let message: String
         let defaultQuestID: String?
 
         enum CodingKeys: String, CodingKey {
             case requestID = "request_id"
             case shouldOfferRest = "should_offer_rest"
+            case reasonCode = "reason_code"
             case message
             case defaultQuestID = "default_quest_id"
         }
@@ -97,6 +102,7 @@ final class MacUsageMonitoringModel: ObservableObject {
     @Published private(set) var isMonitoring = false
     @Published private(set) var currentApplication: ApplicationIdentity?
     @Published private(set) var continuousSeconds: TimeInterval = 0
+    @Published private(set) var continuousScreenSeconds: TimeInterval = 0
     @Published private(set) var currentDailySeconds: TimeInterval = 0
     @Published private(set) var discoveredApplications: [ApplicationIdentity] = []
     @Published private(set) var monitoredApplications: [MonitoredApplication]
@@ -138,11 +144,20 @@ final class MacUsageMonitoringModel: ObservableObject {
     private var activeBundleIdentifier: String?
     private var activeStartedAt: Date?
     private var activeContinuousBase: TimeInterval = 0
+    private var screenContinuousStartedAt: Date?
     private var continuityStates: [String: ContinuityState] = [:]
     private var dailyTotals: [String: TimeInterval]
     private var dailyTotalsDate: Date
     private var switchDates: [Date] = []
     private var lastCheckpointNumber: [String: Int] = [:]
+    private let companionSessionID = UUID().uuidString.lowercased()
+    private var companionSequence = 0
+    private var latestCompanionDecision: HushCompanionDecision?
+    private var isCompanionResting = false
+    private lazy var companionTransport = HushCompanionPeerTransport(
+        role: .macBroadcaster,
+        displayName: Host.current().localizedName ?? "Hush Mac"
+    )
 
     init() {
         agentBaseURL = defaults.string(forKey: Self.agentBaseURLKey) ?? ""
@@ -180,6 +195,10 @@ final class MacUsageMonitoringModel: ObservableObject {
             ?? Date()
         resetDailyTotalsIfNeeded(now: Date())
         seedDiscoveredApplications()
+        companionTransport.onCommand = { [weak self] command in
+            self?.handleCompanionCommand(command)
+        }
+        companionTransport.start()
     }
 
     var currentAppLabel: String {
@@ -274,7 +293,10 @@ final class MacUsageMonitoringModel: ObservableObject {
         seedDiscoveredApplications()
         installObservers()
         isMonitoring = true
-        activate(workspace.frontmostApplication, at: Date())
+        isCompanionResting = false
+        let now = Date()
+        screenContinuousStartedAt = now
+        activate(workspace.frontmostApplication, at: now)
         startTimer()
     }
 
@@ -290,10 +312,13 @@ final class MacUsageMonitoringModel: ObservableObject {
         continuityStates = [:]
         lastCheckpointNumber = [:]
         isMonitoring = false
+        isCompanionResting = false
         activeBundleIdentifier = nil
         activeStartedAt = nil
         activeContinuousBase = 0
         continuousSeconds = 0
+        screenContinuousStartedAt = nil
+        continuousScreenSeconds = 0
         currentDailySeconds = 0
     }
 
@@ -360,6 +385,9 @@ final class MacUsageMonitoringModel: ObservableObject {
     func recordRestCompleted() {
         let now = Date()
         lastCompletedRestDate = now
+        isCompanionResting = false
+        screenContinuousStartedAt = isMonitoring ? now : nil
+        continuousScreenSeconds = 0
         defaults.set(now, forKey: Self.lastCompletedRestDateKey)
         agentStatusMessage = "已记录休息；下一检查点可以上传。"
     }
@@ -520,6 +548,52 @@ final class MacUsageMonitoringModel: ObservableObject {
                 let now = Date()
                 self.refreshPublishedDurations(now: now)
                 self.sendAutomaticCheckpointIfNeeded(now: now)
+                self.publishCompanionSnapshot(now: now)
+            }
+        }
+    }
+
+    private func publishCompanionSnapshot(now: Date) {
+        companionSequence += 1
+        companionTransport.send(
+            snapshot: HushCompanionSnapshot(
+                protocolVersion: HushCompanionSnapshot.protocolVersion,
+                sessionID: companionSessionID,
+                sequence: companionSequence,
+                emittedAt: now,
+                deviceName:
+                    Host.current().localizedName ?? "Hush Mac",
+                currentContext:
+                    currentMonitoredApplication?.trimmedUserProvidedName
+                    ?? "等待已关注的工作",
+                continuousScreenSeconds:
+                    max(0, Int(continuousScreenSeconds)),
+                continuousAppSeconds: max(0, Int(continuousSeconds)),
+                dailySeconds: max(0, Int(currentDailySeconds)),
+                isMonitoring: isMonitoring && currentAppIsMonitored,
+                interruptionMode: interruptionMode.rawValue,
+                latestDecision: latestCompanionDecision
+            )
+        )
+    }
+
+    private func handleCompanionCommand(
+        _ command: HushCompanionCommand
+    ) {
+        switch command.kind {
+        case .restCompleted:
+            recordRestCompleted()
+            latestCompanionDecision = nil
+        case .restStarted:
+            isCompanionResting = true
+            screenContinuousStartedAt = nil
+            continuousScreenSeconds = 0
+            if command.decisionID == latestCompanionDecision?.id {
+                latestCompanionDecision = nil
+            }
+        case .remindLater, .suggestionDismissed:
+            if command.decisionID == latestCompanionDecision?.id {
+                latestCompanionDecision = nil
             }
         }
     }
@@ -528,6 +602,13 @@ final class MacUsageMonitoringModel: ObservableObject {
         _ application: NSRunningApplication?,
         at now: Date
     ) {
+        if
+            isMonitoring,
+            !isCompanionResting,
+            screenContinuousStartedAt == nil
+        {
+            screenContinuousStartedAt = now
+        }
         let previousBundleIdentifier = activeBundleIdentifier
         commitActiveSession(at: now)
         continuityStates = continuityStates.filter {
@@ -606,6 +687,7 @@ final class MacUsageMonitoringModel: ObservableObject {
 
     private func sendAutomaticCheckpointIfNeeded(now: Date) {
         guard
+            !isCompanionResting,
             let bundleIdentifier = activeBundleIdentifier,
             currentMonitoredApplication != nil,
             !Self.websiteMonitoredBrowserBundleIdentifiers.contains(
@@ -661,6 +743,8 @@ final class MacUsageMonitoringModel: ObservableObject {
             userProvidedContextLabel: contextLabel,
             dailyAppUsageMinutes: currentDailyMinutes,
             continuousAppUsageMinutes: currentContinuousMinutes,
+            continuousScreenUsageMinutes:
+                Int(continuousScreenSeconds / 60),
             appSwitchesLast10Minutes: switchDates.count,
             localHour: Calendar.current.component(.hour, from: now),
             minutesSinceLastRest: max(
@@ -723,6 +807,14 @@ final class MacUsageMonitoringModel: ObservableObject {
                     return
                 }
 
+                latestCompanionDecision = HushCompanionDecision(
+                    id: suggestion.requestID,
+                    decidedAt: Date(),
+                    shouldOfferRest: suggestion.shouldOfferRest,
+                    reasonCode: suggestion.reasonCode,
+                    message: suggestion.message,
+                    defaultQuestID: suggestion.defaultQuestID
+                )
                 agentStatusMessage = suggestion.shouldOfferRest
                     ? "Agent 建议休息：\(suggestion.message)"
                     : "Agent 建议继续：\(suggestion.message)"
@@ -755,6 +847,8 @@ final class MacUsageMonitoringModel: ObservableObject {
         activeBundleIdentifier = nil
         activeStartedAt = nil
         activeContinuousBase = 0
+        screenContinuousStartedAt = nil
+        continuousScreenSeconds = 0
         refreshPublishedDurations(now: now)
     }
 
@@ -785,6 +879,14 @@ final class MacUsageMonitoringModel: ObservableObject {
 
     private func refreshPublishedDurations(now: Date) {
         resetDailyTotalsIfNeeded(now: now)
+        if let screenContinuousStartedAt, isMonitoring {
+            continuousScreenSeconds = max(
+                0,
+                now.timeIntervalSince(screenContinuousStartedAt)
+            )
+        } else {
+            continuousScreenSeconds = 0
+        }
         guard
             let bundleIdentifier = activeBundleIdentifier,
             let activeStartedAt

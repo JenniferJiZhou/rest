@@ -1,19 +1,25 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct HushDoorView: View {
     let taskText: String
     let onOpenTask: () -> Void
     let onSettings: () -> Void
-    var onOpenInbox: (() -> Void)?
+    var onInboxSwipeChanged: ((CGFloat) -> Void)?
+    var onInboxSwipeEnded: ((Bool) -> Void)?
     var onOpenCompanion: (() -> Void)?
 
     var body: some View {
         GeometryReader { geometry in
+            let taskWidth = min(300, geometry.size.width - 88)
+
             ZStack(alignment: .topTrailing) {
                 Button(action: onOpenTask) {
                     HushTypewriterText(text: taskText)
                         .frame(
-                            width: min(290, geometry.size.width - 88),
+                            width: taskWidth,
                             alignment: .leading
                         )
                 }
@@ -21,8 +27,8 @@ struct HushDoorView: View {
                 .accessibilityLabel(taskText)
                 .accessibilityHint("打开任务详情")
                 .position(
-                    x: geometry.size.width * 0.43,
-                    y: geometry.size.height * 0.57
+                    x: 44 + taskWidth / 2,
+                    y: geometry.size.height * 0.545
                 )
 
                 HStack(spacing: HushSpacing.xs) {
@@ -67,47 +73,174 @@ struct HushDoorView: View {
                 .padding(.top, HushSpacing.md)
                 .padding(.trailing, HushSpacing.lg)
 
-                if let onOpenInbox {
-                    Button {
-                        onOpenInbox()
-                    } label: {
-                        VStack(spacing: 7) {
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: 11, weight: .semibold))
-                            Text("向上滑查看消息")
-                                .font(HushType.micro)
-                                .tracking(0.5)
-                        }
+                if onInboxSwipeChanged != nil, onInboxSwipeEnded != nil {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.48))
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .frame(
-                        width: min(240, geometry.size.width - 64)
+                        .position(
+                            x: geometry.size.width * 0.5,
+                            y: geometry.size.height * 0.93
+                        )
+                        .accessibilityHidden(true)
+
+                    #if os(macOS)
+                    HushMacTrackpadSwipeView(
+                        onProgressChanged: { progress in
+                            onInboxSwipeChanged?(progress)
+                        },
+                        onGestureEnded: { shouldComplete in
+                            onInboxSwipeEnded?(shouldComplete)
+                        }
                     )
-                    .position(
-                        x: geometry.size.width * 0.5,
-                        y: geometry.size.height * 0.93
-                    )
-                    .accessibilityHint("打开统一消息收件箱")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .allowsHitTesting(false)
+                    #endif
                 }
             }
             .contentShape(Rectangle())
+            #if !os(macOS)
             .gesture(
-                DragGesture(minimumDistance: 18)
+                DragGesture(minimumDistance: 4)
+                    .onChanged { value in
+                        let upwardDistance = max(
+                            0,
+                            -value.translation.height
+                        )
+                        let progress = min(
+                            0.96,
+                            upwardDistance
+                                / max(1, geometry.size.height * 0.55)
+                        )
+                        onInboxSwipeChanged?(progress)
+                    }
                     .onEnded { value in
-                        guard let onOpenInbox else { return }
-                        let vertical = value.translation.height
-                        let horizontal = abs(value.translation.width)
-                        if vertical < -52, abs(vertical) > horizontal {
-                            onOpenInbox()
-                        }
+                        let upwardDistance = max(
+                            0,
+                            -value.translation.height
+                        )
+                        let threshold = geometry.size.height * 0.25
+                        let isPrimarilyVertical =
+                            upwardDistance > abs(value.translation.width)
+                        onInboxSwipeEnded?(
+                            upwardDistance >= threshold
+                                && isPrimarilyVertical
+                        )
                     }
             )
+            #endif
         }
     }
 }
+
+#if os(macOS)
+private struct HushMacTrackpadSwipeView: NSViewRepresentable {
+    let onProgressChanged: (CGFloat) -> Void
+    let onGestureEnded: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            onProgressChanged: onProgressChanged,
+            onGestureEnded: onGestureEnded
+        )
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        context.coordinator.startMonitoring(for: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.onProgressChanged = onProgressChanged
+        context.coordinator.onGestureEnded = onGestureEnded
+        context.coordinator.monitoredView = nsView
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.stopMonitoring()
+    }
+
+    final class Coordinator {
+        weak var monitoredView: NSView?
+        var onProgressChanged: (CGFloat) -> Void
+        var onGestureEnded: (Bool) -> Void
+
+        private var eventMonitor: Any?
+        private var upwardDistance: CGFloat = 0
+
+        init(
+            onProgressChanged: @escaping (CGFloat) -> Void,
+            onGestureEnded: @escaping (Bool) -> Void
+        ) {
+            self.onProgressChanged = onProgressChanged
+            self.onGestureEnded = onGestureEnded
+        }
+
+        func startMonitoring(for view: NSView) {
+            monitoredView = view
+            eventMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: .scrollWheel
+            ) { [weak self] event in
+                self?.handle(event)
+                return event
+            }
+        }
+
+        func stopMonitoring() {
+            if let eventMonitor {
+                NSEvent.removeMonitor(eventMonitor)
+            }
+            eventMonitor = nil
+        }
+
+        private func handle(_ event: NSEvent) {
+            guard
+                event.hasPreciseScrollingDeltas,
+                event.window === monitoredView?.window
+            else {
+                return
+            }
+
+            // Ignore inertial/momentum scrolling that continues after the
+            // fingers lift. Progress must follow the physical two-finger
+            // distance only — projected velocity must never bypass the
+            // completion threshold or hijack a cancelled return.
+            guard event.momentumPhase == [] else {
+                return
+            }
+
+            if event.phase == .began {
+                upwardDistance = 0
+                onProgressChanged(0)
+            }
+
+            let physicalDelta = event.scrollingDeltaY
+                * (event.isDirectionInvertedFromDevice ? 1 : -1)
+            upwardDistance = max(0, upwardDistance + physicalDelta)
+
+            let viewHeight = max(
+                1,
+                monitoredView?.bounds.height
+                    ?? monitoredView?.window?.contentView?.bounds.height
+                    ?? 1
+            )
+            let progress = min(
+                0.96,
+                upwardDistance / (viewHeight * 0.55)
+            )
+            onProgressChanged(progress)
+
+            if event.phase == .ended || event.phase == .cancelled {
+                let shouldComplete =
+                    event.phase != .cancelled
+                    && upwardDistance >= viewHeight * 0.25
+                onGestureEnded(shouldComplete)
+                upwardDistance = 0
+            }
+        }
+    }
+}
+#endif
 
 private struct HushTypewriterText: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

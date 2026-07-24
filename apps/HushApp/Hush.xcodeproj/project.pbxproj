@@ -31,6 +31,9 @@
 		A00000000000000000000022 /* Shared/Core/HushLockdownState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */; };
 		A00000000000000000000023 /* iOSApp/Platform/LockdownCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */; };
 		A00000000000000000000024 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */; };
+		A30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift */; };
+		A30000000000000000000002 /* Shared/Core/Networking/HushCompanionPeerSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift */; };
+		A30000000000000000000003 /* iOSApp/Platform/HushCompanionRestAgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000002 /* iOSApp/Platform/HushCompanionRestAgentService.swift */; };
 		A10000000000000000000001 /* HushComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* HushComponents.swift */; };
 		A10000000000000000000002 /* HushComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* HushComponents.swift */; };
 		A10000000000000000000003 /* HushTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* HushTokens.swift */; };
@@ -75,6 +78,14 @@
 		A10000000000000000000042 /* safety-rules.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* safety-rules.json */; };
 		A10000000000000000000043 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
 		A10000000000000000000044 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
+		A20000000000000000000003 /* hush-wave-keyframe-01.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* hush-wave-keyframe-01.png */; };
+		A20000000000000000000004 /* hush-wave-keyframe-01.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* hush-wave-keyframe-01.png */; };
+		A20000000000000000000005 /* hush-wave-keyframe-02.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* hush-wave-keyframe-02.png */; };
+		A20000000000000000000006 /* hush-wave-keyframe-02.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* hush-wave-keyframe-02.png */; };
+		A20000000000000000000007 /* hush-wave-keyframe-03.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* hush-wave-keyframe-03.png */; };
+		A20000000000000000000008 /* hush-wave-keyframe-03.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* hush-wave-keyframe-03.png */; };
+		A20000000000000000000009 /* hush-wave-keyframe-04.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* hush-wave-keyframe-04.png */; };
+		A20000000000000000000010 /* hush-wave-keyframe-04.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* hush-wave-keyframe-04.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -133,6 +144,8 @@
 		B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Core/HushLockdownState.swift; sourceTree = "<group>"; };
 		B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/LockdownCoordinator.swift; sourceTree = "<group>"; };
 		B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/Platform/MacWebsiteMonitoringModel.swift; sourceTree = "<group>"; };
+		B30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Core/Networking/HushCompanionPeerSync.swift; sourceTree = "<group>"; };
+		B30000000000000000000002 /* iOSApp/Platform/HushCompanionRestAgentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/HushCompanionRestAgentService.swift; sourceTree = "<group>"; };
 		B10000000000000000000001 /* HushComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/HushComponents.swift; sourceTree = "<group>"; };
 		B10000000000000000000002 /* HushTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/HushTokens.swift; sourceTree = "<group>"; };
 		B10000000000000000000003 /* HushWaveBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/Wave/HushWaveBackground.swift; sourceTree = "<group>"; };
@@ -155,6 +168,10 @@
 		B10000000000000000000020 /* bluebox-cards.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/bluebox-cards.json; sourceTree = "<group>"; };
 		B10000000000000000000021 /* safety-rules.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/safety-rules.json; sourceTree = "<group>"; };
 		B10000000000000000000022 /* UnifiedInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxView.swift; sourceTree = "<group>"; };
+		B20000000000000000000002 /* hush-wave-keyframe-01.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-wave-keyframe-01.png; sourceTree = "<group>"; };
+		B20000000000000000000003 /* hush-wave-keyframe-02.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-wave-keyframe-02.png; sourceTree = "<group>"; };
+		B20000000000000000000004 /* hush-wave-keyframe-03.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-wave-keyframe-03.png; sourceTree = "<group>"; };
+		B20000000000000000000005 /* hush-wave-keyframe-04.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-wave-keyframe-04.png; sourceTree = "<group>"; };
 		B00000000000000000000101 /* Hush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hush.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000102 /* HushMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HushMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000103 /* HushDeviceActivityMonitor.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushDeviceActivityMonitor.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -223,6 +240,7 @@
 				B00000000000000000000004 /* Shared/Core/HushProduct.swift */,
 				B00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift */,
 				B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */,
+				B30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift */,
 				C10000000000000000000001 /* DesignSystem */,
 				C10000000000000000000002 /* Features */,
 			);
@@ -242,6 +260,7 @@
 				B00000000000000000000017 /* iOSApp/Platform/InterruptionModeModel.swift */,
 				B00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift */,
 				B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */,
+				B30000000000000000000002 /* iOSApp/Platform/HushCompanionRestAgentService.swift */,
 				B00000000000000000000002 /* iOSApp/Hush.entitlements */,
 			);
 			name = iOSApp;
@@ -283,6 +302,10 @@
 				B10000000000000000000001 /* HushComponents.swift */,
 				B10000000000000000000002 /* HushTokens.swift */,
 				B10000000000000000000003 /* HushWaveBackground.swift */,
+				B20000000000000000000002 /* hush-wave-keyframe-01.png */,
+				B20000000000000000000003 /* hush-wave-keyframe-02.png */,
+				B20000000000000000000004 /* hush-wave-keyframe-03.png */,
+				B20000000000000000000005 /* hush-wave-keyframe-04.png */,
 			);
 			name = DesignSystem;
 			sourceTree = "<group>";
@@ -465,6 +488,10 @@
 				A10000000000000000000037 /* drift-prompts.json in Resources */,
 				A10000000000000000000039 /* bluebox-cards.json in Resources */,
 				A10000000000000000000041 /* safety-rules.json in Resources */,
+				A20000000000000000000003 /* hush-wave-keyframe-01.png in Resources */,
+				A20000000000000000000005 /* hush-wave-keyframe-02.png in Resources */,
+				A20000000000000000000007 /* hush-wave-keyframe-03.png in Resources */,
+				A20000000000000000000009 /* hush-wave-keyframe-04.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -477,6 +504,10 @@
 				A10000000000000000000038 /* drift-prompts.json in Resources */,
 				A10000000000000000000040 /* bluebox-cards.json in Resources */,
 				A10000000000000000000042 /* safety-rules.json in Resources */,
+				A20000000000000000000004 /* hush-wave-keyframe-01.png in Resources */,
+				A20000000000000000000006 /* hush-wave-keyframe-02.png in Resources */,
+				A20000000000000000000008 /* hush-wave-keyframe-03.png in Resources */,
+				A20000000000000000000010 /* hush-wave-keyframe-04.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -514,6 +545,8 @@
 				A00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift in Sources */,
 				A00000000000000000000021 /* Shared/Core/HushLockdownState.swift in Sources */,
 				A00000000000000000000023 /* iOSApp/Platform/LockdownCoordinator.swift in Sources */,
+				A30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift in Sources */,
+				A30000000000000000000003 /* iOSApp/Platform/HushCompanionRestAgentService.swift in Sources */,
 				A10000000000000000000001 /* HushComponents.swift in Sources */,
 				A10000000000000000000003 /* HushTokens.swift in Sources */,
 				A10000000000000000000005 /* HushWaveBackground.swift in Sources */,
@@ -542,6 +575,7 @@
 				A00000000000000000000004 /* Shared/Core/HushProduct.swift in Sources */,
 				A00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift in Sources */,
 				A00000000000000000000024 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift in Sources */,
+				A30000000000000000000002 /* Shared/Core/Networking/HushCompanionPeerSync.swift in Sources */,
 				A10000000000000000000002 /* HushComponents.swift in Sources */,
 				A10000000000000000000004 /* HushTokens.swift in Sources */,
 				A10000000000000000000006 /* HushWaveBackground.swift in Sources */,
@@ -709,13 +743,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = iOSApp/Hush.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				COMPRESS_PNG_FILES = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K85XR4H88D;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Hush;
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iOSApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -737,13 +769,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = iOSApp/Hush.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				COMPRESS_PNG_FILES = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K85XR4H88D;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Hush;
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iOSApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -766,10 +796,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K85XR4H88D;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Hush;
-				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Hush 只读取 Safari 和 Chrome 当前标签页的域名，用于统计网站使用时间；不会读取完整网址、搜索词或页面标题。";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MacMenuBar/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -791,10 +819,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K85XR4H88D;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Hush;
-				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Hush 只读取 Safari 和 Chrome 当前标签页的域名，用于统计网站使用时间；不会读取完整网址、搜索词或页面标题。";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MacMenuBar/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

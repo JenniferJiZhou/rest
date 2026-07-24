@@ -51,8 +51,10 @@ final class HushDemoStore: ObservableObject {
         initialQuestID: String? = nil
     ) {
         content = HushDemoContentSnapshot.load(from: provider)
-        if let initialQuestID,
-           let initialIndex = content.quests.firstIndex(where: { $0.id == initialQuestID }) {
+        let preferredQuestID = initialQuestID ?? "wash_face_01"
+        if let initialIndex = content.quests.firstIndex(
+            where: { $0.id == preferredQuestID }
+        ) {
             selectedQuestIndex = initialIndex
         }
     }
