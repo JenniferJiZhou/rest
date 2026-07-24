@@ -1,12 +1,11 @@
 # Hush Server
 
-W1/P2 owns the API boundary, Agent orchestration, Rest application service,
-Handoff Job state machine, contracts implementation, bootstrap, and provider
-ports and the final Composition Root. Gmail Owner owns only Gmail/OAuth
-adapters. W2/P3 owns only Photon messaging and webhook adapters.
+W1/P2 maintains the existing Rest and Handoff backend. W2/P3 owns Unified
+Inbox end to end: contracts, API, storage, AI orchestration, Connector Host,
+provider adapters, confirmed send flow, and its Composition Root wiring.
 
-Business routes call application services. They never call Gmail, Photon, or
-Claude SDKs directly.
+Business routes call application services. They never call provider CLIs,
+Graph, IMAP/SMTP, or AI SDKs directly.
 
 ## Toolchain
 
@@ -54,6 +53,24 @@ The body `request_id` must equal `X-Request-ID`. Mutating idempotent routes also
 require an `Idempotency-Key` of 8–128 Unicode characters after trimming, with
 no control characters.
 
+Unified Inbox exposes:
+
+```text
+POST /v1/inbox/events:batch
+GET  /v1/inbox/items
+GET  /v1/inbox/items/{itemId}
+POST /v1/inbox/items/{itemId}/summary
+POST /v1/inbox/items/{itemId}/draft
+GET/PATCH /v1/inbox/drafts/{draftId}
+POST /v1/inbox/drafts/{draftId}/confirmation
+POST /v1/inbox/drafts/{draftId}:send
+GET  /v1/inbox/sync-status
+```
+
+Sending requires the current draft version, an unconsumed five-minute
+confirmation token, and `Idempotency-Key`. AI providers receive message text
+but never provider credentials, confirmation tokens, or a send tool.
+
 ## Commands
 
 ```powershell
@@ -66,10 +83,10 @@ corepack pnpm test:integration
 corepack pnpm test:vertical
 ```
 
-`test:contracts` validates fixtures and local OpenAPI references. The current
-full suite contains 149 deterministic tests. W1-04
-vertical-slice tests use real TCP/HTTP on a random `127.0.0.1` port and do not
-expose a stable development port.
+`test:contracts` validates fixtures and local OpenAPI references. Vertical
+slice tests include the credential-free Unified Inbox flow. The legacy W1-04
+suite uses real TCP/HTTP on a random `127.0.0.1` port and does not expose a
+stable development port.
 
 ## Current provider behavior
 
@@ -78,6 +95,14 @@ expose a stable development port.
 - Until Gmail Owner supplies a Gmail adapter, the real Handoff path completes with
   user-submitted open loops only and explicitly marks Gmail as unavailable.
 - A valid demo token switches to fixture mail and canned Agent behavior.
+- A valid demo token also switches Unified Inbox to independent Fixture
+  intelligence, repositories, confirmation store, idempotency store, and
+  senders for Feishu, DingTalk, Outlook, and QQ Mail.
+- Without provider configuration, normal Unified Inbox adapters report
+  `unavailable`. Configured adapters are `lark-cli`, DingTalk `dws`,
+  Microsoft Graph, and QQ IMAP/SMTP.
+- Real provider credentials have not been exercised by CI. Tenant/admin
+  approval and account-specific smoke tests remain required.
 - `X-Hush-Data-Origin` is computed from the complete selected dependency
   graph. A normal graph containing Canned, Fixture, Recording, Noop, or
   Console providers is conservatively marked `mock`; it is `real` only when
@@ -95,6 +120,7 @@ LLM_TIMEOUT_MS=15000
 MAIL_FETCH_TIMEOUT_MS=10000
 DRAFT_CREATE_TIMEOUT_MS=10000
 COMPLETION_SEND_TIMEOUT_MS=5000
+INBOX_POLL_INTERVAL_MS=30000
 ```
 
 Each accepts an integer from 100 through 120000 milliseconds. Handoff
@@ -116,19 +142,19 @@ with `--frozen-lockfile`, and runs typecheck, provider contracts, integration,
 vertical slice, full tests, production build, diff checks, and workspace
 cleanliness checks without real provider credentials.
 
-## Provider integration points
+## Unified Inbox integration points
 
-Provider Owners implement W1-owned interfaces from `src/domain/ports.ts`
-without modifying that file:
+Provider-neutral interfaces live in `src/inbox/ports.ts`. Implementations and
+vendor payloads stay under `src/inbox/providers/`; application and route code
+must not import provider SDK or CLI types.
 
-- Gmail Owner implements `MailProvider`: Gmail health, unread fetch, and
-  idempotent draft creation.
-- W2 implements `MessagingChannel`, inbound mapping, and Photon-backed
-  completion delivery.
+```text
+LARK_CLI_PATH / LARK_ACCOUNT_ID
+DWS_CLI_PATH / DINGTALK_ACCOUNT_ID
+OUTLOOK_ACCOUNT_ID / OUTLOOK_ACCESS_TOKEN
+QQ_EMAIL_ADDRESS / QQ_EMAIL_AUTH_CODE
+```
 
-Gmail-specific code stays under `src/mail/`; Photon code stays under
-`src/messaging/`. Each Owner exports factories or registration functions. W1
-wires those exports in `src/composition.ts` after review.
-
-The Gmail adapter must honor `DraftRequest.dedupeKey`. It must never send mail;
-`createDraft` only creates or returns an existing draft.
+Empty values mean unconfigured. Secrets are resolved only inside adapters and
+are redacted from HTTP errors and logs. QQ SMTP and Graph timeouts return
+`unknown`; they are not retried automatically.

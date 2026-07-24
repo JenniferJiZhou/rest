@@ -26,8 +26,10 @@ describe("server dependency graph isolation", () => {
     expect(graphOrigins(dependencies)).toMatchObject({
       restOrigin: "mock",
       handoffOrigin: "mock",
+      inboxOrigin: "mock",
       demoRestOrigin: "mock",
-      demoHandoffOrigin: "mock"
+      demoHandoffOrigin: "mock",
+      demoInboxOrigin: "mock"
     });
   });
 
@@ -111,14 +113,18 @@ describe("server dependency graph isolation", () => {
 function graphOrigins(dependencies: object): {
   restOrigin: string | undefined;
   handoffOrigin: string | undefined;
+  inboxOrigin: string | undefined;
   demoRestOrigin: string | undefined;
   demoHandoffOrigin: string | undefined;
+  demoInboxOrigin: string | undefined;
 } {
   return dependencies as {
     restOrigin: string | undefined;
     handoffOrigin: string | undefined;
+    inboxOrigin: string | undefined;
     demoRestOrigin: string | undefined;
     demoHandoffOrigin: string | undefined;
+    demoInboxOrigin: string | undefined;
   };
 }
 

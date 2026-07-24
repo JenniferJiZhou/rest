@@ -36,7 +36,8 @@ describe("server listener configuration", () => {
       LLM_TIMEOUT_MS: 15_000,
       MAIL_FETCH_TIMEOUT_MS: 10_000,
       DRAFT_CREATE_TIMEOUT_MS: 10_000,
-      COMPLETION_SEND_TIMEOUT_MS: 5_000
+      COMPLETION_SEND_TIMEOUT_MS: 5_000,
+      INBOX_POLL_INTERVAL_MS: 30_000
     });
   });
 
@@ -44,7 +45,8 @@ describe("server listener configuration", () => {
     ["LLM_TIMEOUT_MS", "0"],
     ["MAIL_FETCH_TIMEOUT_MS", "-1"],
     ["DRAFT_CREATE_TIMEOUT_MS", "NaN"],
-    ["COMPLETION_SEND_TIMEOUT_MS", "120001"]
+    ["COMPLETION_SEND_TIMEOUT_MS", "120001"],
+    ["INBOX_POLL_INTERVAL_MS", "99"]
   ])("rejects invalid %s=%s", (name, value) => {
     expect(() =>
       loadConfig({
@@ -53,5 +55,20 @@ describe("server listener configuration", () => {
         [name]: value
       })
     ).toThrow("Invalid server configuration");
+  });
+
+  it("accepts empty optional Inbox credentials as unconfigured", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      LOG_LEVEL: "silent",
+      LARK_CLI_PATH: "",
+      DWS_CLI_PATH: "",
+      OUTLOOK_ACCESS_TOKEN: "",
+      QQ_EMAIL_AUTH_CODE: ""
+    });
+
+    expect(config.LARK_CLI_PATH).toBeUndefined();
+    expect(config.OUTLOOK_ACCESS_TOKEN).toBeUndefined();
+    expect(config.QQ_EMAIL_AUTH_CODE).toBeUndefined();
   });
 });

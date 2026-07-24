@@ -6,6 +6,14 @@ import { z } from "zod";
 const sourceDirectory = dirname(fileURLToPath(import.meta.url));
 loadDotEnv({ path: resolve(sourceDirectory, "../../.env"), quiet: true });
 
+const optionalString = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim().length === 0
+      ? undefined
+      : value,
+  z.string().trim().min(1).optional()
+);
+
 const environmentSchema = z
   .object({
     HOST: z.string().trim().min(1).default("127.0.0.1"),
@@ -40,6 +48,20 @@ const environmentSchema = z
       .min(100)
       .max(120_000)
       .default(5_000),
+    INBOX_POLL_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(3_600_000)
+      .default(30_000),
+    LARK_CLI_PATH: optionalString,
+    LARK_ACCOUNT_ID: optionalString,
+    DWS_CLI_PATH: optionalString,
+    DINGTALK_ACCOUNT_ID: optionalString,
+    OUTLOOK_ACCOUNT_ID: optionalString,
+    OUTLOOK_ACCESS_TOKEN: optionalString,
+    QQ_EMAIL_ADDRESS: optionalString,
+    QQ_EMAIL_AUTH_CODE: optionalString,
     HUSH_DEMO_MODE: z
       .enum(["true", "false"])
       .default("false")

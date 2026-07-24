@@ -39,7 +39,17 @@ class W2MessagingHarness
   readonly channel: MessagingChannel = {
     health: async () =>
       this.scenario === "ready" ? "ready" : "unavailable",
-    send: async (message) => {
+    send: async (message, options) => {
+      if (options?.signal?.aborted) {
+        throw new AppError({
+          code: "PHOTON_UNAVAILABLE",
+          message: "消息发送已取消。",
+          statusCode: 503,
+          retryable: true,
+          fallback: "APP_ONLY",
+          details: { reason: "aborted" }
+        });
+      }
       if (this.scenario === "unavailable") {
         throw new AppError({
           code: "PHOTON_UNAVAILABLE",

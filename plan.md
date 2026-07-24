@@ -1,6 +1,6 @@
 # Hush Unified Inbox 需求与实现计划
 
-状态：设计已确认，等待书面复核  
+状态：Fixture 端到端实现已完成；真实账号/租户验证待凭据与管理员审批
 日期：2026-07-24  
 范围：替换 W2/P3 原 Photon 工作，面向中国用户构建可在 Hush 后台运行的统一消息与邮件收件箱。
 
@@ -287,32 +287,21 @@ OpenCLI 仅作为平台官方接口确实无法覆盖某项 Demo 能力时的显
 
 ## 11. 协作与契约变更
 
-当前仓库的 `AGENTS.md`、范围文档、系统边界、团队所有权、OpenAPI、schemas、
-fixtures 和测试仍以 Gmail/Photon 为中心，并禁止外部消息自动发送。因此不能
-只替换 Adapter 后直接开发。
+治理变更已经完成：`AGENTS.md` 已授权 W2/P3 端到端维护 Unified Inbox 的
+contracts、application、API、provider adapters、Composition Root 和测试。
+当前已新增 provider-neutral 的 `InboxSource`、`InboxSender`、
+`InboxIntelligenceProvider`、草稿版本、一次性确认令牌、发送幂等和
+`unknown` 结果。W1/P2 仅在共享后端基础设施受影响时参与兼容性评审。
 
-开发前必须先更新 `AGENTS.md` 与团队所有权文档，将 Unified Inbox 的公共
-contracts、application、API、Composition Root 修改权授予 W2/P3。该治理变更
-由 M1/P1、W1/P2、W2/P3 和受影响 UI Owner 共同评审。
-
-治理变更通过后，由 W2/P3 发起并实现 Unified Inbox Contract Change：
-
-1. 删除 Photon webhook 和 Gmail 专属命名，增加 provider-neutral Inbox。
-2. 扩展 `MailProvider`/`MessagingChannel`，或拆分为
-   `InboxSource`、`InboxSender` 和 `InboxIntelligenceProvider`。
-3. 冻结 Inbox item、draft、send command、sync status 和 error schemas。
-4. 加入用户确认、版本冲突、发送幂等和 `unknown` 结果。
-5. 更新 TS、Swift 镜像、fixtures 和 provider contract tests。
-6. 由 M1/P1、W1/P2、W2/P3 和受影响 UI Owner 共同评审。
-
-所有权治理变更合并前，W2/P3 只做独立 spike 和 Provider Harness，不修改当前
-仍受保护的公共 contracts、application、composition 或 Xcode 工程。治理变更
-合并后，Unified Inbox 相关 contracts、application、API 和 composition 由
-W2/P3 独占实现；W1/P2 仅在共享基础设施受影响时做兼容性评审。
+M2/P4 可直接依据 `contracts/openapi.yaml`、JSON schemas 和 fixtures 实现
+App UI；M1/P1 负责 Apple 客户端网络接线与后台生命周期。若客户端需要改变
+现有字段或状态机，必须提交 Contract Change，不得静默派生另一套模型。
 
 ## 12. 实现路径
 
 ### Phase 0：权限可行性验证
+
+状态：待真实账号、租户管理员审批和授权码；CI 不宣称通过。
 
 - 为四个渠道准备独立 Demo 账号/租户。
 - 验证接收范围、历史窗口、增量同步、单聊/群聊或邮件回复、token 刷新。
@@ -321,6 +310,8 @@ W2/P3 独占实现；W1/P2 仅在共享基础设施受影响时做兼容性评�
 
 ### Phase 1：W2/P3 Ownership 与 Contract Change
 
+状态：已完成并由 contract tests 验证。
+
 - 更新所有权规则，获得 Unified Inbox 相关公共目录的明确修改权。
 - 冻结统一数据模型和本文 API。
 - 提供成功、空 Inbox、权限不足、AI 失败、版本冲突、发送超时 fixtures。
@@ -328,11 +319,15 @@ W2/P3 独占实现；W1/P2 仅在共享基础设施受影响时做兼容性评�
 
 ### Phase 2：W2/P3 Connector Host
 
+状态：代码与无凭据 Harness 已完成；真实渠道 smoke test 待 Phase 0。
+
 - 先实现 Connector Host 生命周期、checkpoint、去重和 Fixture Provider。
 - 再按飞书、钉钉、Outlook、QQ 的顺序接入 Real Provider。
 - 验收：重启不丢 checkpoint，同一事件不重复入库，凭据和正文不进入日志。
 
 ### Phase 3：W2/P3 Inbox 与 AI 编排
+
+状态：Fixture、Unavailable 和 Real AI 接口已完成；真实 AI 调用待 API 凭据。
 
 - 实现 Inbox repository/query、AI Provider、摘要和草稿任务。
 - 实现草稿版本、确认令牌、发送幂等和 Adapter 调用。
@@ -340,10 +335,14 @@ W2/P3 独占实现；W1/P2 仅在共享基础设施受影响时做兼容性评�
 
 ### Phase 4：Hush App
 
+状态：不在 W2/P3 当前代码范围，由 M2/P4 与 M1/P1 接线。
+
 - 实现统一 Inbox、来源覆盖、摘要、草稿编辑、确认发送和错误恢复。
 - 验收：用户可完全改写 AI 草稿，看到最终收件人和正文后再发送。
 
 ### Phase 5：端到端与 Demo 冻结
+
+状态：Fixture vertical slice 已完成；真实四渠道 Demo 待 Phase 0。
 
 - 用真实 Demo 账号分别演示后台接收、摘要、草稿、编辑和确认发送。
 - 注入断网、token 过期、重复点击、AI 超时和 SMTP 结果未知。

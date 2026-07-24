@@ -3,10 +3,12 @@ import { buildServerDependencies } from "./composition.js";
 import { loadConfig } from "./config.js";
 
 const config = loadConfig();
-const server = createServer(buildServerDependencies(config));
+const dependencies = buildServerDependencies(config);
+const server = createServer(dependencies);
 
 const close = async (signal: string): Promise<void> => {
   server.log.info({ signal }, "shutting down");
+  dependencies.connectorHost.stop();
   await server.close();
   process.exit(0);
 };
@@ -23,6 +25,7 @@ try {
     host: config.HOST,
     port: config.PORT
   });
+  dependencies.connectorHost.start();
   server.log.info(
     { host: config.HOST, port: config.PORT },
     "server listening"
