@@ -127,3 +127,45 @@ Output: passed with no errors.
 ### Remaining concern
 
 - `pnpm` is unavailable on this container PATH; direct installed `vitest` and `tsc` commands were used for the recorded verification.
+
+## Re-review safety fixes
+
+### Implementation
+
+- Lark and DingTalk adapters now classify only explicit official envelope conversation types: `group` maps to `group`; `p2p` and `direct` map to `direct`; missing or unrecognized values are withheld from normalized events.
+- The adapters consume the envelope conversation display name when available and use generic provider labels otherwise. Sender fallbacks use display-name fields only and never fall back to provider user IDs.
+- The real intelligence prompt explicitly requires `reply_targets` as an array, permits `[]` only when no safe target exists, and specifies `target_id`, `display_name`, and `reason` for every target. Runtime Zod validation remains required; malformed real-provider output is sanitized as `INBOX_AI_UNAVAILABLE`.
+
+### RED → GREEN
+
+```bash
+./node_modules/.bin/vitest run tests/unit/inbox-cli-adapters.test.ts tests/unit/inbox-intelligence.test.ts
+```
+
+RED output: 5 expected failures. Existing adapters emitted `direct` for group, missing, and unknown envelopes; DingTalk exposed the `senderId` fallback; and the real-provider prompt did not contain `reply_targets`. The mocked Anthropic constructor was injected successfully, and the missing-`reply_targets` response already followed the required-schema sanitization path.
+
+GREEN output: 2 files passed, 11 tests passed.
+
+Follow-up verification:
+
+```bash
+./node_modules/.bin/vitest run tests/contracts/fixtures.test.ts tests/contracts/openapi.test.ts tests/unit/inbox-repositories.test.ts tests/unit/inbox-service.test.ts tests/unit/connector-host.test.ts
+./node_modules/.bin/vitest run tests/unit/inbox-cli-adapters.test.ts tests/provider-contracts/inbox-provider-kit.test.ts tests/integration/inbox-http.test.ts
+./node_modules/.bin/tsc --noEmit
+```
+
+Output: contracts and affected unit tests passed; CLI/provider/integration: 3 files and 17 tests passed; typecheck passed with no output.
+
+### Files
+
+- `server/src/inbox/providers/lark-cli-adapter.ts`
+- `server/src/inbox/providers/dingtalk-dws-adapter.ts`
+- `server/src/inbox/intelligence.ts`
+- `server/tests/unit/inbox-cli-adapters.test.ts`
+- `server/tests/unit/inbox-intelligence.test.ts`
+
+### Self-review
+
+- No unknown provider conversation type is presented as direct, and no participant binding, mentions, group aggregation, acknowledgement endpoint behavior, or StepFun work was added.
+- Group source events remain raw internal events; the test constructs a public `conversation_digest` and proves the existing Zod redaction constraint accepts only null sender/content fields.
+- Valid real-provider JSON with `reply_targets` parses, while an omitted field is rejected and sanitized without supplying a default.

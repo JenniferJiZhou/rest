@@ -20,6 +20,8 @@ export interface DingTalkDwsConfig {
 interface DingTalkMessage {
   messageId?: unknown;
   conversationId?: unknown;
+  conversationType?: unknown;
+  conversationName?: unknown;
   senderId?: unknown;
   sender?: unknown;
   text?: unknown;
@@ -177,18 +179,21 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
   ): InboxEvent | null {
     const messageId = stringValue(message.messageId);
     const conversationId = stringValue(message.conversationId);
+    const conversationType = conversationTypeValue(message.conversationType);
     const receivedAt = timestampValue(
       message.createdAt ?? message.createTime
     );
-    if (!messageId || !conversationId || !receivedAt) {
+    if (!messageId || !conversationId || !conversationType || !receivedAt) {
       return null;
     }
     return {
       provider: this.provider,
       account_id: accountId,
       conversation_id: conversationId,
-      conversation_type: "direct",
-      conversation_name: "钉钉会话",
+      conversation_type: conversationType,
+      conversation_name:
+        stringValue(message.conversationName) ??
+        (conversationType === "group" ? "钉钉群聊" : "钉钉会话"),
       provider_message_id: messageId,
       sender: senderValue(message.sender, message.senderId),
       sender_ref: null,
@@ -276,20 +281,32 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function senderValue(sender: unknown, fallback: unknown): string {
+function senderValue(sender: unknown, _fallback: unknown): string {
   if (typeof sender === "string" && sender.length > 0) {
     return sender;
   }
   if (typeof sender === "object" && sender !== null) {
     const record = sender as Record<string, unknown>;
-    for (const key of ["name", "nick", "id", "userId"]) {
+    for (const key of ["name", "nick", "displayName"]) {
       const value = stringValue(record[key]);
       if (value) {
         return value;
       }
     }
   }
-  return stringValue(fallback) ?? "unknown";
+  return "未知发送者";
+}
+
+function conversationTypeValue(value: unknown): "direct" | "group" | null {
+  switch (stringValue(value)?.trim().toLowerCase()) {
+    case "group":
+      return "group";
+    case "p2p":
+    case "direct":
+      return "direct";
+    default:
+      return null;
+  }
 }
 
 function contentValue(content: unknown): string {

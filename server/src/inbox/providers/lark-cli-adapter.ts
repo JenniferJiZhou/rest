@@ -19,6 +19,9 @@ export interface LarkCliConfig {
 interface LarkMessage {
   message_id?: unknown;
   chat_id?: unknown;
+  chat_type?: unknown;
+  chat_name?: unknown;
+  conversation_name?: unknown;
   sender_id?: unknown;
   sender?: unknown;
   content?: unknown;
@@ -163,16 +166,20 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
   ): InboxEvent | null {
     const messageId = stringValue(message.message_id);
     const chatId = stringValue(message.chat_id);
+    const conversationType = conversationTypeValue(message.chat_type);
     const receivedAt = timestampValue(message.create_time);
-    if (!messageId || !chatId || !receivedAt) {
+    if (!messageId || !chatId || !conversationType || !receivedAt) {
       return null;
     }
     return {
       provider: this.provider,
       account_id: accountId,
       conversation_id: chatId,
-      conversation_type: "direct",
-      conversation_name: "飞书会话",
+      conversation_type: conversationType,
+      conversation_name:
+        stringValue(message.chat_name) ??
+        stringValue(message.conversation_name) ??
+        (conversationType === "group" ? "飞书群聊" : "飞书会话"),
       provider_message_id: messageId,
       sender: senderValue(message.sender, message.sender_id),
       sender_ref: null,
@@ -243,20 +250,32 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function senderValue(sender: unknown, fallback: unknown): string {
+function senderValue(sender: unknown, _fallback: unknown): string {
   if (typeof sender === "string" && sender.length > 0) {
     return sender;
   }
   if (typeof sender === "object" && sender !== null) {
     const record = sender as Record<string, unknown>;
-    for (const key of ["name", "id", "open_id", "sender_id"]) {
+    for (const key of ["name", "display_name", "nickname"]) {
       const value = stringValue(record[key]);
       if (value) {
         return value;
       }
     }
   }
-  return stringValue(fallback) ?? "unknown";
+  return "未知发送者";
+}
+
+function conversationTypeValue(value: unknown): "direct" | "group" | null {
+  switch (stringValue(value)?.trim().toLowerCase()) {
+    case "group":
+      return "group";
+    case "p2p":
+    case "direct":
+      return "direct";
+    default:
+      return null;
+  }
 }
 
 function contentValue(content: unknown): string {

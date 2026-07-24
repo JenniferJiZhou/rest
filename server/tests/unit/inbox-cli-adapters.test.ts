@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { unifiedInboxItemSchema } from "../../src/domain/contracts.js";
 import {
   DingTalkDwsAdapter,
   LarkCliAdapter
@@ -17,6 +18,8 @@ describe("Inbox CLI adapters", () => {
           {
             message_id: "lark-message-1",
             chat_id: "lark-chat-1",
+            chat_type: "p2p",
+            chat_name: "飞书私聊",
             sender: {
               id: "lark-user-1",
               name: "飞书用户"
@@ -52,6 +55,8 @@ describe("Inbox CLI adapters", () => {
     expect(pulled.items[0]).toMatchObject({
       provider: "feishu",
       provider_message_id: "lark-message-1",
+      conversation_type: "direct",
+      conversation_name: "飞书私聊",
       sender: "飞书用户",
       content: "飞书消息",
       received_at: "2026-07-24T01:00:00.000Z"
@@ -112,6 +117,8 @@ describe("Inbox CLI adapters", () => {
             {
               messageId: "ding-message-1",
               conversationId: "ding-chat-1",
+              conversationType: "p2p",
+              conversationName: "钉钉私聊",
               senderId: "ding-user-1",
               text: "钉钉消息",
               createdAt: "2026-07-24T09:00:00+08:00"
@@ -229,6 +236,194 @@ describe("Inbox CLI adapters", () => {
     ).rejects.toMatchObject({
       code: "INBOX_PROVIDER_UNAVAILABLE"
     });
+  });
+
+  it("maps known group envelopes and supports public digest redaction", async () => {
+    const adapter = new LarkCliAdapter(
+      {
+        executable: "/opt/lark-cli",
+        accountId: "lark-account"
+      },
+      new RecordingRunner([
+        JSON.stringify({
+          items: [
+            {
+              message_id: "lark-group-message-1",
+              chat_id: "lark-group-1",
+              chat_type: "group",
+              chat_name: "产品讨论组",
+              sender: { name: "王同学" },
+              content: "请确认接口交付时间",
+              create_time: "1784854800000"
+            }
+          ],
+          has_more: false
+        })
+      ])
+    );
+
+    const pulled = await adapter.pull({
+      accountId: "lark-account",
+      checkpoint: null,
+      limit: 20
+    });
+    const sourceEvent = pulled.items[0]!;
+
+    const dingtalk = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          result: {
+            messages: [
+              {
+                messageId: "ding-group-message-1",
+                conversationId: "ding-group-1",
+                conversationType: "GROUP",
+                conversationName: "产品讨论组",
+                sender: { name: "王同学" },
+                text: "请确认接口交付时间",
+                createdAt: "2026-07-24T09:00:00+08:00"
+              }
+            ],
+            hasMore: false
+          }
+        })
+      ])
+    );
+    const dingtalkPulled = await dingtalk.pull({
+      accountId: "ding-account",
+      checkpoint: null,
+      limit: 20
+    });
+
+    expect(sourceEvent).toMatchObject({
+      conversation_type: "group",
+      conversation_name: "产品讨论组",
+      sender: "王同学"
+    });
+    expect(dingtalkPulled.items[0]).toMatchObject({
+      conversation_type: "group",
+      conversation_name: "产品讨论组",
+      sender: "王同学"
+    });
+    expect(
+      unifiedInboxItemSchema.parse({
+        id: "inbox-group-1",
+        ...sourceEvent,
+        sender: null,
+        sender_ref: null,
+        content: null,
+        item_kind: "conversation_digest",
+        revision: 1,
+        message_count: 1,
+        window_started_at: sourceEvent.received_at,
+        window_ended_at: sourceEvent.received_at,
+        sealed_at: null,
+        acknowledged_at: null,
+        summary: "产品讨论组需要确认接口交付时间。",
+        important_points: [],
+        todos: [],
+        priority: "normal",
+        needs_reply: true,
+        reply_targets: [],
+        draft_id: null,
+        sync_status: "ready"
+      })
+    ).toMatchObject({ sender: null, content: null });
+  });
+
+  it("withholds envelopes with missing or unknown conversation types", async () => {
+    const lark = new LarkCliAdapter(
+      { executable: "/opt/lark-cli", accountId: "lark-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          items: [
+            {
+              message_id: "lark-missing-type",
+              chat_id: "lark-chat-1",
+              sender: "飞书用户",
+              content: "消息",
+              create_time: "1784854800000"
+            },
+            {
+              message_id: "lark-unknown-type",
+              chat_id: "lark-chat-2",
+              chat_type: "channel",
+              sender: "飞书用户",
+              content: "消息",
+              create_time: "1784854800000"
+            }
+          ],
+          has_more: false
+        })
+      ])
+    );
+    const dingtalk = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          result: {
+            messages: [
+              {
+                messageId: "ding-missing-type",
+                conversationId: "ding-chat-1",
+                sender: "钉钉用户",
+                text: "消息",
+                createdAt: "2026-07-24T09:00:00+08:00"
+              },
+              {
+                messageId: "ding-unknown-type",
+                conversationId: "ding-chat-2",
+                conversationType: "channel",
+                sender: "钉钉用户",
+                text: "消息",
+                createdAt: "2026-07-24T09:00:00+08:00"
+              }
+            ],
+            hasMore: false
+          }
+        })
+      ])
+    );
+
+    await expect(
+      lark.pull({ accountId: "lark-account", checkpoint: null, limit: 20 })
+    ).resolves.toMatchObject({ items: [] });
+    await expect(
+      dingtalk.pull({ accountId: "ding-account", checkpoint: null, limit: 20 })
+    ).resolves.toMatchObject({ items: [] });
+  });
+
+  it("does not expose provider user IDs as sender display names", async () => {
+    const adapter = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          result: {
+            messages: [
+              {
+                messageId: "ding-id-only",
+                conversationId: "ding-chat-1",
+                conversationType: "direct",
+                senderId: "provider-user-id-should-not-leak",
+                text: "消息",
+                createdAt: "2026-07-24T09:00:00+08:00"
+              }
+            ],
+            hasMore: false
+          }
+        })
+      ])
+    );
+
+    const pulled = await adapter.pull({
+      accountId: "ding-account",
+      checkpoint: null,
+      limit: 20
+    });
+
+    expect(pulled.items[0]?.sender).toBe("未知发送者");
+    expect(pulled.items[0]?.sender).not.toContain("provider-user-id");
   });
 });
 
