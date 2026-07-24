@@ -75,4 +75,26 @@ describe("deployment artifacts", () => {
     expect(dockerignore).toContain("*.pem");
     expect(dockerignore).toContain("*.key");
   });
+
+  it("keeps Unified Inbox smoke opt-in and on the existing HTTPS origin", () => {
+    const smoke = readFileSync(
+      resolve(repositoryRoot, "scripts/smoke-unified-inbox.ps1"),
+      "utf8"
+    );
+
+    expect(smoke).toContain("[string]$BaseUrl");
+    expect(smoke).toContain("[switch]$AllowSimulatedSend");
+    expect(smoke).toContain(
+      "HTTPS smoke requires an https BaseUrl"
+    );
+    expect(smoke).toContain(
+      "no network request was made"
+    );
+    expect(smoke).not.toContain(
+      'BaseUrl = "https://'
+    );
+    expect(smoke).toContain(
+      'delivery_mode -ne "simulated"'
+    );
+  });
 });

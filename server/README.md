@@ -69,7 +69,7 @@ corepack pnpm test:deployment
 ```
 
 `test:contracts` validates fixtures and local OpenAPI references. The current
-full suite contains 305 deterministic tests. W1-04
+full suite contains 432 deterministic tests. W1-04
 vertical-slice tests use real TCP/HTTP on a random `127.0.0.1` port and do not
 expose a stable development port.
 
@@ -77,6 +77,14 @@ expose a stable development port.
 
 - Without both `CLAUDE_API_KEY` and `CLAUDE_MODEL`, Agent calls use
   `CannedAgentLLM`. Canned output is Mock data; it is not real Claude output.
+- `HUSH_REST_DECISION_PROVIDER` independently selects `real`, `canned`, or
+  `unavailable` for `POST /v1/rest/evaluate`. Real mode uses
+  `REST_DECISION_MODEL` (falling back to `CLAUDE_MODEL`), `CLAUDE_API_KEY`,
+  and `CLAUDE_BASE_URL`. Missing Real configuration selects the explicit
+  Unavailable Provider; it never silently falls back to Canned.
+- Demo Rest Decision always uses its own Canned Provider and never calls the
+  model API. A successful Real Rest Decision response is marked
+  `X-Hush-Data-Origin: real`; Canned and Demo responses are `mock`.
 - Until Gmail Owner supplies a Gmail adapter, the real Handoff path completes with
   user-submitted open loops only and explicitly marks Gmail as unavailable.
 - A valid demo token switches to fixture mail and canned Agent behavior.
@@ -93,14 +101,19 @@ expose a stable development port.
 Provider calls are bounded by validated environment settings:
 
 ```text
+REST_DECISION_TIMEOUT_MS=3500
 LLM_TIMEOUT_MS=15000
 MAIL_FETCH_TIMEOUT_MS=10000
 DRAFT_CREATE_TIMEOUT_MS=10000
 COMPLETION_SEND_TIMEOUT_MS=5000
 ```
 
-Each accepts an integer from 100 through 120000 milliseconds. Handoff
+Rest Decision accepts 500–4500 milliseconds. The other timeouts accept an
+integer from 100 through 120000 milliseconds. Handoff
 cancellation aborts the active Agent, Mail, Draft, or Completion call.
+Rest Decision timeout and HTTP client disconnect also abort the active model
+call. Timeout, unavailable infrastructure, and invalid model output return
+HTTP 503 and are not cached as successful decisions.
 Completion notification is an auxiliary delivery: failure or timeout is
 logged by correlation ID but does not reverse an already persisted
 `succeeded` Job. A failed draft remains in `drafts` with `saved=false` and in
@@ -146,3 +159,37 @@ wires those exports in `src/composition.ts` after review.
 
 The Gmail adapter must honor `DraftRequest.dedupeKey`. It must never send mail;
 `createDraft` only creates or returns an existing draft.
+
+## Real Rest Decision
+
+The Real Provider uses the versioned `rest-decision-v1.0` System Prompt,
+strict JSON input, Anthropic JSON Schema structured output, fixed reason and
+Quest allowlists, and the server Output Guard. It has no tools and cannot
+control Shield, notifications, actions, request IDs, or checkpoints.
+
+See `../docs/19_REAL_REST_DECISION_AGENT.md` for configuration, failure
+behavior, staging handoff, prompt-version policy, and manual evaluation.
+
+## Unified Inbox Mock Vertical Slice
+
+Seven `/v1/inbox/**` operations implement provider-neutral list/detail,
+acknowledge, draft CAS updates/discard, short-lived confirmation, and send.
+Normal defaults to `HUSH_UNIFIED_INBOX_PROVIDER=unavailable`; explicit
+`canned` and the isolated Demo graph use fixed fixtures. Canned send returns
+`delivery_mode=simulated` with `X-Hush-Data-Origin: mock` and never contacts
+Feishu, DingTalk, Outlook, or QQ Mail.
+
+Drafts, confirmations, idempotency claims, and atomic send claims are
+process-local. Restart and multiple instances do not preserve or share this
+state. Swift mapping and the remaining real-integration work are documented
+in `../docs/21_UNIFIED_INBOX_CONTRACT_AND_SWIFT_MAPPING.md`.
+
+Local smoke defaults to read/edit/confirm without send:
+
+```powershell
+..\scripts\smoke-unified-inbox.ps1 `
+  -BaseUrl "http://127.0.0.1:3000" `
+  -Mode LocalHttp
+```
+
+Only a controlled mock environment may add `-AllowSimulatedSend`.

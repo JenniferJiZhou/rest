@@ -124,6 +124,20 @@ not need a Demo Token. Set `HUSH_REST_DECISION_PROVIDER=unavailable` only for
 the immediate 503 failure-injection path; it does not call a network service.
 Normal Canned and Demo Canned both report origin `mock`.
 
+Credentialed Real staging keeps the same HTTPS settings and uses:
+
+```text
+HUSH_REST_DECISION_PROVIDER=real
+CLAUDE_API_KEY=<secret>
+CLAUDE_BASE_URL=https://api.anthropic.com
+REST_DECISION_MODEL=<deployment-selected-model>
+REST_DECISION_TIMEOUT_MS=3500
+```
+
+`REST_DECISION_MODEL` falls back to `CLAUDE_MODEL`. Incomplete Real
+configuration is Unavailable and never silently falls back to Canned. See
+`docs/19_REAL_REST_DECISION_AGENT.md` for the Prompt and failure contract.
+
 Demo is selected only when server configuration and request Header all match:
 
 ```text
@@ -286,6 +300,7 @@ The Apple Owner must:
 6. Confirm notifications and Shield remain entirely Apple-controlled.
 7. Run standard CI with Node 20.19.5 and pnpm 9.15.9.
 8. When Docker daemon is available, verify build, health, and SIGTERM.
-9. Integrate a Real Rest Decision Provider in a separate task.
+9. Configure credentials and run the implemented Real Provider staging
+   evaluation without logging model payloads or Secrets.
 10. Add production client authentication, abuse protection, and rate limiting
     only through a later Contract Change.

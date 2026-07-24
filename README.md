@@ -36,3 +36,8 @@ HTTPS staging、Render、Docker 与 Apple 真机交接步骤见
 `docs/18_HTTPS_STAGING_AND_CLOUD_DEPLOYMENT.md` 和
 `docs/17_APPLE_REST_DECISION_HANDOFF.md`。仓库只提供可重复配置，不包含已创建的
 云资源、证书或 Secret。
+
+Real Rest Decision Provider 已实现，并通过独立的 Normal/Demo 组合图隔离；
+Prompt、严格结构化输出、失败行为和凭据化 HTTPS staging 交接见
+`docs/19_REAL_REST_DECISION_AGENT.md`。模型不能控制 Shield、通知、actions
+或下一 checkpoint。

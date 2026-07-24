@@ -1,6 +1,6 @@
 # HTTPS Staging and Cloud Deployment
 
-Status: deployment-ready configuration; no cloud resource has been created.  
+Status: deployment-ready configuration; no cloud resource has been created.
 HTTPS staging URL: pending
 
 ## Architecture
@@ -77,14 +77,27 @@ HUSH_REST_DECISION_PROVIDER=unavailable
 ```
 
 This makes `/v1/rest/evaluate` return the existing safe HTTP 503 response.
-Restore `canned` after the test. A future Real Provider is not implemented;
-do not invent a value or add a model key until its separate integration task.
+Restore the intended Provider after the test. The implemented credentialed
+Real mode uses:
+
+```text
+HUSH_REST_DECISION_PROVIDER=real
+CLAUDE_API_KEY=<secret>
+CLAUDE_BASE_URL=https://api.anthropic.com
+REST_DECISION_MODEL=<deployment-selected-model>
+REST_DECISION_TIMEOUT_MS=3500
+```
+
+`REST_DECISION_MODEL` falls back to `CLAUDE_MODEL`. Missing Real credentials
+or model configuration selects Unavailable; runtime failure, timeout, and
+invalid output never fall back to Canned. Keep these values in the platform
+environment or secret store rather than `render.yaml`.
 
 Secret values include `HUSH_DEMO_TOKEN`, model/API keys, OAuth tokens,
 Gmail/Photon credentials, SMTP credentials, and webhook secrets. Enter them
-only in the platform secret store when a later task actually requires them.
-Never put them in `render.yaml`, `.env.example`, curl examples, logs, or an
-Apple binary.
+only in the platform secret store when the selected staging mode requires
+them. Never put them in `render.yaml`, `.env.example`, curl examples, logs,
+or an Apple binary.
 
 ## First deploy and verification
 
@@ -158,8 +171,9 @@ Generic platform checklist:
 - `TRUST_PROXY=true` only behind the trusted platform proxy;
 - TLS termination and valid public certificate at the platform edge;
 - health path `/v1/health`;
-- Canned normal graph for controlled staging;
-- secret store for any later credentials;
+- Canned normal graph for HTTPS-only controlled staging, or explicitly
+  configured Real normal graph for credentialed Agent staging;
+- secret store for credentials;
 - SIGTERM grace period long enough for Fastify `close()`.
 
 ## Rollback and operations

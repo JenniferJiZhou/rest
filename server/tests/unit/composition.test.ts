@@ -23,6 +23,39 @@ import {
 } from "../../src/infra/provider-stubs.js";
 
 describe("server dependency graph isolation", () => {
+  it("selects the real Rest Decision graph without changing the other Agent graph", async () => {
+    const dependencies = buildServerDependencies(
+      config({
+        HUSH_REST_DECISION_PROVIDER: "real",
+        CLAUDE_API_KEY: "not-used-unless-called",
+        REST_DECISION_MODEL: "claude-test-model"
+      })
+    );
+
+    expect(dependencies.restDecisionOrigin).toBe("real");
+    expect(dependencies.restOrigin).toBe("mock");
+    await expect(
+      dependencies.providerHealth()
+    ).resolves.toMatchObject({
+      rest_decision: "ready"
+    });
+  });
+
+  it("makes an incompletely configured real Provider unavailable instead of falling back to Canned", async () => {
+    const dependencies = buildServerDependencies(
+      config({
+        HUSH_REST_DECISION_PROVIDER: "real"
+      })
+    );
+
+    expect(dependencies.restDecisionOrigin).toBe("mock");
+    await expect(
+      dependencies.providerHealth()
+    ).resolves.toMatchObject({
+      rest_decision: "unavailable"
+    });
+  });
+
   it("marks normal graphs with missing Claude as mock", () => {
     const dependencies = buildServerDependencies(config());
 

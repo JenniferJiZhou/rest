@@ -69,6 +69,50 @@ describe("OpenAPI contract", () => {
       $ref: "#/components/responses/Error"
     });
   });
+
+  it("declares the seven Unified Inbox operations with shared protocol responses", () => {
+    const document = parse(
+      readFileSync(openApiPath, "utf8")
+    ) as OpenApiDocument;
+    const operations = [
+      ["/v1/inbox/items", "get", "listUnifiedInboxItems"],
+      ["/v1/inbox/items/{itemId}", "get", "getUnifiedInboxItem"],
+      [
+        "/v1/inbox/items/{itemId}:acknowledge",
+        "post",
+        "acknowledgeUnifiedInboxItem"
+      ],
+      ["/v1/inbox/drafts/{draftId}", "get", "getUnifiedInboxDraft"],
+      ["/v1/inbox/drafts/{draftId}", "patch", "updateUnifiedInboxDraft"],
+      [
+        "/v1/inbox/drafts/{draftId}/confirmation",
+        "post",
+        "createUnifiedInboxConfirmation"
+      ],
+      [
+        "/v1/inbox/drafts/{draftId}:send",
+        "post",
+        "sendUnifiedInboxDraft"
+      ]
+    ] as const;
+
+    for (const [path, method, operationId] of operations) {
+      const operation = document.paths[path]?.[method];
+      expect(operation?.operationId).toBe(operationId);
+      expect(operation?.responses["400"]).toEqual({
+        $ref: "#/components/responses/Error"
+      });
+      expect(operation?.responses["404"]).toEqual({
+        $ref: "#/components/responses/Error"
+      });
+      expect(operation?.responses["409"]).toEqual({
+        $ref: "#/components/responses/Error"
+      });
+      expect(operation?.responses["503"]).toEqual({
+        $ref: "#/components/responses/Error"
+      });
+    }
+  });
 });
 
 interface OpenApiResponse {
@@ -79,7 +123,13 @@ interface OpenApiResponse {
 interface OpenApiDocument {
   paths: Record<
     string,
-    Record<string, { responses: Record<string, OpenApiResponse> }>
+    Record<
+      string,
+      {
+        operationId?: string;
+        responses: Record<string, OpenApiResponse>;
+      }
+    >
   >;
   components: {
     responses: { Error: OpenApiResponse };
