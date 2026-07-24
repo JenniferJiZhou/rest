@@ -31,3 +31,8 @@
 ## 当前包的性质
 
 这是**协议、可执行后端和分阶段客户端工程并存的开发仓库**，不是已完成的生产系统。Unified Inbox 的 Fixture 端到端路径和四渠道 Real Adapter 已实现；飞书/钉钉租户审批、Outlook delegated token、QQ 邮箱授权码、Apple 真机最后一跳和 HTTPS staging 仍需真实环境验证。
+
+HTTPS staging、Render、Docker 与 Apple 真机交接步骤见
+`docs/18_HTTPS_STAGING_AND_CLOUD_DEPLOYMENT.md` 和
+`docs/17_APPLE_REST_DECISION_HANDOFF.md`。仓库只提供可重复配置，不包含已创建的
+云资源、证书或 Secret。

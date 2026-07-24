@@ -37,15 +37,8 @@ struct BlueResetView: View {
             }
             .hushPanel(emphasized: true)
 
-            Label(
-                card.reviewedByBluebox ? "Blue Box 内容已审核" : "示例内容，待 Blue Box 审核",
-                systemImage: card.reviewedByBluebox ? "checkmark.seal.fill" : "exclamationmark.triangle.fill"
-            )
-            .font(HushType.caption)
-            .foregroundStyle(card.reviewedByBluebox ? HushColor.mint : HushColor.warm)
-
-            Text("这是一段普通的注意力引导，不用于改善或治疗失眠、焦虑等医学问题。")
-                .font(HushType.caption)
+            Text("感到不适时，可以随时停下。")
+                .font(HushType.micro)
                 .foregroundStyle(HushColor.textSecondary)
 
             Button(action: onDone) {

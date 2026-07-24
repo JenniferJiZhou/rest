@@ -31,6 +31,50 @@
 		A00000000000000000000022 /* Shared/Core/HushLockdownState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */; };
 		A00000000000000000000023 /* iOSApp/Platform/LockdownCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */; };
 		A00000000000000000000024 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */; };
+		A10000000000000000000001 /* HushComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* HushComponents.swift */; };
+		A10000000000000000000002 /* HushComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* HushComponents.swift */; };
+		A10000000000000000000003 /* HushTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* HushTokens.swift */; };
+		A10000000000000000000004 /* HushTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* HushTokens.swift */; };
+		A10000000000000000000005 /* HushWaveBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* HushWaveBackground.swift */; };
+		A10000000000000000000006 /* HushWaveBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* HushWaveBackground.swift */; };
+		A10000000000000000000007 /* DayResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* DayResetView.swift */; };
+		A10000000000000000000008 /* DayResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* DayResetView.swift */; };
+		A10000000000000000000009 /* HushDemoRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* HushDemoRootView.swift */; };
+		A10000000000000000000010 /* HushDemoRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* HushDemoRootView.swift */; };
+		A10000000000000000000011 /* HushDemoStandalone.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* HushDemoStandalone.swift */; };
+		A10000000000000000000012 /* HushDemoStandalone.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* HushDemoStandalone.swift */; };
+		A10000000000000000000013 /* HushDemoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* HushDemoStore.swift */; };
+		A10000000000000000000014 /* HushDemoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* HushDemoStore.swift */; };
+		A10000000000000000000015 /* FatigueCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* FatigueCheckInView.swift */; };
+		A10000000000000000000016 /* FatigueCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* FatigueCheckInView.swift */; };
+		A10000000000000000000017 /* RestFeedbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* RestFeedbackView.swift */; };
+		A10000000000000000000018 /* RestFeedbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* RestFeedbackView.swift */; };
+		A10000000000000000000019 /* GuidedDriftView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* GuidedDriftView.swift */; };
+		A10000000000000000000020 /* GuidedDriftView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* GuidedDriftView.swift */; };
+		A10000000000000000000021 /* HushDoorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* HushDoorView.swift */; };
+		A10000000000000000000022 /* HushDoorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* HushDoorView.swift */; };
+		A10000000000000000000023 /* HushRestContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* HushRestContent.swift */; };
+		A10000000000000000000024 /* HushRestContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* HushRestContent.swift */; };
+		A10000000000000000000025 /* RestQuestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* RestQuestView.swift */; };
+		A10000000000000000000026 /* RestQuestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* RestQuestView.swift */; };
+		A10000000000000000000027 /* BlueResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* BlueResetView.swift */; };
+		A10000000000000000000028 /* BlueResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* BlueResetView.swift */; };
+		A10000000000000000000029 /* PauseReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* PauseReceiptView.swift */; };
+		A10000000000000000000030 /* PauseReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* PauseReceiptView.swift */; };
+		A10000000000000000000031 /* SleepHandoffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* SleepHandoffView.swift */; };
+		A10000000000000000000032 /* SleepHandoffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* SleepHandoffView.swift */; };
+		A10000000000000000000033 /* content-manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* content-manifest.json */; };
+		A10000000000000000000034 /* content-manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* content-manifest.json */; };
+		A10000000000000000000035 /* rest-quests.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* rest-quests.json */; };
+		A10000000000000000000036 /* rest-quests.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* rest-quests.json */; };
+		A10000000000000000000037 /* drift-prompts.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000019 /* drift-prompts.json */; };
+		A10000000000000000000038 /* drift-prompts.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000019 /* drift-prompts.json */; };
+		A10000000000000000000039 /* bluebox-cards.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* bluebox-cards.json */; };
+		A10000000000000000000040 /* bluebox-cards.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* bluebox-cards.json */; };
+		A10000000000000000000041 /* safety-rules.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* safety-rules.json */; };
+		A10000000000000000000042 /* safety-rules.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* safety-rules.json */; };
+		A10000000000000000000043 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
+		A10000000000000000000044 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,6 +133,28 @@
 		B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Core/HushLockdownState.swift; sourceTree = "<group>"; };
 		B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/LockdownCoordinator.swift; sourceTree = "<group>"; };
 		B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/Platform/MacWebsiteMonitoringModel.swift; sourceTree = "<group>"; };
+		B10000000000000000000001 /* HushComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/HushComponents.swift; sourceTree = "<group>"; };
+		B10000000000000000000002 /* HushTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/HushTokens.swift; sourceTree = "<group>"; };
+		B10000000000000000000003 /* HushWaveBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/Wave/HushWaveBackground.swift; sourceTree = "<group>"; };
+		B10000000000000000000004 /* DayResetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/DayReset/DayResetView.swift; sourceTree = "<group>"; };
+		B10000000000000000000005 /* HushDemoRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/Demo/HushDemoRootView.swift; sourceTree = "<group>"; };
+		B10000000000000000000006 /* HushDemoStandalone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/Demo/HushDemoStandalone.swift; sourceTree = "<group>"; };
+		B10000000000000000000007 /* HushDemoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/Demo/HushDemoStore.swift; sourceTree = "<group>"; };
+		B10000000000000000000008 /* FatigueCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/FatigueCheckIn/FatigueCheckInView.swift; sourceTree = "<group>"; };
+		B10000000000000000000009 /* RestFeedbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/Feedback/RestFeedbackView.swift; sourceTree = "<group>"; };
+		B10000000000000000000010 /* GuidedDriftView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/GuidedDrift/GuidedDriftView.swift; sourceTree = "<group>"; };
+		B10000000000000000000011 /* HushDoorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/HushDoor/HushDoorView.swift; sourceTree = "<group>"; };
+		B10000000000000000000012 /* HushRestContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/RestQuest/HushRestContent.swift; sourceTree = "<group>"; };
+		B10000000000000000000013 /* RestQuestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/RestQuest/RestQuestView.swift; sourceTree = "<group>"; };
+		B10000000000000000000014 /* BlueResetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/SleepHandoff/BlueResetView.swift; sourceTree = "<group>"; };
+		B10000000000000000000015 /* PauseReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/SleepHandoff/PauseReceiptView.swift; sourceTree = "<group>"; };
+		B10000000000000000000016 /* SleepHandoffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/SleepHandoff/SleepHandoffView.swift; sourceTree = "<group>"; };
+		B10000000000000000000017 /* content-manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/content-manifest.json; sourceTree = "<group>"; };
+		B10000000000000000000018 /* rest-quests.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/rest-quests.json; sourceTree = "<group>"; };
+		B10000000000000000000019 /* drift-prompts.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/drift-prompts.json; sourceTree = "<group>"; };
+		B10000000000000000000020 /* bluebox-cards.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/bluebox-cards.json; sourceTree = "<group>"; };
+		B10000000000000000000021 /* safety-rules.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/safety-rules.json; sourceTree = "<group>"; };
+		B10000000000000000000022 /* UnifiedInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxView.swift; sourceTree = "<group>"; };
 		B00000000000000000000101 /* Hush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hush.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000102 /* HushMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HushMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000103 /* HushDeviceActivityMonitor.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushDeviceActivityMonitor.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -135,6 +201,7 @@
 				C00000000000000000000005 /* MacMenuBar */,
 				C00000000000000000000006 /* DeviceActivityMonitorExt */,
 				C00000000000000000000007 /* RestLiveActivityWidget */,
+				C10000000000000000000003 /* Content */,
 				C00000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -156,6 +223,8 @@
 				B00000000000000000000004 /* Shared/Core/HushProduct.swift */,
 				B00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift */,
 				B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */,
+				C10000000000000000000001 /* DesignSystem */,
+				C10000000000000000000002 /* Features */,
 			);
 			name = Shared;
 			sourceTree = "<group>";
@@ -206,6 +275,49 @@
 				B00000000000000000000009 /* RestLiveActivityWidget/Info.plist */,
 			);
 			name = RestLiveActivityWidget;
+			sourceTree = "<group>";
+		};
+		C10000000000000000000001 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000001 /* HushComponents.swift */,
+				B10000000000000000000002 /* HushTokens.swift */,
+				B10000000000000000000003 /* HushWaveBackground.swift */,
+			);
+			name = DesignSystem;
+			sourceTree = "<group>";
+		};
+		C10000000000000000000002 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000004 /* DayResetView.swift */,
+				B10000000000000000000005 /* HushDemoRootView.swift */,
+				B10000000000000000000006 /* HushDemoStandalone.swift */,
+				B10000000000000000000007 /* HushDemoStore.swift */,
+				B10000000000000000000008 /* FatigueCheckInView.swift */,
+				B10000000000000000000009 /* RestFeedbackView.swift */,
+				B10000000000000000000010 /* GuidedDriftView.swift */,
+				B10000000000000000000011 /* HushDoorView.swift */,
+				B10000000000000000000012 /* HushRestContent.swift */,
+				B10000000000000000000013 /* RestQuestView.swift */,
+				B10000000000000000000014 /* BlueResetView.swift */,
+				B10000000000000000000015 /* PauseReceiptView.swift */,
+				B10000000000000000000016 /* SleepHandoffView.swift */,
+				B10000000000000000000022 /* UnifiedInboxView.swift */,
+			);
+			name = Features;
+			sourceTree = "<group>";
+		};
+		C10000000000000000000003 /* Content */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000017 /* content-manifest.json */,
+				B10000000000000000000018 /* rest-quests.json */,
+				B10000000000000000000019 /* drift-prompts.json */,
+				B10000000000000000000020 /* bluebox-cards.json */,
+				B10000000000000000000021 /* safety-rules.json */,
+			);
+			name = Content;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -348,6 +460,11 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000033 /* content-manifest.json in Resources */,
+				A10000000000000000000035 /* rest-quests.json in Resources */,
+				A10000000000000000000037 /* drift-prompts.json in Resources */,
+				A10000000000000000000039 /* bluebox-cards.json in Resources */,
+				A10000000000000000000041 /* safety-rules.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -355,6 +472,11 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000034 /* content-manifest.json in Resources */,
+				A10000000000000000000036 /* rest-quests.json in Resources */,
+				A10000000000000000000038 /* drift-prompts.json in Resources */,
+				A10000000000000000000040 /* bluebox-cards.json in Resources */,
+				A10000000000000000000042 /* safety-rules.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -392,6 +514,23 @@
 				A00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift in Sources */,
 				A00000000000000000000021 /* Shared/Core/HushLockdownState.swift in Sources */,
 				A00000000000000000000023 /* iOSApp/Platform/LockdownCoordinator.swift in Sources */,
+				A10000000000000000000001 /* HushComponents.swift in Sources */,
+				A10000000000000000000003 /* HushTokens.swift in Sources */,
+				A10000000000000000000005 /* HushWaveBackground.swift in Sources */,
+				A10000000000000000000007 /* DayResetView.swift in Sources */,
+				A10000000000000000000009 /* HushDemoRootView.swift in Sources */,
+				A10000000000000000000011 /* HushDemoStandalone.swift in Sources */,
+				A10000000000000000000013 /* HushDemoStore.swift in Sources */,
+				A10000000000000000000015 /* FatigueCheckInView.swift in Sources */,
+				A10000000000000000000017 /* RestFeedbackView.swift in Sources */,
+				A10000000000000000000019 /* GuidedDriftView.swift in Sources */,
+				A10000000000000000000021 /* HushDoorView.swift in Sources */,
+				A10000000000000000000023 /* HushRestContent.swift in Sources */,
+				A10000000000000000000025 /* RestQuestView.swift in Sources */,
+				A10000000000000000000027 /* BlueResetView.swift in Sources */,
+				A10000000000000000000029 /* PauseReceiptView.swift in Sources */,
+				A10000000000000000000031 /* SleepHandoffView.swift in Sources */,
+				A10000000000000000000043 /* UnifiedInboxView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -403,6 +542,23 @@
 				A00000000000000000000004 /* Shared/Core/HushProduct.swift in Sources */,
 				A00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift in Sources */,
 				A00000000000000000000024 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift in Sources */,
+				A10000000000000000000002 /* HushComponents.swift in Sources */,
+				A10000000000000000000004 /* HushTokens.swift in Sources */,
+				A10000000000000000000006 /* HushWaveBackground.swift in Sources */,
+				A10000000000000000000008 /* DayResetView.swift in Sources */,
+				A10000000000000000000010 /* HushDemoRootView.swift in Sources */,
+				A10000000000000000000012 /* HushDemoStandalone.swift in Sources */,
+				A10000000000000000000014 /* HushDemoStore.swift in Sources */,
+				A10000000000000000000016 /* FatigueCheckInView.swift in Sources */,
+				A10000000000000000000018 /* RestFeedbackView.swift in Sources */,
+				A10000000000000000000020 /* GuidedDriftView.swift in Sources */,
+				A10000000000000000000022 /* HushDoorView.swift in Sources */,
+				A10000000000000000000024 /* HushRestContent.swift in Sources */,
+				A10000000000000000000026 /* RestQuestView.swift in Sources */,
+				A10000000000000000000028 /* BlueResetView.swift in Sources */,
+				A10000000000000000000030 /* PauseReceiptView.swift in Sources */,
+				A10000000000000000000032 /* SleepHandoffView.swift in Sources */,
+				A10000000000000000000044 /* UnifiedInboxView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

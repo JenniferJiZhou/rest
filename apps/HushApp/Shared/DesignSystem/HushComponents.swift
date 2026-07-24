@@ -14,7 +14,6 @@ struct HushPanelModifier: ViewModifier {
                             .stroke(HushColor.hairline, lineWidth: 1)
                     )
             )
-            .shadow(color: .black.opacity(0.14), radius: 28, y: 14)
     }
 }
 
@@ -30,7 +29,7 @@ struct HushPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(HushType.bodyStrong)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(Color.black)
             .frame(maxWidth: .infinity)
             .frame(minHeight: 48)
             .padding(.horizontal, HushSpacing.md)
@@ -38,17 +37,17 @@ struct HushPrimaryButtonStyle: ButtonStyle {
                 Capsule()
                     .fill(
                         LinearGradient(
-                            colors: [HushColor.indigo, HushColor.violet],
+                            colors: [Color.white, Color.white.opacity(0.82)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
             )
-            .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+            .overlay(Capsule().stroke(Color.white.opacity(0.32), lineWidth: 1))
             .shadow(
-                color: HushColor.violet.opacity(configuration.isPressed ? 0.12 : 0.28),
-                radius: configuration.isPressed ? 6 : 15,
-                y: configuration.isPressed ? 2 : 8
+                color: Color.white.opacity(configuration.isPressed ? 0.04 : 0.10),
+                radius: configuration.isPressed ? 4 : 12,
+                y: configuration.isPressed ? 1 : 5
             )
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .opacity(isEnabled ? 1 : 0.38)
@@ -100,17 +99,17 @@ struct HushSampleModeBadge: View {
             Circle()
                 .fill(degraded ? HushColor.warm : HushColor.mint)
                 .frame(width: 6, height: 6)
-            Text(degraded ? "SAMPLE · FALLBACK" : "SAMPLE MODE")
-                .font(HushType.eyebrow)
-                .tracking(0.8)
+            Text(degraded ? "演示模式 · 备用内容" : "演示模式")
+                .font(HushType.micro)
+                .tracking(0.4)
         }
         .foregroundStyle(HushColor.textSecondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
         .background(Capsule().fill(Color.black.opacity(0.18)))
         .overlay(Capsule().stroke(HushColor.hairline, lineWidth: 1))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(degraded ? "Sample Mode，内容已降级" : "Sample Mode，当前为模拟演示")
+        .accessibilityLabel(degraded ? "演示模式，当前使用备用内容" : "当前为演示模式")
     }
 }
 
@@ -132,7 +131,7 @@ struct HushSourcePill: View {
 
     var body: some View {
         Label(text, systemImage: included ? "checkmark.circle.fill" : "minus.circle")
-            .font(HushType.caption)
+            .font(HushType.micro)
             .foregroundStyle(included ? HushColor.mint : HushColor.textSecondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)

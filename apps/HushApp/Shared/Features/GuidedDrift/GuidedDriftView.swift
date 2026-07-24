@@ -21,7 +21,7 @@ struct GuidedDriftView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("不用回答给 Hush。让这个问题在脑子里轻轻飘过去就好。")
-                .font(HushType.caption)
+                .font(HushType.micro)
                 .foregroundStyle(HushColor.textSecondary)
         }
         .hushPanel()

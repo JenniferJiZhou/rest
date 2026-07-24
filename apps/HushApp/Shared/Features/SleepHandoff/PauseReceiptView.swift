@@ -6,7 +6,7 @@ struct PauseReceiptView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: HushSpacing.lg) {
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
-                HushSectionLabel(text: "Pause receipt · Sample")
+                HushSectionLabel(text: "Pause receipt")
                 Text("今晚可以先停了。")
                     .font(HushType.title)
                     .foregroundStyle(HushColor.textPrimary)
@@ -22,7 +22,7 @@ struct PauseReceiptView: View {
                 receiptRow(
                     icon: "doc.text.fill",
                     title: "回复李老师",
-                    detail: "模拟：Gmail 草稿已保存",
+                    detail: "Gmail 草稿已保存",
                     color: HushColor.mint
                 )
                 receiptRow(
@@ -34,7 +34,7 @@ struct PauseReceiptView: View {
                 receiptRow(
                     icon: "questionmark.circle.fill",
                     title: "确认活动材料截止时间",
-                    detail: "时间不明确，保留为 uncertain",
+                    detail: "时间不明确，保留为待确认",
                     color: HushColor.warm
                 )
             }
@@ -52,13 +52,13 @@ struct PauseReceiptView: View {
                 }
 
                 Text("未连接渠道不在结论范围内。")
-                    .font(HushType.caption)
+                    .font(HushType.micro)
                     .foregroundStyle(HushColor.textSecondary)
             }
 
             VStack(alignment: .leading, spacing: HushSpacing.xs) {
                 Text("明天第一步")
-                    .font(HushType.caption)
+                    .font(HushType.micro)
                     .foregroundStyle(HushColor.textSecondary)
                 Text("先查看活动材料邮件的截止时间。")
                     .font(HushType.bodyStrong)
@@ -71,9 +71,6 @@ struct PauseReceiptView: View {
             }
             .buttonStyle(HushPrimaryButtonStyle())
 
-            Text("页面数据来自固定 handoff-summary fixture；“草稿已保存”仅表示该模拟样例中的状态。")
-                .font(HushType.caption)
-                .foregroundStyle(HushColor.warm)
         }
     }
 
@@ -87,7 +84,7 @@ struct PauseReceiptView: View {
                     .font(HushType.bodyStrong)
                     .foregroundStyle(HushColor.textPrimary)
                 Text(detail)
-                    .font(HushType.caption)
+                    .font(HushType.micro)
                     .foregroundStyle(HushColor.textSecondary)
             }
             Spacer()

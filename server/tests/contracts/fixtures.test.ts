@@ -5,13 +5,13 @@ import { describe, expect, it } from "vitest";
 import {
   inboxDraftSchema,
   inboxEventBatchSchema,
-  unifiedInboxItemSchema
+  unifiedInboxItemSchema,
+  usageSummarySchema
 } from "../../src/domain/contracts.js";
 import {
   FIXTURE_CONTRACTS,
   createContractValidator
 } from "../../src/infra/contract-validator.js";
-
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const fixtureDirectory = resolve(
   currentDirectory,
@@ -39,5 +39,19 @@ describe("contract fixtures", () => {
     ) as unknown;
 
     expect(schema.safeParse(value).success).toBe(true);
+  });
+
+  it.each([
+    "usage-summary-manual-ios.json",
+    "usage-summary-device-activity-ios.json",
+    "usage-summary-macos-app.json",
+    "usage-summary-macos-website.json",
+    "usage-summary-macos-website-user-label.json"
+  ])("%s also matches the runtime Zod contract", (fixture) => {
+    const input = JSON.parse(
+      readFileSync(resolve(fixtureDirectory, fixture), "utf8")
+    ) as unknown;
+
+    expect(usageSummarySchema.safeParse(input).success).toBe(true);
   });
 });

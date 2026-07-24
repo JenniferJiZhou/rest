@@ -36,7 +36,7 @@ struct DayResetView: View {
                     .scaleEffect(x: 1, y: 1.6)
 
                 Text(isRunning ? "屏幕可以放下，计时会继续。" : "已经暂停，按继续后恢复计时。")
-                    .font(HushType.caption)
+                    .font(HushType.micro)
                     .foregroundStyle(HushColor.textSecondary)
             }
             .hushPanel(emphasized: true)
@@ -69,10 +69,6 @@ struct DayResetView: View {
                 .buttonStyle(HushSecondaryButtonStyle())
             }
 
-            Text("Demo 计时由界面本地运行；正式版由 P1 的 Session Controller 接管锁屏恢复。")
-                .font(HushType.caption)
-                .foregroundStyle(HushColor.textSecondary)
-                .multilineTextAlignment(.center)
         }
         .task {
             while remainingSeconds > 0, !Task.isCancelled {

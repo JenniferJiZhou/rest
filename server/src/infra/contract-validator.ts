@@ -22,6 +22,18 @@ export const FIXTURE_CONTRACTS: FixtureContract[] = [
     schema: "usage-summary.schema.json"
   },
   {
+    fixture: "usage-summary-device-activity-ios.json",
+    schema: "usage-summary.schema.json"
+  },
+  {
+    fixture: "usage-summary-macos-app.json",
+    schema: "usage-summary.schema.json"
+  },
+  {
+    fixture: "usage-summary-macos-website.json",
+    schema: "usage-summary.schema.json"
+  },
+  {
     fixture: "rest-suggestion-no-offer.json",
     schema: "rest-suggestion.schema.json"
   },
@@ -110,7 +122,8 @@ export function createContractValidator(rootPath?: string): {
   ) => void;
   const ajv = new Ajv2020({
     allErrors: true,
-    strict: true
+    strict: true,
+    strictRequired: false
   });
   addFormats(ajv);
 

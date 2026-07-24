@@ -74,9 +74,6 @@ struct RestFeedbackView: View {
             .buttonStyle(HushPrimaryButtonStyle())
             .disabled(helpfulness == nil || timing == nil)
 
-            Text("Sample Mode 只在本地演示状态变化，不会上传反馈。")
-                .font(HushType.caption)
-                .foregroundStyle(HushColor.textSecondary)
         }
     }
 

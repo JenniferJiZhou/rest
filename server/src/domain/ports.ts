@@ -7,7 +7,8 @@ import type {
   RestFeedback,
   RestQuest,
   RestQuestRecommendation,
-  RestRecommendationRequest
+  RestRecommendationRequest,
+  RestSuggestion
 } from "./contracts.js";
 
 export interface MailFetchContext {
@@ -112,6 +113,61 @@ export interface AgentLLM {
     input: HandoffAgentInput,
     options?: ProviderCallOptions
   ): Promise<HandoffSummaryDraft>;
+}
+
+export interface NormalizedUsageSignals {
+  dailyMinutes: number | null;
+  continuousMinutes: number;
+  continuousIsEstimated: boolean;
+}
+
+export interface MonitoredContext {
+  userProvidedLabel: string | null;
+  labelSource: "user" | "domain" | null;
+  websiteDomain: string | null;
+  rawAppIdentityAvailable: false;
+  fullUrlAvailable: false;
+  pageTitleAvailable: false;
+}
+
+export interface RestDecisionSource {
+  platform: "ios" | "ipados" | "macos";
+  triggerSource: string;
+  targetType: "app" | "website";
+}
+
+export interface RestDecisionContext {
+  requestId: string;
+  measuredAt: string;
+  source: RestDecisionSource;
+  monitoredContext: MonitoredContext;
+  usage: NormalizedUsageSignals;
+  appSwitchesLast10Minutes: number | null;
+  localHour: number;
+  minutesSinceLastRest: number;
+  selfReportedEnergy: number | null;
+  recentFeedback: Array<"too_early" | "right" | "too_late">;
+  outputConstraints: {
+    maximumMessageCharacters: 240;
+    mayControlDevice: false;
+    mayChangeNextThreshold: false;
+  };
+}
+
+export interface RestDecisionCandidate {
+  shouldOfferRest: boolean;
+  reasonCode: RestSuggestion["reason_code"];
+  message?: string;
+  defaultQuestId?: string | null;
+}
+
+export interface RestDecisionProvider {
+  readonly dataOrigin?: DataOrigin;
+  health(): Promise<ProviderHealth>;
+  decide(
+    context: RestDecisionContext,
+    options?: ProviderCallOptions
+  ): Promise<RestDecisionCandidate>;
 }
 
 export interface HandoffAgentInput {

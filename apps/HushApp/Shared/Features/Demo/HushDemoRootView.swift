@@ -2,42 +2,150 @@ import SwiftUI
 
 struct HushDemoRootView: View {
     @StateObject private var store: HushDemoStore
+    @ObservedObject private var sleepSchedule =
+        HushSleepScheduleController.shared
+    @State private var isShowingSettings = false
+    private let onSettings: (() -> Void)?
+    private let onCompanion: (() -> Void)?
+    private let suggestedQuestID: String?
+    private let suggestionMessage: String?
+    private let suggestionEventID: String?
 
     @MainActor
-    init(provider: any HushRestContentProviding = BundledHushRestContentProvider.automatic) {
-        _store = StateObject(wrappedValue: HushDemoStore(provider: provider))
+    init(
+        provider: any HushRestContentProviding = BundledHushRestContentProvider.automatic,
+        initialQuestID: String? = nil,
+        onSettings: (() -> Void)? = nil,
+        onCompanion: (() -> Void)? = nil,
+        suggestedQuestID: String? = nil,
+        suggestionMessage: String? = nil,
+        suggestionEventID: String? = nil
+    ) {
+        self.onSettings = onSettings
+        self.onCompanion = onCompanion
+        self.suggestedQuestID = suggestedQuestID
+        self.suggestionMessage = suggestionMessage
+        self.suggestionEventID = suggestionEventID
+        _store = StateObject(
+            wrappedValue: HushDemoStore(
+                provider: provider,
+                initialQuestID: initialQuestID ?? suggestedQuestID
+            )
+        )
     }
 
     var body: some View {
         ZStack {
             HushWaveBackground()
 
-            VStack(spacing: 0) {
-                topBar
-                    .padding(.horizontal, HushSpacing.lg)
-                    .padding(.top, HushSpacing.md)
-
-                ScrollView {
-                    routeContent
-                        .frame(maxWidth: 460)
+            if store.route == .door {
+                HushDoorView(
+                    taskText: agentTaskText,
+                    onOpenTask: store.openCurrentQuest,
+                    onSettings: {
+                        if let onSettings {
+                            onSettings()
+                        } else {
+                            isShowingSettings = true
+                        }
+                    },
+                    onOpenInbox: store.openInbox,
+                    onOpenCompanion: onCompanion
+                )
+                .transition(.opacity)
+            } else if store.route == .inbox {
+                UnifiedInboxView(onClose: store.closeInbox)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                VStack(spacing: 0) {
+                    topBar
                         .padding(.horizontal, HushSpacing.lg)
-                        .padding(.top, HushSpacing.lg)
-                        .padding(.bottom, HushSpacing.xl)
-                }
-                .scrollIndicators(.hidden)
+                        .padding(.top, HushSpacing.md)
 
-                if let fallbackMessage = store.content.status.message {
-                    Text("本地内容降级：\(fallbackMessage)")
-                        .font(HushType.caption)
-                        .foregroundStyle(HushColor.warm)
-                        .lineLimit(2)
-                        .padding(.horizontal, HushSpacing.lg)
-                        .padding(.bottom, HushSpacing.sm)
+                    ScrollView {
+                        routeContent
+                            .frame(maxWidth: 460)
+                            .padding(.horizontal, HushSpacing.lg)
+                            .padding(.top, HushSpacing.lg)
+                            .padding(.bottom, HushSpacing.xl)
+                    }
+                    .scrollIndicators(.hidden)
+
                 }
+                .transition(
+                    store.route == .sleepHandoff
+                        ? .move(edge: .top).combined(with: .opacity)
+                        : .opacity
+                )
             }
         }
-        .frame(minWidth: 380, idealWidth: 420, minHeight: 580, idealHeight: 700)
+        #if os(macOS)
+        .frame(
+            minWidth: 380,
+            idealWidth: 420,
+            minHeight: 580,
+            idealHeight: 700
+        )
+        #else
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #endif
         .preferredColorScheme(.dark)
+        .task {
+            if sleepSchedule.consumePendingRoute() {
+                store.startSleepHandoff()
+            }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .hushSleepHandoffRequested
+            )
+        ) { _ in
+            store.startSleepHandoff()
+        }
+        .onChange(of: suggestionEventID) { _, _ in
+            store.presentRestSuggestion(questID: suggestedQuestID)
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            HushSettingsView(
+                degraded: store.content.status.isFallback,
+                onSwapTask: {
+                    store.swapQuest()
+                    isShowingSettings = false
+                },
+                onCheckIn: {
+                    store.startCheckIn()
+                    isShowingSettings = false
+                },
+                onDismiss: {
+                    isShowingSettings = false
+                }
+            )
+        }
+    }
+
+    private var agentTaskText: String {
+        if let suggestedQuestID,
+           let quest = store.content.quests.first(
+               where: { $0.id == suggestedQuestID }
+           )
+        {
+            return taskText(for: quest)
+        }
+
+        let trimmedMessage = suggestionMessage?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if let trimmedMessage, !trimmedMessage.isEmpty {
+            return trimmedMessage
+        }
+
+        return taskText(for: store.currentQuest)
+    }
+
+    private func taskText(for quest: HushQuestContent) -> String {
+        let steps = quest.steps.prefix(2)
+        let task = steps.isEmpty ? quest.title : steps.joined(separator: "\n")
+        return task.hasSuffix("。") ? task : "\(task)。"
     }
 
     private var topBar: some View {
@@ -81,11 +189,7 @@ struct HushDemoRootView: View {
     private var routeContent: some View {
         switch store.route {
         case .door:
-            HushDoorView(
-                onCheckIn: store.startCheckIn,
-                onSurpriseMe: store.surpriseMe,
-                onSleepHandoff: store.startSleepHandoff
-            )
+            EmptyView()
         case .checkIn:
             FatigueCheckInView(
                 description: $store.fatigueDescription,
@@ -113,9 +217,10 @@ struct HushDemoRootView: View {
             RestCompletionView(onDone: store.reset)
         case .sleepHandoff:
             SleepHandoffView(
-                openLoop: $store.openLoop,
-                includeGmail: $store.includeGmail,
-                onStart: store.submitHandoff
+                todaySummary: $store.sleepTodaySummary,
+                highlight: $store.sleepHighlight,
+                tomorrowFirstStep: $store.sleepTomorrowFirstStep,
+                onFinish: store.finishSleepHandoff
             )
         case .handoffRunning:
             HandoffRunningView(onShowResult: store.showPauseReceipt)
@@ -123,7 +228,86 @@ struct HushDemoRootView: View {
             PauseReceiptView(onBlueReset: store.startBlueReset)
         case .blueReset:
             BlueResetView(card: store.currentBlueBoxCard, onDone: store.reset)
+        case .inbox:
+            EmptyView()
         }
+    }
+}
+
+private struct HushSettingsView: View {
+    let degraded: Bool
+    let onSwapTask: () -> Void
+    let onCheckIn: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: HushSpacing.lg) {
+                HStack {
+                    Text("设置")
+                        .font(HushType.title)
+                        .foregroundStyle(HushColor.textPrimary)
+
+                    Spacer()
+
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(HushColor.textSecondary)
+                            .frame(width: 32, height: 32)
+                            .overlay(Circle().stroke(HushColor.hairline, lineWidth: 0.8))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("关闭设置")
+                }
+
+                HStack(spacing: HushSpacing.xs) {
+                    Circle()
+                        .fill(Color.white.opacity(0.82))
+                        .frame(width: 6, height: 6)
+                    Text(degraded ? "演示模式 · 备用内容" : "演示模式")
+                        .font(HushType.micro)
+                        .tracking(0.4)
+                        .foregroundStyle(HushColor.textSecondary)
+                }
+
+                Divider()
+                    .overlay(HushColor.hairline)
+
+                VStack(spacing: 0) {
+                    settingsRow("换一个任务", systemImage: "arrow.triangle.2.circlepath", action: onSwapTask)
+                    settingsRow("描述我的疲惫", systemImage: "text.bubble", action: onCheckIn)
+                }
+            }
+            .padding(HushSpacing.xl)
+        }
+        .frame(minWidth: 340, idealWidth: 380, minHeight: 300)
+        .preferredColorScheme(.dark)
+    }
+
+    private func settingsRow(
+        _ title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: HushSpacing.sm) {
+                Image(systemName: systemImage)
+                    .frame(width: 20)
+                Text(title)
+                    .font(HushType.body)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(HushColor.textSecondary)
+            }
+            .foregroundStyle(HushColor.textPrimary)
+            .padding(.vertical, HushSpacing.md)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

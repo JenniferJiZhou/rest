@@ -1,6 +1,10 @@
 import { CannedAgentLLM } from "./agent/canned-llm.js";
 import { ClaudeAgentLLM } from "./agent/claude-llm.js";
 import { ResilientAgentLLM } from "./agent/resilient-llm.js";
+import {
+  CannedRestDecisionProvider,
+  UnavailableRestDecisionProvider
+} from "./agent/rest-decision-providers.js";
 import type { ServerDependencies } from "./api/create-server.js";
 import { HandoffService } from "./application/handoff/handoff-service.js";
 import { InboxService } from "./application/inbox/inbox-service.js";
@@ -17,7 +21,8 @@ import {
   type DataOrigin,
   type HandoffCompletionSink,
   type MailProvider,
-  type MessagingChannel
+  type MessagingChannel,
+  type RestDecisionProvider
 } from "./domain/ports.js";
 import {
   ConsoleMessagingChannel,
@@ -60,6 +65,8 @@ import {
 export interface ServerCompositionOverrides {
   realAgent?: AgentLLM;
   demoAgent?: AgentLLM;
+  normalRestDecisionProvider?: RestDecisionProvider;
+  demoRestDecisionProvider?: RestDecisionProvider;
   realMail?: MailProvider;
   demoMail?: MailProvider;
   messagingChannel?: MessagingChannel;
@@ -93,6 +100,14 @@ export function buildServerDependencies(
         )
       : localAgent);
   const demoAgent = overrides.demoAgent ?? new CannedAgentLLM();
+  const normalRestDecisionProvider =
+    overrides.normalRestDecisionProvider ??
+    (config.HUSH_REST_DECISION_PROVIDER === "unavailable"
+      ? new UnavailableRestDecisionProvider()
+      : new CannedRestDecisionProvider(content));
+  const demoRestDecisionProvider =
+    overrides.demoRestDecisionProvider ??
+    new CannedRestDecisionProvider(content);
   const realMail = overrides.realMail ?? new UnavailableMailProvider();
   const demoMail = overrides.demoMail ?? new FixtureMailProvider();
   const messaging =
@@ -262,7 +277,7 @@ export function buildServerDependencies(
 
   return {
     config,
-    restOrigin: graphOrigin(realAgent),
+    restOrigin: graphOrigin(realAgent, normalRestDecisionProvider),
     handoffOrigin: graphOrigin(realAgent, realMail, completionSink),
     inboxOrigin: graphOrigin(
       realInboxIntelligence,
@@ -275,14 +290,16 @@ export function buildServerDependencies(
       realAgent,
       content,
       new InMemoryFeedbackRepository(),
-      new InMemoryIdempotencyStore<boolean>(),
+      new InMemoryIdempotencyStore<unknown>(),
+      normalRestDecisionProvider,
       { llmTimeoutMs: config.LLM_TIMEOUT_MS }
     ),
     demoRest: new RestService(
       demoAgent,
       content,
       new InMemoryFeedbackRepository(),
-      new InMemoryIdempotencyStore<boolean>(),
+      new InMemoryIdempotencyStore<unknown>(),
+      demoRestDecisionProvider,
       { llmTimeoutMs: config.LLM_TIMEOUT_MS }
     ),
     handoff: new HandoffService(
@@ -324,6 +341,7 @@ export function buildServerDependencies(
     connectorHost,
     providerHealth: async () => ({
       agent: await realAgent.health(),
+      rest_decision: await normalRestDecisionProvider.health(),
       gmail: await realMail.health(),
       inbox_intelligence: await realInboxIntelligence.health(),
       feishu: await inboxSenders.get("feishu")!.health(),

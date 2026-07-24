@@ -16,8 +16,7 @@ import {
   fatigueCheckInSchema,
   handoffStartRequestSchema,
   restFeedbackSchema,
-  restRecommendationRequestSchema,
-  usageSummarySchema
+  restRecommendationRequestSchema
 } from "../domain/contracts.js";
 import {
   AppError,
@@ -65,6 +64,8 @@ export function createServer(
   dependencies: ServerDependencies
 ): FastifyInstance {
   const server = Fastify({
+    trustProxy: dependencies.config.TRUST_PROXY,
+    bodyLimit: 64 * 1024,
     requestIdHeader: "x-request-id",
     genReqId: () => `req_server_${randomUUID()}`,
     logger: {
@@ -75,14 +76,41 @@ export function createServer(
           "req.headers.x-hush-demo-token",
           "req.headers.x-hush-app-session",
           "req.headers.cookie",
-          "res.headers.set-cookie"
+          "req.body",
+          "res.headers.set-cookie",
+          "*.apiKey",
+          "*.api_key",
+          "*.accessToken",
+          "*.access_token",
+          "*.refreshToken",
+          "*.refresh_token",
+          "*.password",
+          "*.secret"
         ],
         censor: "[REDACTED]"
+      },
+      serializers: {
+        req: (request) => ({
+          id: request.id,
+          method: request.method,
+          route: request.routeOptions?.url
+        }),
+        res: (reply) => ({ statusCode: reply.statusCode })
       }
     },
     logController: new LogController({
       disableRequestLogging: true
     })
+  });
+
+  server.addHook("onRequest", async (request, reply) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Referrer-Policy", "no-referrer");
+    reply.header("Cache-Control", "no-store");
+    reply.header("Pragma", "no-cache");
+    if (request.protocol === "https") {
+      reply.header("Strict-Transport-Security", "max-age=31536000");
+    }
   });
 
   server.setErrorHandler((error, request, reply) => {
@@ -109,6 +137,14 @@ export function createServer(
               retryable: false,
               details: { reason: "MALFORMED_JSON" }
             })
+          : isBodyTooLargeError(error)
+            ? new AppError({
+                code: "INVALID_REQUEST",
+                message: "请求正文超过允许大小。",
+                statusCode: 413,
+                retryable: false,
+                details: { reason: "BODY_TOO_LARGE" }
+              })
         : unknownToAppError(error);
     request.log.error(
       {
@@ -150,8 +186,7 @@ export function createServer(
     setResponseHeaders(reply, requestId, origin);
     return {
       status: "ok",
-      contract_version: CONTRACT_VERSION,
-      providers: await dependencies.providerHealth()
+      contract_version: CONTRACT_VERSION
     };
   });
 
@@ -163,9 +198,7 @@ export function createServer(
       true,
       "rest"
     );
-    const input = usageSummarySchema.parse(request.body);
-    assertBodyRequestId(input.request_id, context.requestId);
-    return context.rest.evaluate(input);
+    return context.rest.evaluate(request.body, context.requestId);
   });
 
   server.post("/v1/rest/check-in", async (request, reply) => {
@@ -522,6 +555,15 @@ function isMalformedJsonError(error: unknown): boolean {
     (error instanceof SyntaxError &&
       "statusCode" in error &&
       error.statusCode === 400)
+  );
+}
+
+function isBodyTooLargeError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "FST_ERR_CTP_BODY_TOO_LARGE"
   );
 }
 

@@ -84,11 +84,13 @@ final class MacUsageMonitoringModel: ObservableObject {
         let requestID: String
         let shouldOfferRest: Bool
         let message: String
+        let defaultQuestID: String?
 
         enum CodingKeys: String, CodingKey {
             case requestID = "request_id"
             case shouldOfferRest = "should_offer_rest"
             case message
+            case defaultQuestID = "default_quest_id"
         }
     }
 
@@ -724,6 +726,14 @@ final class MacUsageMonitoringModel: ObservableObject {
                 agentStatusMessage = suggestion.shouldOfferRest
                     ? "Agent 建议休息：\(suggestion.message)"
                     : "Agent 建议继续：\(suggestion.message)"
+                if suggestion.shouldOfferRest {
+                    HushMacRestNotificationController.shared
+                        .sendRestSuggestion(
+                            message: suggestion.message,
+                            questID: suggestion.defaultQuestID,
+                            requestID: suggestion.requestID
+                        )
+                }
             } catch {
                 agentStatusMessage =
                     "Agent 请求失败：\(error.localizedDescription)"

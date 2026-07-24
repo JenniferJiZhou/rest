@@ -37,7 +37,7 @@ struct FatigueCheckInView: View {
                     .accessibilityLabel("描述你的疲惫")
 
                 Text("\(description.count) / 500")
-                    .font(HushType.caption)
+                    .font(HushType.micro)
                     .foregroundStyle(HushColor.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -97,8 +97,8 @@ struct FatigueReflectionView: View {
                     .foregroundStyle(HushColor.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("这是推荐分类，不是诊断。")
-                    .font(HushType.caption)
+                Text("仅用于选择更合适的休息方式。")
+                    .font(HushType.micro)
                     .foregroundStyle(HushColor.textSecondary)
             }
             .hushPanel(emphasized: true)
@@ -123,9 +123,6 @@ struct FatigueReflectionView: View {
                 }
             }
 
-            Text("Sample Mode：上面的反映来自固定 fixture，不是实时 LLM 判断。")
-                .font(HushType.caption)
-                .foregroundStyle(HushColor.textSecondary)
         }
     }
 }

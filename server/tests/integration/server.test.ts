@@ -34,20 +34,16 @@ describe("Hush API", () => {
     await server.close();
   });
 
-  it("reports provider health without exposing secrets", async () => {
+  it("reports lightweight process health without exposing providers or secrets", async () => {
     const response = await server.inject({
       method: "GET",
       url: "/v1/health"
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
+    expect(response.json()).toEqual({
       status: "ok",
-      contract_version: "1.0",
-      providers: {
-        agent: "ready",
-        gmail: "unavailable"
-      }
+      contract_version: "1.0"
     });
   });
 

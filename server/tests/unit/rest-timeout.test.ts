@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CannedAgentLLM } from "../../src/agent/canned-llm.js";
+import { CannedRestDecisionProvider } from "../../src/agent/rest-decision-providers.js";
 import { RestService } from "../../src/application/rest/rest-service.js";
 import type {
   FatigueCheckIn,
@@ -49,11 +50,13 @@ describe("Rest provider timeout", () => {
 });
 
 function createService(agent: CannedAgentLLM): RestService {
+  const content = new FileRestContentRepository();
   return new RestService(
     agent,
-    new FileRestContentRepository(),
+    content,
     new InMemoryFeedbackRepository(),
-    new InMemoryIdempotencyStore<boolean>(),
+    new InMemoryIdempotencyStore<unknown>(),
+    new CannedRestDecisionProvider(content),
     { llmTimeoutMs: 100 }
   );
 }

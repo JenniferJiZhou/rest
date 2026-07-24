@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "request_id": "req_usage_macos_app_001",
+  "measured_at": "2026-07-24T04:00:00Z",
+  "platform": "macos",
+  "trigger_source": "macos_usage_checkpoint",
+  "user_provided_context_label": "写作",
+  "daily_app_usage_minutes": 60,
+  "continuous_app_usage_minutes": 12,
+  "continuous_usage_is_estimated": false,
+  "app_switches_last_10_minutes": 3,
+  "local_hour": 14,
+  "minutes_since_last_rest": 180,
+  "self_reported_energy": null,
+  "recent_feedback": [],
+  "raw_app_names_included": false
+}

@@ -1,6 +1,5 @@
 import {
   CONTENT_VERSION,
-  CONTRACT_VERSION,
   fatigueCheckInSchema,
   fatigueReflectionSchema,
   restFeedbackSchema,
@@ -14,8 +13,7 @@ import {
   type RestQuest,
   type RestQuestRecommendation,
   type RestRecommendationRequest,
-  type RestSuggestion,
-  type UsageSummary
+  type RestSuggestion
 } from "../../domain/contracts.js";
 import { AppError } from "../../domain/errors.js";
 import { canonicalRequestHash } from "../../domain/request-hash.js";
@@ -23,85 +21,72 @@ import type {
   AgentLLM,
   FeedbackRepository,
   IdempotencyStore,
-  RestContentRepository
+  RestContentRepository,
+  RestDecisionProvider
 } from "../../domain/ports.js";
 import { withProviderTimeout } from "../../infra/provider-call.js";
+import { RestDecisionExecutor } from "./rest-decision-execution.js";
 
 export interface RestServiceOptions {
   llmTimeoutMs?: number;
 }
 
 export class RestService {
+  private readonly decisionExecutor: RestDecisionExecutor;
+
   constructor(
     private readonly agent: AgentLLM,
     private readonly content: RestContentRepository,
     private readonly feedback: FeedbackRepository,
-    private readonly feedbackIdempotency: IdempotencyStore<boolean>,
+    private readonly idempotency: IdempotencyStore<unknown>,
+    decisionProvider: RestDecisionProvider,
     private readonly options: RestServiceOptions = {}
-  ) {}
-
-  evaluate(input: UsageSummary): RestSuggestion {
-    const request = usageSummarySchema.parse(input);
-    const manual = [
-      "manual_ios",
-      "manual_macos",
-      "notification",
-      "debug"
-    ].includes(request.trigger_source);
-
-    if (!manual && request.minutes_since_last_rest < 15) {
-      return this.suggestion(request.request_id, false, "cooldown", "");
-    }
-    if (manual) {
-      return this.suggestion(
-        request.request_id,
-        true,
-        "manual",
-        "可以。先说说你现在更像是哪一种累。"
-      );
-    }
-    if (
-      request.self_reported_energy !== null &&
-      request.self_reported_energy !== undefined &&
-      request.self_reported_energy <= 2
-    ) {
-      return this.suggestion(
-        request.request_id,
-        true,
-        "low_energy",
-        "你的精力已经偏低，先做一个短而明确的恢复动作。"
-      );
-    }
-    if (request.local_hour >= 23 || request.local_hour <= 5) {
-      return this.suggestion(
-        request.request_id,
-        true,
-        "late_hour",
-        "现在已经很晚，先把未完成事项安置好，再决定是否继续。"
-      );
-    }
-    if ((request.app_switches_last_10_minutes ?? 0) >= 10) {
-      return this.suggestion(
-        request.request_id,
-        true,
-        "attention_fragmentation",
-        "刚才的应用切换比较频繁，先离开屏幕一小会儿。"
-      );
-    }
-    if ((request.continuous_screen_minutes ?? 0) >= 45) {
-      return this.suggestion(
-        request.request_id,
-        true,
-        "long_continuous_use",
-        "你已经连续使用屏幕一段时间，可以先暂停几分钟。"
-      );
-    }
-    return this.suggestion(
-      request.request_id,
-      false,
-      "insufficient_signal",
-      ""
+  ) {
+    this.decisionExecutor = new RestDecisionExecutor(
+      decisionProvider,
+      content
     );
+  }
+
+  async evaluate(
+    input: unknown,
+    verifiedRequestId: string
+  ): Promise<RestSuggestion> {
+    const request = usageSummarySchema.parse(input);
+    if (request.request_id !== verifiedRequestId) {
+      throw new AppError({
+        code: "INVALID_REQUEST",
+        message: "正文 request_id 必须与 X-Request-ID 相同。",
+        statusCode: 400,
+        retryable: false
+      });
+    }
+    await this.idempotency.deleteExpired(new Date().toISOString());
+    const claim = await this.idempotency.claimOrGet({
+      key: `rest:evaluate:${verifiedRequestId}`,
+      requestHash: canonicalRequestHash(request),
+      ttlSeconds: 24 * 60 * 60,
+      create: async () => {
+        const result = await this.decisionExecutor.execute(
+          request,
+          verifiedRequestId
+        );
+        if (result.kind === "responded") {
+          return result.response;
+        }
+        throw result.error;
+      }
+    });
+    if (claim.kind === "conflict_different_request") {
+      throw new AppError({
+        code: "INVALID_REQUEST",
+        message: "该 request_id 已用于不同的请求内容。",
+        statusCode: 409,
+        retryable: false,
+        details: { reason: "REQUEST_ID_REUSED" }
+      });
+    }
+    return restSuggestionSchema.parse(claim.value);
   }
 
   async checkIn(input: FatigueCheckIn): Promise<FatigueReflection> {
@@ -183,11 +168,11 @@ export class RestService {
     idempotencyKey: string
   ): Promise<void> {
     const feedback = restFeedbackSchema.parse(input);
-    await this.feedbackIdempotency.deleteExpired(
+    await this.idempotency.deleteExpired(
       new Date().toISOString()
     );
-    const result = await this.feedbackIdempotency.claimOrGet({
-      key: idempotencyKey,
+    const result = await this.idempotency.claimOrGet({
+      key: `rest:feedback:${idempotencyKey}`,
       requestHash: canonicalRequestHash(feedback),
       ttlSeconds: 24 * 60 * 60,
       create: async () => {
@@ -246,24 +231,4 @@ export class RestService {
     });
   }
 
-  private suggestion(
-    requestId: string,
-    shouldOffer: boolean,
-    reasonCode: RestSuggestion["reason_code"],
-    message: string
-  ): RestSuggestion {
-    return restSuggestionSchema.parse({
-      schema_version: CONTRACT_VERSION,
-      request_id: requestId,
-      should_offer_rest: shouldOffer,
-      reason_code: reasonCode,
-      message,
-      default_quest_id: shouldOffer
-        ? this.content.quests()[0]?.id ?? null
-        : null,
-      actions: shouldOffer
-        ? ["start_rest_session", "open_check_in", "remind_later", "dismiss"]
-        : []
-    });
-  }
 }

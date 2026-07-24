@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "UsageSummary",
+  "description": "Mutually exclusive current iOS App, current Mac App, current Mac website, and legacy usage summaries.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,8 +11,7 @@
     "platform",
     "trigger_source",
     "local_hour",
-    "minutes_since_last_rest",
-    "raw_app_names_included"
+    "minutes_since_last_rest"
   ],
   "properties": {
     "schema_version": {
@@ -19,7 +19,8 @@
       "const": "1.0"
     },
     "request_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "measured_at": {
       "type": "string",
@@ -35,8 +36,11 @@
     },
     "trigger_source": {
       "type": "string",
+      "description": "macos_rule is retained only for legacy compatibility and is deprecated; current Apple clients send one of the three checkpoint values.",
       "enum": [
         "device_activity_threshold",
+        "macos_usage_checkpoint",
+        "macos_website_checkpoint",
         "macos_rule",
         "manual_ios",
         "manual_macos",
@@ -44,12 +48,74 @@
         "debug"
       ]
     },
+    "user_provided_context_label": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^(?!\\s*$)(?!.*[\\u0000-\\u001F\\u007F-\\u009F]).+$",
+      "description": "User-supplied label. The server trims it, normalizes it to Unicode NFC, and never logs the raw value in ordinary request logs."
+    },
+    "daily_app_usage_minutes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1440
+    },
+    "estimated_continuous_app_usage_minutes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1440,
+      "description": "Client estimate; it is not exact foreground time and must not exceed daily_app_usage_minutes."
+    },
+    "continuous_app_usage_minutes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1440,
+      "description": "Mac App continuous usage checkpoint; must not exceed daily_app_usage_minutes."
+    },
+    "target_type": {
+      "type": "string",
+      "const": "website"
+    },
+    "website_domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 257,
+      "pattern": "^(?:[Ww]{3}\\.)?[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$",
+      "description": "Hostname only. The server lowercases it and removes one leading www.; subdomains remain distinct."
+    },
+    "label_source": {
+      "type": "string",
+      "enum": [
+        "domain",
+        "user"
+      ]
+    },
+    "daily_usage_minutes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1440
+    },
+    "continuous_usage_minutes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1440,
+      "description": "Mac website continuous usage; must not exceed daily_usage_minutes."
+    },
+    "continuous_usage_is_estimated": {
+      "type": "boolean"
+    },
     "continuous_screen_minutes": {
       "type": [
         "integer",
         "null"
       ],
-      "minimum": 0
+      "minimum": 0,
+      "maximum": 1440,
+      "deprecated": true,
+      "description": "Legacy client compatibility field. Do not combine it with any current usage fields."
     },
     "app_switches_last_10_minutes": {
       "type": [
@@ -89,6 +155,213 @@
     "raw_app_names_included": {
       "type": "boolean",
       "const": false
+    },
+    "full_url_included": {
+      "type": "boolean",
+      "const": false
+    },
+    "page_title_included": {
+      "type": "boolean",
+      "const": false
     }
-  }
+  },
+  "oneOf": [
+    {
+      "title": "Current iOS or iPadOS App usage",
+      "required": [
+        "user_provided_context_label",
+        "daily_app_usage_minutes",
+        "estimated_continuous_app_usage_minutes",
+        "continuous_usage_is_estimated",
+        "raw_app_names_included"
+      ],
+      "properties": {
+        "platform": {
+          "enum": [
+            "ios",
+            "ipados"
+          ]
+        },
+        "trigger_source": {
+          "const": "device_activity_threshold"
+        },
+        "continuous_usage_is_estimated": {
+          "const": true
+        },
+        "user_provided_context_label": {
+          "type": "string"
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "continuous_screen_minutes"
+            ]
+          },
+          {
+            "required": [
+              "continuous_app_usage_minutes"
+            ]
+          },
+          {
+            "required": [
+              "website_domain"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Current Mac App usage",
+      "required": [
+        "user_provided_context_label",
+        "daily_app_usage_minutes",
+        "continuous_app_usage_minutes",
+        "continuous_usage_is_estimated",
+        "raw_app_names_included"
+      ],
+      "properties": {
+        "platform": {
+          "const": "macos"
+        },
+        "trigger_source": {
+          "const": "macos_usage_checkpoint"
+        },
+        "continuous_usage_is_estimated": {
+          "const": false
+        },
+        "user_provided_context_label": {
+          "type": "string"
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "continuous_screen_minutes"
+            ]
+          },
+          {
+            "required": [
+              "estimated_continuous_app_usage_minutes"
+            ]
+          },
+          {
+            "required": [
+              "website_domain"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Current Mac website usage",
+      "required": [
+        "target_type",
+        "website_domain",
+        "label_source",
+        "daily_usage_minutes",
+        "continuous_usage_minutes",
+        "continuous_usage_is_estimated",
+        "full_url_included",
+        "page_title_included"
+      ],
+      "properties": {
+        "platform": {
+          "const": "macos"
+        },
+        "trigger_source": {
+          "const": "macos_website_checkpoint"
+        },
+        "continuous_usage_is_estimated": {
+          "const": false
+        }
+      },
+      "if": {
+        "properties": {
+          "label_source": {
+            "const": "user"
+          }
+        },
+        "required": [
+          "label_source"
+        ]
+      },
+      "then": {
+        "required": [
+          "user_provided_context_label"
+        ],
+        "properties": {
+          "user_provided_context_label": {
+            "type": "string"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "user_provided_context_label": {
+            "type": "null"
+          }
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "continuous_screen_minutes"
+            ]
+          },
+          {
+            "required": [
+              "daily_app_usage_minutes"
+            ]
+          },
+          {
+            "required": [
+              "raw_app_names_included"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Legacy usage",
+      "required": [
+        "continuous_screen_minutes",
+        "raw_app_names_included"
+      ],
+      "properties": {
+        "trigger_source": {
+          "enum": [
+            "device_activity_threshold",
+            "macos_rule",
+            "manual_ios",
+            "manual_macos",
+            "notification",
+            "debug"
+          ]
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "daily_app_usage_minutes"
+            ]
+          },
+          {
+            "required": [
+              "continuous_usage_is_estimated"
+            ]
+          },
+          {
+            "required": [
+              "website_domain"
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

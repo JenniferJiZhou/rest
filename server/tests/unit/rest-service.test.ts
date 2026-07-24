@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CannedAgentLLM } from "../../src/agent/canned-llm.js";
+import { CannedRestDecisionProvider } from "../../src/agent/rest-decision-providers.js";
 import { RestService } from "../../src/application/rest/rest-service.js";
 import { FileRestContentRepository } from "../../src/content/file-rest-content-repository.js";
 import {
@@ -7,13 +8,16 @@ import {
   InMemoryIdempotencyStore
 } from "../../src/infra/in-memory.js";
 
-const createService = (): RestService =>
-  new RestService(
+const createService = (): RestService => {
+  const content = new FileRestContentRepository();
+  return new RestService(
     new CannedAgentLLM(),
-    new FileRestContentRepository(),
+    content,
     new InMemoryFeedbackRepository(),
-    new InMemoryIdempotencyStore<boolean>()
+    new InMemoryIdempotencyStore<unknown>(),
+    new CannedRestDecisionProvider(content)
   );
+};
 
 const feedbackInput = (
   requestId: string,
@@ -31,8 +35,8 @@ const feedbackInput = (
 });
 
 describe("RestService", () => {
-  it("offers a rest immediately for a manual trigger", () => {
-    const result = createService().evaluate({
+  it("offers a rest immediately for a manual trigger", async () => {
+    const result = await createService().evaluate({
       schema_version: "1.0",
       request_id: "req_manual",
       measured_at: "2026-07-24T15:20:00+08:00",
@@ -45,14 +49,14 @@ describe("RestService", () => {
       self_reported_energy: 3,
       recent_feedback: [],
       raw_app_names_included: false
-    });
+    }, "req_manual");
 
     expect(result.should_offer_rest).toBe(true);
     expect(result.reason_code).toBe("manual");
   });
 
-  it("applies cooldown before behavioral rules", () => {
-    const result = createService().evaluate({
+  it("applies cooldown before behavioral rules", async () => {
+    const result = await createService().evaluate({
       schema_version: "1.0",
       request_id: "req_cooldown",
       measured_at: "2026-07-24T15:20:00+08:00",
@@ -65,7 +69,7 @@ describe("RestService", () => {
       self_reported_energy: null,
       recent_feedback: [],
       raw_app_names_included: false
-    });
+    }, "req_cooldown");
 
     expect(result.should_offer_rest).toBe(false);
     expect(result.reason_code).toBe("cooldown");
@@ -114,7 +118,10 @@ describe("RestService", () => {
       new CannedAgentLLM(),
       new FileRestContentRepository(),
       repository,
-      new InMemoryIdempotencyStore<boolean>()
+      new InMemoryIdempotencyStore<unknown>(),
+      new CannedRestDecisionProvider(
+        new FileRestContentRepository()
+      )
     );
     const feedback = feedbackInput("req_feedback_concurrent");
 
@@ -133,7 +140,10 @@ describe("RestService", () => {
       new CannedAgentLLM(),
       new FileRestContentRepository(),
       repository,
-      new InMemoryIdempotencyStore<boolean>()
+      new InMemoryIdempotencyStore<unknown>(),
+      new CannedRestDecisionProvider(
+        new FileRestContentRepository()
+      )
     );
     await service.recordFeedback(
       feedbackInput("req_feedback_a"),
@@ -159,7 +169,10 @@ describe("RestService", () => {
       new CannedAgentLLM(),
       new FileRestContentRepository(),
       repository,
-      new InMemoryIdempotencyStore<boolean>()
+      new InMemoryIdempotencyStore<unknown>(),
+      new CannedRestDecisionProvider(
+        new FileRestContentRepository()
+      )
     );
 
     await service.recordFeedback(

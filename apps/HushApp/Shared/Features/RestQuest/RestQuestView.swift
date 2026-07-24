@@ -26,7 +26,7 @@ struct RestQuestView: View {
                             Label(quest.durationLabel, systemImage: "timer")
                             Label("不用盯屏幕", systemImage: "rectangle.slash")
                         }
-                        .font(HushType.caption)
+                        .font(HushType.micro)
                         .foregroundStyle(HushColor.textSecondary)
                     }
 
@@ -61,7 +61,7 @@ struct RestQuestView: View {
 
                 if let safetyNote = quest.safetyNote {
                     Label(safetyNote, systemImage: "shield")
-                        .font(HushType.caption)
+                        .font(HushType.micro)
                         .foregroundStyle(HushColor.textSecondary)
                 }
             }
@@ -80,9 +80,6 @@ struct RestQuestView: View {
                 .disabled(!canSwap)
             }
 
-            Text("动作来自本地固定内容库。后端只能选择 Quest ID，不能改写步骤。")
-                .font(HushType.caption)
-                .foregroundStyle(HushColor.textSecondary)
         }
     }
 }

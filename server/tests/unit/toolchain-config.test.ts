@@ -42,7 +42,8 @@ describe("server toolchain certification config", () => {
     expect(workflow.on.push.branches).toContain("main");
     expect(workflow.on).toHaveProperty("pull_request");
     expect(source).toContain("20.19");
-    expect(source).toContain("pnpm@9.15.9");
+    expect(source).toContain("uses: pnpm/action-setup@v4");
+    expect(source).toContain("version: 9.15.9");
     expect(source).toContain("pnpm install --frozen-lockfile");
     expect(source).toContain("pnpm typecheck");
     expect(source).toContain("pnpm test:providers");

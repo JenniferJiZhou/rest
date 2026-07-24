@@ -7,19 +7,29 @@ This kit covers the W1 Rest and Handoff APIs. Gmail OAuth and Photon webhook
 adapters are owned separately and are not required for Mock Server
 integration.
 
+The focused Rest Decision runbook and Apple handoff are in
+`17_APPLE_REST_DECISION_HANDOFF.md`.
+
 ## 1. Base URLs
 
 | Environment | Base URL |
 |---|---|
-| Same Windows host | `http://127.0.0.1:3000` |
-| Trusted LAN | `http://<windows-lan-ipv4>:<port>` |
-| Demo | `https://<demo-host>` |
+| Windows-local backend smoke | `http://127.0.0.1:3000` |
+| Trusted-LAN HTTP smoke for manual tools | `http://<windows-lan-ipv4>:<port>` |
+| Current Apple clients / HTTPS staging | pending (`https://<staging-host>`) |
 
-The Demo URL is a placeholder until deployment. Keep the base URL in client
-configuration, not inside feature views.
+The current iOS DeviceActivity, Mac App, and Mac website clients reject
+non-HTTPS Base URLs. Localhost and trusted-LAN HTTP are only for backend or
+manual smoke tools; they are not Base URLs that the current Apple clients can
+use. After staging deployment, configure Apple with the platform-provided
+root HTTPS origin. It must not include `/v1/rest/evaluate`, because the Swift
+clients append that path. Keep the Base URL in the client configuration layer,
+not inside feature views. The real HTTPS staging URL remains pending.
 
 An iPhone or a different Mac must not use `127.0.0.1`; that address points
-back to the Apple device itself. See
+back to the Apple device itself. The HTTP LAN URL is for the PowerShell/curl
+protocol harness unless the Apple Owner separately changes transport policy.
+See
 `15_APPLE_MOCK_INTEGRATION_RELEASE.md` for LAN startup, firewall, ATS, and
 local-network permission guidance.
 
@@ -34,6 +44,9 @@ X-Contract-Version: 1.0
 ```
 
 Requests with JSON bodies must repeat the same value in `request_id`.
+For `/v1/rest/evaluate`, that request ID is also the checkpoint idempotency
+key: an identical retry returns the stored decision, while reuse with
+different content returns `409 INVALID_REQUEST`.
 
 These operations also require an idempotency key:
 
@@ -51,6 +64,8 @@ X-Hush-Demo-Token: <private runtime token>
 ```
 
 Do not ship a production demo token in the repository or App binary.
+The normal Canned staging graph does not send this token; it is identified
+by `X-Hush-Data-Origin: mock`.
 `GET /v1/health` does not require client headers, but it returns the same
 three Contract response headers.
 
@@ -115,8 +130,11 @@ curl -X POST "$BASE_URL/v1/rest/evaluate" \
     "request_id":"req_curl_evaluate",
     "measured_at":"2026-07-24T15:20:00+08:00",
     "platform":"ios",
-    "trigger_source":"manual_ios",
-    "continuous_screen_minutes":null,
+    "trigger_source":"device_activity_threshold",
+    "user_provided_context_label":"小红书",
+    "daily_app_usage_minutes":35,
+    "estimated_continuous_app_usage_minutes":15,
+    "continuous_usage_is_estimated":true,
     "app_switches_last_10_minutes":null,
     "local_hour":15,
     "minutes_since_last_rest":96,
@@ -125,6 +143,40 @@ curl -X POST "$BASE_URL/v1/rest/evaluate" \
     "raw_app_names_included":false
   }'
 ```
+
+UsageSummary has four mutually exclusive formats:
+
+| Format | `trigger_source` | Usage fields |
+|---|---|---|
+| Current iOS/iPadOS App | `device_activity_threshold` | `user_provided_context_label`, `daily_app_usage_minutes`, `estimated_continuous_app_usage_minutes`, `continuous_usage_is_estimated=true` |
+| Current Mac App | `macos_usage_checkpoint` | `user_provided_context_label`, `daily_app_usage_minutes`, `continuous_app_usage_minutes`, `continuous_usage_is_estimated=false` |
+| Current Mac website | `macos_website_checkpoint` | `target_type=website`, `website_domain`, `label_source`, `daily_usage_minutes`, `continuous_usage_minutes`, `continuous_usage_is_estimated=false`, `full_url_included=false`, `page_title_included=false` |
+| Legacy | legacy triggers including deprecated `macos_rule` | `continuous_screen_minutes` |
+
+Never combine `continuous_screen_minutes` with current usage fields. The
+server returns `400 INVALID_REQUEST` for a mixed payload. `macos_rule` is
+legacy/deprecated; current Apple clients do not send `macos_rule` or
+`macos_rules`.
+
+`user_provided_context_label` is supplied by the user. It is not an Apple
+verified App name. The server trims it, normalizes it to Unicode NFC, accepts
+1–80 characters, rejects control characters, and does not include the raw
+label in ordinary logs.
+
+For website checkpoints, send only a hostname. The server lowercases it and
+removes one leading `www.`. It does not perform eTLD+1/registrable-domain
+merging, so `m.youtube.com` and `music.youtube.com` stay distinct. Schemes,
+paths, queries, fragments, userinfo, and ports are rejected. Never upload a
+full URL, search term, or page title.
+
+For `label_source=user`, `user_provided_context_label` is a non-empty string.
+For `label_source=domain`, the field may be omitted (the current Swift
+encoding) or explicitly `null`; a non-null user label is rejected.
+
+`estimated_continuous_app_usage_minutes` is explicitly an estimate. Neither
+client nor server should describe it as exact continuous foreground time.
+The backend only decides whether to offer a rest choice; it never activates
+Shield or changes the next checkpoint.
 
 ### First fatigue check-in
 
@@ -282,7 +334,11 @@ files form one deterministic pair.
 
 | Flow | Request-shape fixture | Response/state-shape fixture |
 |---|---|---|
-| Evaluate | `usage-summary-manual-ios.json` | `rest-suggestion-no-offer.json` |
+| Evaluate legacy | `usage-summary-manual-ios.json` | `rest-suggestion-no-offer.json` |
+| Evaluate current iOS | `usage-summary-device-activity-ios.json` | runtime Canned decision |
+| Evaluate current Mac App | `usage-summary-macos-app.json` | runtime Canned decision |
+| Evaluate current Mac website/domain label | `usage-summary-macos-website.json` | runtime Canned decision |
+| Evaluate current Mac website/user label | `usage-summary-macos-website-user-label.json` | runtime Canned decision |
 | Check-in | `fatigue-check-in-cognitive.json` | `fatigue-reflection-follow-up.json` |
 | Recommend | fields from `rest-recommendation-success.json` request examples | `rest-recommendation-success.json` |
 | Start Handoff | `handoff-start-request.json` | `handoff-job-running.json` |
@@ -317,7 +373,7 @@ the live runtime rules described in this document.
 | Endpoint | Client timeout |
 |---|---:|
 | `/v1/health` | 3 s |
-| `/v1/rest/evaluate` | 8 s |
+| `/v1/rest/evaluate` | 5 s (current Swift implementation) |
 | `/v1/rest/check-in` | 12 s |
 | `/v1/rest/recommend` | 8 s |
 | `/v1/rest/feedback` | 5 s |
@@ -452,7 +508,7 @@ Fields that are nullable or conditionally absent include:
 
 Do not replace missing/`null` `summary` with an empty success model.
 
-## 11. Mock Server-only integration
+## 11. Local protocol smoke
 
 Start locally:
 
@@ -463,16 +519,15 @@ $env:HUSH_DEMO_TOKEN = "<private-local-token>"
 pnpm dev
 ```
 
-The Apple client then:
+The PowerShell smoke harness then:
 
-1. uses `http://<windows-lan-ipv4>:3000` from another machine, or
-   `http://127.0.0.1:3000` only when the client runs on the server host;
-2. sends the matching demo token;
-3. displays `SAMPLE MODE` after observing origin `mock`;
-4. uses Rest APIs normally;
-5. starts Handoff with either Fixture Gmail or
-   `include_gmail=false`;
-6. polls the real in-process Job state machine.
+1. uses `http://127.0.0.1:3000` on Windows, or a trusted-LAN HTTP URL;
+2. may send the matching Demo Token to select the Demo graph;
+3. verifies the three response headers and all Apple checkpoint shapes.
+
+Current Swift checkpoint code sends no Demo Token. It therefore selects the
+Normal graph, which is still Canned and reports origin `mock` in this phase.
+True Apple-device integration requires an HTTPS Base URL.
 
 This path uses real Fastify routes, application services, repositories, and
 composition, while injecting `CannedAgentLLM` and local providers. It does
@@ -484,6 +539,16 @@ Run the PowerShell smoke client from the repository root:
 .\scripts\smoke-w1-vertical-slice.ps1 `
   -BaseUrl "http://127.0.0.1:3000" `
   -DemoToken "<private-local-token>"
+```
+
+For the Apple Rest Decision protocol only:
+
+```powershell
+.\scripts\smoke-apple-rest-decision.ps1 `
+  -BaseUrl "http://127.0.0.1:3000" `
+  -Mode Demo `
+  -DemoToken "<private-local-token>" `
+  -Payload All
 ```
 
 ## 12. Cross-client troubleshooting with Request ID

@@ -12,7 +12,10 @@ import type {
   MailProvider,
   MessagingChannel,
   OutboundMessage,
-  ProviderHealth
+  ProviderHealth,
+  RestDecisionCandidate,
+  RestDecisionContext,
+  RestDecisionProvider
 } from "../../src/domain/ports.js";
 import {
   FixtureMailProvider,
@@ -47,6 +50,7 @@ describe("server dependency graph isolation", () => {
   it("marks a fully real normal graph as real", () => {
     const dependencies = buildServerDependencies(config(), {
       realAgent: new RealAgent(),
+      normalRestDecisionProvider: new RealRestDecisionProvider(),
       realMail: new RealMailProvider(),
       completionSink: new RealCompletionSink()
     });
@@ -157,6 +161,25 @@ class RealMailProvider implements MailProvider {
 
   async createDraft(_request: DraftRequest): Promise<DraftResult> {
     return { draftId: "real-draft" };
+  }
+}
+
+class RealRestDecisionProvider implements RestDecisionProvider {
+  readonly dataOrigin = "real" as const;
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async decide(
+    _context: RestDecisionContext
+  ): Promise<RestDecisionCandidate> {
+    return {
+      shouldOfferRest: false,
+      reasonCode: "insufficient_signal",
+      message: "",
+      defaultQuestId: null
+    };
   }
 }
 

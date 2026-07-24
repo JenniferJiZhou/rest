@@ -41,7 +41,8 @@ the Windows machine's LAN IPv4 address from the Apple device. See
 external callback URL construction; the existing W1 routes do not use it to
 change listener or response behavior.
 
-`GET /v1/health` does not require client headers. All other W1 routes require:
+`GET /v1/health` does not require client headers or call any Provider. It is
+a lightweight process liveness endpoint. All other W1 routes require:
 
 ```text
 X-Request-ID
@@ -92,12 +93,13 @@ corepack pnpm check
 corepack pnpm test:providers
 corepack pnpm test:integration
 corepack pnpm test:vertical
+corepack pnpm test:deployment
 ```
 
 `test:contracts` validates fixtures and local OpenAPI references. Vertical
-slice tests include the credential-free Unified Inbox flow. The legacy W1-04
-suite uses real TCP/HTTP on a random `127.0.0.1` port and does not expose a
-stable development port.
+slice tests include the credential-free Unified Inbox flow. W1-04 vertical-slice
+tests use real TCP/HTTP on a random `127.0.0.1` port and do not expose a stable
+development port.
 
 ## Current provider behavior
 
@@ -159,6 +161,18 @@ IDs and in-memory claims.
 with `--frozen-lockfile`, and runs typecheck, provider contracts, integration,
 vertical slice, full tests, production build, diff checks, and workspace
 cleanliness checks without real provider credentials.
+
+## HTTPS staging and containers
+
+Production HTTPS terminates at the cloud platform; Fastify receives internal
+HTTP. Set `TRUST_PROXY=true` only behind that trusted proxy. Production also
+requires an explicit public HTTPS `PUBLIC_BASE_URL`. Local defaults remain
+loopback-only with proxy trust disabled.
+
+The repository-root `render.yaml` and `Dockerfile` preserve runtime access to
+`content/rest-quests.json` and the Demo mail fixture. See
+`../docs/18_HTTPS_STAGING_AND_CLOUD_DEPLOYMENT.md`. No cloud resource or
+certificate is created by these files.
 
 ## Unified Inbox integration points
 
