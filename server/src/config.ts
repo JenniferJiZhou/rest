@@ -16,6 +16,14 @@ const environmentSchema = z
     PUBLIC_BASE_URL: z.url().default("http://localhost:3000"),
     CLAUDE_API_KEY: z.string().min(1).optional(),
     CLAUDE_MODEL: z.string().min(1).optional(),
+    CLAUDE_BASE_URL: z.url().default("https://api.anthropic.com"),
+    REST_DECISION_MODEL: z.string().trim().min(1).optional(),
+    REST_DECISION_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(4_500)
+      .default(3_500),
     LLM_TIMEOUT_MS: z.coerce
       .number()
       .int()
@@ -46,7 +54,7 @@ const environmentSchema = z
       .transform((value) => value === "true"),
     HUSH_DEMO_TOKEN: z.string().min(8).optional(),
     HUSH_REST_DECISION_PROVIDER: z
-      .enum(["canned", "unavailable"])
+      .enum(["real", "canned", "unavailable"])
       .default("canned"),
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])

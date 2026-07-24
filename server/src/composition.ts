@@ -5,6 +5,10 @@ import {
   CannedRestDecisionProvider,
   UnavailableRestDecisionProvider
 } from "./agent/rest-decision-providers.js";
+import {
+  AnthropicRestDecisionModelClient,
+  RealRestDecisionProvider
+} from "./agent/rest-decision/real-rest-decision-provider.js";
 import type { ServerDependencies } from "./api/create-server.js";
 import { HandoffService } from "./application/handoff/handoff-service.js";
 import { RestService } from "./application/rest/rest-service.js";
@@ -65,9 +69,7 @@ export function buildServerDependencies(
   const demoAgent = overrides.demoAgent ?? new CannedAgentLLM();
   const normalRestDecisionProvider =
     overrides.normalRestDecisionProvider ??
-    (config.HUSH_REST_DECISION_PROVIDER === "unavailable"
-      ? new UnavailableRestDecisionProvider()
-      : new CannedRestDecisionProvider(content));
+    createRestDecisionProvider(config, content);
   const demoRestDecisionProvider =
     overrides.demoRestDecisionProvider ??
     new CannedRestDecisionProvider(content);
@@ -95,7 +97,8 @@ export function buildServerDependencies(
 
   return {
     config,
-    restOrigin: graphOrigin(realAgent, normalRestDecisionProvider),
+    restDecisionOrigin: graphOrigin(normalRestDecisionProvider),
+    restOrigin: graphOrigin(realAgent),
     handoffOrigin: graphOrigin(realAgent, realMail, completionSink),
     demoRestOrigin: "mock",
     demoHandoffOrigin: "mock",
@@ -105,7 +108,10 @@ export function buildServerDependencies(
       new InMemoryFeedbackRepository(),
       new InMemoryIdempotencyStore<unknown>(),
       normalRestDecisionProvider,
-      { llmTimeoutMs: config.LLM_TIMEOUT_MS }
+      {
+        llmTimeoutMs: config.LLM_TIMEOUT_MS,
+        restDecisionTimeoutMs: config.REST_DECISION_TIMEOUT_MS
+      }
     ),
     demoRest: new RestService(
       demoAgent,
@@ -113,7 +119,10 @@ export function buildServerDependencies(
       new InMemoryFeedbackRepository(),
       new InMemoryIdempotencyStore<unknown>(),
       demoRestDecisionProvider,
-      { llmTimeoutMs: config.LLM_TIMEOUT_MS }
+      {
+        llmTimeoutMs: config.LLM_TIMEOUT_MS,
+        restDecisionTimeoutMs: config.REST_DECISION_TIMEOUT_MS
+      }
     ),
     handoff: new HandoffService(
       new InMemoryHandoffJobRepository(),
@@ -158,6 +167,30 @@ export function buildServerDependencies(
       handoff_jobs: "ready"
     })
   };
+}
+
+function createRestDecisionProvider(
+  config: AppConfig,
+  content: FileRestContentRepository
+): RestDecisionProvider {
+  if (config.HUSH_REST_DECISION_PROVIDER === "canned") {
+    return new CannedRestDecisionProvider(content);
+  }
+  if (config.HUSH_REST_DECISION_PROVIDER === "unavailable") {
+    return new UnavailableRestDecisionProvider();
+  }
+  const model = config.REST_DECISION_MODEL ?? config.CLAUDE_MODEL;
+  if (!config.CLAUDE_API_KEY || !model) {
+    return new UnavailableRestDecisionProvider();
+  }
+  return new RealRestDecisionProvider(
+    new AnthropicRestDecisionModelClient(
+      config.CLAUDE_API_KEY,
+      config.CLAUDE_BASE_URL
+    ),
+    model,
+    content
+  );
 }
 
 function graphOrigin(

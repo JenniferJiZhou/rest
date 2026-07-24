@@ -32,6 +32,7 @@ import type { RestService } from "../application/rest/rest-service.js";
 
 export interface ServerDependencies {
   config: AppConfig;
+  restDecisionOrigin: DataOrigin;
   restOrigin: DataOrigin;
   handoffOrigin: DataOrigin;
   demoRestOrigin: DataOrigin;
@@ -50,7 +51,7 @@ interface RequestContext {
   handoff: HandoffService;
 }
 
-type GraphKind = "rest" | "handoff";
+type GraphKind = "rest_decision" | "rest" | "handoff";
 
 export function createServer(
   dependencies: ServerDependencies
@@ -120,7 +121,11 @@ export function createServer(
     const origin = graphOrigin(
       dependencies,
       demo,
-      request.url.startsWith("/v1/handoff") ? "handoff" : "rest"
+      request.url.startsWith("/v1/handoff")
+        ? "handoff"
+        : request.url.startsWith("/v1/rest/evaluate")
+          ? "rest_decision"
+          : "rest"
     );
     setResponseHeaders(reply, requestId, origin);
     void reply
@@ -149,9 +154,18 @@ export function createServer(
       reply,
       dependencies,
       true,
-      "rest"
+      "rest_decision"
     );
-    return context.rest.evaluate(request.body, context.requestId);
+    const cancellation = requestCancellation(request, reply);
+    try {
+      return await context.rest.evaluate(
+        request.body,
+        context.requestId,
+        { signal: cancellation.signal }
+      );
+    } finally {
+      cancellation.dispose();
+    }
   });
 
   server.post("/v1/rest/check-in", async (request, reply) => {
@@ -310,9 +324,12 @@ function graphOrigin(
   graph: GraphKind
 ): DataOrigin {
   if (demo) {
-    return graph === "rest"
+    return graph === "rest" || graph === "rest_decision"
       ? dependencies.demoRestOrigin
       : dependencies.demoHandoffOrigin;
+  }
+  if (graph === "rest_decision") {
+    return dependencies.restDecisionOrigin;
   }
   return graph === "rest"
     ? dependencies.restOrigin
@@ -385,6 +402,43 @@ function setResponseHeaders(
   reply.header("X-Request-ID", requestId);
   reply.header("X-Contract-Version", CONTRACT_VERSION);
   reply.header("X-Hush-Data-Origin", origin);
+}
+
+function requestCancellation(
+  request: FastifyRequest,
+  reply: FastifyReply
+): {
+  signal: AbortSignal;
+  dispose(): void;
+} {
+  const controller = new AbortController();
+  const abort = (): void => {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error("HTTP client disconnected."));
+    }
+  };
+  const abortIncompleteResponse = (): void => {
+    if (!reply.raw.writableEnded) {
+      abort();
+    }
+  };
+  request.raw.once("aborted", abort);
+  reply.raw.once("close", abortIncompleteResponse);
+  request.raw.socket.once("close", abortIncompleteResponse);
+  if (request.raw.aborted) {
+    abort();
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      request.raw.removeListener("aborted", abort);
+      reply.raw.removeListener("close", abortIncompleteResponse);
+      request.raw.socket.removeListener(
+        "close",
+        abortIncompleteResponse
+      );
+    }
+  };
 }
 
 function isMalformedJsonError(error: unknown): boolean {

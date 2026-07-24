@@ -21,6 +21,7 @@ import type {
   AgentLLM,
   FeedbackRepository,
   IdempotencyStore,
+  ProviderCallOptions,
   RestContentRepository,
   RestDecisionProvider
 } from "../../domain/ports.js";
@@ -29,6 +30,7 @@ import { RestDecisionExecutor } from "./rest-decision-execution.js";
 
 export interface RestServiceOptions {
   llmTimeoutMs?: number;
+  restDecisionTimeoutMs?: number;
 }
 
 export class RestService {
@@ -44,13 +46,17 @@ export class RestService {
   ) {
     this.decisionExecutor = new RestDecisionExecutor(
       decisionProvider,
-      content
+      content,
+      options.restDecisionTimeoutMs === undefined
+        ? {}
+        : { timeoutMs: options.restDecisionTimeoutMs }
     );
   }
 
   async evaluate(
     input: unknown,
-    verifiedRequestId: string
+    verifiedRequestId: string,
+    options?: ProviderCallOptions
   ): Promise<RestSuggestion> {
     const request = usageSummarySchema.parse(input);
     if (request.request_id !== verifiedRequestId) {
@@ -69,7 +75,8 @@ export class RestService {
       create: async () => {
         const result = await this.decisionExecutor.execute(
           request,
-          verifiedRequestId
+          verifiedRequestId,
+          options
         );
         if (result.kind === "responded") {
           return result.response;
