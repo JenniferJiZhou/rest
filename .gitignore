@@ -29,5 +29,8 @@ logs/
 .vscode/
 .idea/
 
+# Agent worktrees
+.worktrees/
+
 # Demo artifacts
 demo-output/
