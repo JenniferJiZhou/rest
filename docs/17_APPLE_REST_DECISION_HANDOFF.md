@@ -270,7 +270,7 @@ HTTPS staging:
 
 ```powershell
 .\scripts\smoke-https-staging.ps1 `
-  -BaseUrl "https://<deployed-origin>" `
+  -BaseUrl "https://hush-server-staging.preview.aliyun-zeabur.cn" `
   -Mode Https `
   -ExpectedDataOrigin mock
 ```

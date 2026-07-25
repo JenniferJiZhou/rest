@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
@@ -17,6 +18,19 @@ describe("deployment artifacts", () => {
       resolve(repositoryRoot, "deploy/zeabur.env.example"),
       "utf8"
     );
+    const document = parse(workflow) as {
+      jobs: {
+        build: {
+          permissions: Record<string, string>;
+          outputs: Record<string, string>;
+        };
+        publish: {
+          if: string;
+          needs: string;
+          permissions: Record<string, string>;
+        };
+      };
+    };
     const env = new Map(
       environment
         .trim()
@@ -36,9 +50,9 @@ describe("deployment artifacts", () => {
     expect(workflow).toContain("docker/build-push-action@");
     expect(workflow).toContain("docker/login-action@");
     expect(workflow).toContain("load: true");
-    expect(workflow).toContain("docker push");
+    expect(workflow).toContain("push: true");
+    expect(workflow).toContain("docker buildx imagetools create");
     expect(workflow).toContain("GITHUB_SHA");
-    expect(workflow).toContain("packages: write");
     expect(workflow).toContain("http://127.0.0.1:3000/v1/health");
     expect(workflow).toContain("github.ref == 'refs/heads/main'");
     expect(workflow).toContain("workflow_dispatch");
@@ -47,6 +61,20 @@ describe("deployment artifacts", () => {
     expect(workflow).not.toContain("HUSH_DEMO_TOKEN");
     expect(workflow.toLowerCase()).not.toContain("clawcloud");
     expect(environment.toLowerCase()).not.toContain("clawcloud");
+    expect(document.jobs.build.permissions).toEqual({
+      contents: "read"
+    });
+    expect(document.jobs.build.outputs.image_name).toContain(
+      "steps.image.outputs.name"
+    );
+    expect(document.jobs.publish.needs).toBe("build");
+    expect(document.jobs.publish.if).toContain(
+      "github.event_name == 'push'"
+    );
+    expect(document.jobs.publish.permissions).toEqual({
+      contents: "read",
+      packages: "write"
+    });
     expect(env.get("NODE_ENV")).toBe("production");
     expect(env.get("HOST")).toBe("0.0.0.0");
     expect(env.get("TRUST_PROXY")).toBe("true");

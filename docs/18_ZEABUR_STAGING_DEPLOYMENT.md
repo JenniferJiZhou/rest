@@ -17,10 +17,15 @@ repository.
 
 ## Why Zeabur
 
-Zeabur currently provides a Free Plan that does not require a credit card.
-Free services sleep while idle and wake on the next request, so this path is
-appropriate for controlled staging and Demo use, not an availability-critical
-production service.
+The current deployment does not use Zeabur's hosted Free Plan as container
+runtime. It uses the existing ZeaburOS server recorded above. A Zeabur account
+can stay on the Free Plan without adding a payment method, but the runtime
+server is separate and can have its own renewal cost.
+
+New Zeabur projects must select an existing Server, buy a Server, or bind an
+external Server. Shared-cluster projects are deprecated and cannot be used as
+a new free container target. This runbook therefore assumes that a suitable
+Server already exists before project creation.
 
 Zeabur can deploy a prebuilt public Docker/OCI image, inject environment
 variables, expose the image port, issue a managed address, and manage HTTPS
@@ -33,6 +38,8 @@ need to change.
 Authoritative platform references:
 
 - [Free Plan](https://zeabur.com/docs/en-US/pricing/free-plan)
+- [Create Project and select a Server](https://zeabur.com/docs/en-US/deploy/create/create-project)
+- [Shared Cluster deprecation](https://zeabur.com/docs/en-US/server/shared-cluster)
 - [Create Service](https://zeabur.com/docs/en-US/deploy/create/create-service)
 - [Dockerfile deployments](https://zeabur.com/docs/en-US/deploy/methods/dockerfile)
 - [GitHub integration](https://zeabur.com/docs/en-US/deploy/methods/github-integration)
@@ -148,10 +155,11 @@ Create one Zeabur project and add a **Docker Image** service:
 Keep one replica. Jobs, idempotency claims, draft state, and the Canned
 decision cache are process-local; multiple replicas would partition them.
 
-Hosted Free Plan services auto-sleep and have no SLA. The current deployment
-uses an existing ZeaburOS server instead. In either case, call `/v1/health`
-until it returns HTTP 200 before a Demo, then run the full smoke test. Do not
-treat an initial image pull or cold request as an Agent timeout measurement.
+The current deployment uses an existing ZeaburOS server and does not rely on
+hosted Free Plan auto-sleep behavior. After an image update or restart, call
+`/v1/health` until it returns HTTP 200 before a Demo, then run the full smoke
+test. Do not treat an initial image pull or cold request as an Agent timeout
+measurement.
 
 For a mainland-China ZeaburOS server, Zeabur shows a compliance notice before
 public-domain binding. The account owner must complete the required identity
@@ -207,6 +215,10 @@ credentials, SMTP credentials, webhook secrets, or registry credentials in:
 - an Apple binary.
 
 ## First deployment
+
+Prerequisite: select an existing Server, buy a Server, or bind an external
+Server before creating the project. A Free Plan account by itself is not
+container runtime for a new project.
 
 1. Run a reviewed `HTTPS Staging Image` workflow with `publish=true`.
 2. Record the full commit SHA and image digest.
