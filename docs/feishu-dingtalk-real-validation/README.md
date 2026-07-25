@@ -91,9 +91,8 @@ provider 登录态只保存在官方 CLI 的本地凭证存储。不得将 provi
 - 不在 shell 命令行中写 `HUSH_APP_TOKEN` 字面值，避免进入 shell history。
 - 环境变量本身仍是敏感信息；只在当前 shell 使用并在收尾时 `unset`。
 - read smoke 不输出正文或 ID，也绝不发送消息。
-- 任何 `stage=send` 非 `PASS` 都属于歧义发送结果。遇到
-  `INBOX_SEND_UNKNOWN`、`HUSH_SMOKE_SEND_NOT_CONFIRMED`、
-  `HUSH_SMOKE_NETWORK_ERROR`、超时或连接中断，先查真实客户端，禁止直接重跑。
+- App send 的任何非成功结果都按歧义发送处理。遇到 `INBOX_SEND_UNKNOWN`、
+  网络错误、超时或连接中断，先查真实客户端，禁止自动重试。
 - 不在公共 Wi-Fi 上运行，不做路由器端口转发、隧道或公网暴露。
 
 ## 3. Mac 工具链与分支准备
@@ -169,14 +168,25 @@ npm install -g dingtalk-workspace-cli@1.0.54
 
 禁止使用浮动版本、从可变分支下载执行脚本，或在比赛日临时升级。
 
-安装后可在同一目录确认可执行文件位置；不要把包含本机用户名的绝对路径写入
-证据表：
+安装后在当前 shell 解析两个固定 binary 的绝对路径：
 
 ```bash
 cd "<repository-root>"
-command -v lark-cli
-command -v dws
+LARK_CLI_PATH="$(command -v lark-cli)" || exit 1
+DWS_CLI_PATH="$(command -v dws)" || exit 1
+case "$LARK_CLI_PATH" in /*) ;; *) echo "STOP: lark-cli path is not absolute"; exit 1 ;; esac
+case "$DWS_CLI_PATH" in /*) ;; *) echo "STOP: dws path is not absolute"; exit 1 ;; esac
+"$LARK_CLI_PATH" --version
+"$DWS_CLI_PATH" version
 ```
+
+只有两个 version 输出分别精确对应 `1.0.77` 和 `1.0.54` 才继续；任一不符立即
+STOP，不得运行 config 或 auth。
+
+将这两个 shell 变量的解析值逐字写入 `.env` 的 `LARK_CLI_PATH` 和
+`DWS_CLI_PATH`。不要写 `command -v`、变量名或未展开占位符。shell 变量与
+`.env` 必须完全一致，确保 preflight 和 Connector 执行同一个 binary。路径只在
+本机使用，不写入证据表。
 
 ## 5. 本机 `.env` 配置
 
@@ -184,6 +194,19 @@ command -v dws
 `.env.example` 为准创建本机文件；不得提交或共享。下面所有值均为占位符。
 这不是 `.env.example` 的全量复制；未列出的非 Inbox 字段沿用默认值或留空，
 不参与本验证。
+
+创建根 `.env` 后立即限制权限。执行目录：`<repository-root>`
+
+```bash
+cd "<repository-root>"
+touch .env
+chmod 600 .env
+stat -f '%Lp' .env
+```
+
+只有 `stat` 输出精确为 `600` 才继续填写配置；该命令不读取或输出 `.env`
+内容。共享 Mac 上只允许当前比赛操作员的系统账号访问 `.env`，不得通过共享
+账号、云盘同步或宽松 ACL 暴露 secret。
 
 ### 5.1 macOS App 同机 loopback 模式
 
@@ -206,11 +229,11 @@ INBOX_STEPFUN_TIMEOUT_MS=15000
 INBOX_POLL_INTERVAL_MS=30000
 INBOX_INITIAL_LOOKBACK_MINUTES=60
 INBOX_SYNC_BATCH_LIMIT=100
-INBOX_STATE_FILE=.data/unified-inbox-state.json
+INBOX_STATE_FILE=.data/unified-inbox-real-demo.json
 
-LARK_CLI_PATH=<absolute-path-to-lark-cli-executable>
+LARK_CLI_PATH=<exact-value-of-resolved-LARK_CLI_PATH>
 LARK_ACCOUNT_ID=feishu-demo
-DWS_CLI_PATH=<absolute-path-to-dws-executable>
+DWS_CLI_PATH=<exact-value-of-resolved-DWS_CLI_PATH>
 DINGTALK_ACCOUNT_ID=dingtalk-demo
 
 OUTLOOK_ACCOUNT_ID=
@@ -258,6 +281,7 @@ Network permission 和 ATS 机制；它不证明当前真实 Inbox UI 已接入�
 - `LARK_ACCOUNT_ID` 与 `DINGTALK_ACCOUNT_ID` 只是 Hush 本地稳定标签，不是
   provider 账号、corp、用户或会话 ID。
 - 只验证一个 provider 时，另一个 provider 的 CLI path 和 account label 可留空。
+- 已配置 provider 的 `*_CLI_PATH` 必须与第 4.2 节当前 shell 解析值逐字相同。
 - `INBOX_STEPFUN_TIMEOUT_MS=15000` 将单次 AI 请求限制在 15 秒。
 - `INBOX_POLL_INTERVAL_MS=30000`、`INBOX_INITIAL_LOOKBACK_MINUTES=60`、
   `INBOX_SYNC_BATCH_LIMIT=100` 分别控制 poll、初始 lookback 和 batch 上限。
@@ -266,6 +290,8 @@ Network permission 和 ATS 机制；它不证明当前真实 Inbox UI 已接入�
 
 授权 URL、device code、status JSON 和 profile JSON 只在比赛用 Mac 本地查看，
 不截图、不复制、不共享。preflight 可在任意目录运行；这里统一使用仓库根目录。
+若已打开新 shell，先按第 4.2 节重新解析 `LARK_CLI_PATH` 和 `DWS_CLI_PATH`，
+并逐字确认它们仍与 `.env` 一致；不一致时停止。
 
 ### 6.1 飞书
 
@@ -273,8 +299,8 @@ Network permission 和 ATS 机制；它不证明当前真实 Inbox UI 已接入�
 
 ```bash
 cd "<repository-root>"
-lark-cli config init --new
-lark-cli auth login --scope "search:message im:message.reactions:read im:message.send_as_user im:message"
+"$LARK_CLI_PATH" config init --new
+"$LARK_CLI_PATH" auth login --scope "search:message im:message.reactions:read im:message.send_as_user im:message"
 ```
 
 scope 必须精确为以下四项，不增加也不减少：
@@ -290,13 +316,14 @@ im:message
 
 ```bash
 cd "<repository-root>"
-lark-cli --version
-lark-cli auth status --json --verify
+"$LARK_CLI_PATH" --version
+"$LARK_CLI_PATH" auth status --json --verify
 ```
 
-只有 effective identity 为 `user` 且 `--verify` 网络校验成功时才继续。不要把
-JSON 输出粘贴到证据表。`--verify` 只用于这次 preflight；Connector 正常 poll
-不执行它，而是调用 `im +messages-search` 拉取消息。
+只有 version 输出精确对应 `1.0.77`、effective identity 为 `user` 且
+`--verify` 网络校验成功时才继续；版本不符必须停止。不要把 JSON 输出粘贴到
+证据表。`--verify` 只用于这次 preflight；Connector 正常 poll 不执行它，而是
+调用 `im +messages-search` 拉取消息。
 
 ### 6.2 钉钉
 
@@ -304,14 +331,14 @@ JSON 输出粘贴到证据表。`--verify` 只用于这次 preflight；Connector
 
 ```bash
 cd "<repository-root>"
-dws auth login
+"$DWS_CLI_PATH" auth login
 ```
 
 无浏览器交互时改用：
 
 ```bash
 cd "<repository-root>"
-dws auth login --device
+"$DWS_CLI_PATH" auth login --device
 ```
 
 若提示 CLI access disabled，管理员必须进入：
@@ -327,14 +354,15 @@ DingTalk Developer Platform -> CLI Access Management
 
 ```bash
 cd "<repository-root>"
-dws version
-dws auth status --format json
-dws profile list --format json
+"$DWS_CLI_PATH" version
+"$DWS_CLI_PATH" auth status --format json
+"$DWS_CLI_PATH" profile list --format json
 ```
 
-只有目标 profile 是 current profile、`authenticated=true` 且 refresh token
-有效时才继续。不要记录 JSON。`dws auth status` 可能刷新过期 access token，
-所以只放在 preflight，不放进 Connector polling loop。正常 poll 使用
+只有 version 输出精确对应 `1.0.54`、目标 profile 是 current profile、
+`authenticated=true` 且 refresh token 有效时才继续；版本不符必须停止。不要
+记录 JSON。`dws auth status` 可能刷新过期 access token，所以只放在
+preflight，不放进 Connector polling loop。正常 poll 使用
 `dws chat message list-all`。
 
 ## 7. 准备无敏感测试消息
@@ -353,7 +381,33 @@ dws profile list --format json
 使用两个 Terminal 窗口。read smoke 不依赖 Apple UI；它可以在当前 fixture App
 未改造时独立取得 Backend PASS，但不能证明 UI connected。
 
-### 8.1 Terminal A：启动 server
+### 8.1 新鲜状态与权限硬门禁
+
+本 Runbook 必须从不存在的专用状态文件开始，避免默认文件或旧验证数据误触发
+Backend PASS。启动 server 前执行以下命令。
+
+执行目录：`<repository-root>/server`
+
+```bash
+cd "<repository-root>/server"
+mkdir -p .data
+chmod 700 .data
+stat -f '%Lp' .data
+if [ -e .data/unified-inbox-real-demo.json ]; then
+  echo "STOP: real demo state already exists"
+  exit 1
+fi
+```
+
+只有 `.data` 权限输出精确为 `700`，且专用文件不存在时才继续。文件已存在必须
+STOP，由负责人先决定是否归档或删除；不得继续启动或运行 read smoke。本次验证
+必须从不存在的新状态开始，不能复用默认
+`.data/unified-inbox-state.json` 或任何旧 Demo 状态。
+
+共享 Mac 上，`.data` 目录和专用状态文件只允许当前比赛操作员的系统账号访问；
+不得让其他本机账号、同步工具或共享目录绕过此权限边界。
+
+### 8.2 Terminal A：启动 server
 
 执行目录：`<repository-root>/server`
 
@@ -364,7 +418,19 @@ corepack pnpm dev
 
 保持 Terminal A 运行。Connector 按配置的 poll interval 同步 provider。
 
-### 8.2 Terminal B：liveness 与敏感 token 输入
+专用状态文件首次创建后，在 Terminal B 限制并验证权限，不读取文件内容。
+执行目录：`<repository-root>/server`
+
+```bash
+cd "<repository-root>/server"
+chmod 600 .data/unified-inbox-real-demo.json
+stat -f '%Lp' .data/unified-inbox-real-demo.json
+```
+
+只有权限输出精确为 `600` 才继续 read smoke。如果文件尚未创建，先等待首次
+poll；不要手工创建空 JSON。
+
+### 8.3 Terminal B：liveness 与敏感 token 输入
 
 loopback 模式执行目录：`<repository-root>/server`
 
@@ -387,7 +453,7 @@ iOS LAN 模式还需从 iPhone 验证 transport：在 Safari 打开
 Base URL。Safari liveness 成功仍不代表 native App 的 Local Network permission、
 ATS 或真实 Inbox API 集成成功。
 
-### 8.3 两个 provider 的 read smoke
+### 8.4 两个 provider 的 read smoke
 
 飞书，执行目录：`<repository-root>/server`
 
@@ -409,7 +475,9 @@ corepack pnpm smoke:inbox -- --provider dingtalk --mode read
 PASS provider=<feishu-or-dingtalk> stage=read card_count=<positive-count> sync_ready=true conversation_metadata=true stepfun_summary=true needs_reply=<true-or-false> draft_present=<true-or-false> private_id_fields=false
 ```
 
-只有实际出现该行，且三个必需布尔值均正确，才记录 Backend PASS。
+只有实际出现该行，且三个必需布尔值均正确，才记录 Backend PASS。该结果只
+证明本次新鲜专用状态中已拉到目标 provider 卡并生成摘要；它不输出、引用或
+关联消息正文、item id 或 provider 私有 ID，也不证明 Apple UI 已连接。
 
 ## 9. API-connected Apple build 硬门禁
 
@@ -475,46 +543,23 @@ Apple build 的 UI 验收；否则本节为 `BLOCKED` 或 `SKIPPED`。
 - 最终草稿已逐字核对。
 - 所有 `@` target 可见、正确且无多余或缺失对象。
 
-item id 只能由 API-connected App 的当前安全选中流程在内部传递并触发。操作员
-不得查看、复制、输入或记录它，也不得从日志、raw API 或状态文件获取它。当前
-fixture App 无此能力，所以不能执行真实 send。
+发送只能由 API-connected Apple App 自身完成。App 必须在可见的最终复核后：
 
-优先由 API-connected App 自身完成 exact-version confirmation/send。若批准的
-Apple integration harness 在内部调用仓库 smoke，其等价单次命令形状如下；
-`HUSH_ITEM_ID` 必须由 App 安全流程注入，不能显示或落入 shell history。
+1. 固定用户刚复核的 `draftId` 和 `expectedVersion`。
+2. 若草稿、targets 或 version 发生变化，立即使本次复核失效并要求重新核对。
+3. 为该 reviewed draft version 和当前 App session 请求一次性 confirmation。
+4. 使用同一 `draftId`、同一 `expectedVersion`、该 confirmation 和新的
+   idempotency key 执行 send。
+5. 仅在 App 收到明确成功且真实客户端确认只送达一次后记录 `PASS`。
 
-飞书，执行目录：`<repository-root>/server`
+现有仓库 CLI smoke 的 send mode 只接收 item id，执行时会重新取得最新 draft，
+没有绑定用户复核时的 `draftId` / `expectedVersion`。禁止将它当作用户审核的
+等价路径，也不得作为正式 Demo fallback。当前 fixture App 不具备上述契约能力，
+所以 send 必须为 `BLOCKED` 或 `SKIPPED`。
 
-```bash
-cd "<repository-root>/server"
-HUSH_SMOKE_ALLOW_SEND=true corepack pnpm smoke:inbox -- --provider feishu --mode send --item-id "$HUSH_ITEM_ID"
-```
-
-钉钉，执行目录：`<repository-root>/server`
-
-```bash
-cd "<repository-root>/server"
-HUSH_SMOKE_ALLOW_SEND=true corepack pnpm smoke:inbox -- --provider dingtalk --mode send --item-id "$HUSH_ITEM_ID"
-```
-
-使用单命令前缀可避免 `HUSH_SMOKE_ALLOW_SEND` 残留；永远不要把它写入 `.env`。
-成功输出形状为：
-
-```text
-PASS provider=<feishu-or-dingtalk> stage=send sent=true confirmation=true idempotency_fresh=true
-```
-
-命令完成后：
-
-1. 在真实飞书/钉钉客户端确认目标会话、`@` 对象正确且只送达一次。
-2. 只有真实客户端确认送达，guarded send 才记 `PASS`。
-3. 清除 integration harness 内部的 item id，并确保未进入日志或证据。
-
-`INBOX_SEND_UNKNOWN` 表示 backend 已明确持久化并返回歧义发送结果；
-`HUSH_SMOKE_SEND_NOT_CONFIRMED` 表示 HTTP 2xx 响应未满足 smoke 要求的
-`status=sent` 等 sent-confirmed 结构；`HUSH_SMOKE_NETWORK_ERROR` 或连接中断
-表示传输层结果有歧义。三者以及任何 `stage=send` 非 `PASS` 都必须先在真实
-客户端检查是否已送达，禁止直接重跑。
+`INBOX_SEND_UNKNOWN` 表示 backend 已持久化并返回歧义发送结果。App send 的任何
+非成功结果、网络错误、超时或连接中断都必须先在真实客户端检查是否已送达，
+禁止自动重试或直接再次确认发送。
 
 ## 11. 故障排查
 
@@ -528,8 +573,7 @@ PASS provider=<feishu-or-dingtalk> stage=send sent=true confirmation=true idempo
 | `INBOX_AI_UNAVAILABLE` 且 `reason=timeout` | StepFun 超过 15 秒上限 | 保持 server 运行，等待 Connector backoff；核对网络与 StepFun，不无限阻塞。 |
 | provider permission / entitlement 错误 | 登录存在但无读取或发送权限 | 飞书核对精确四 scope 和组织审批；钉钉按 CLI 提示处理 CLI Access Management。 |
 | `INBOX_SEND_UNKNOWN` | backend 已持久化并返回歧义发送结果 | 先查真实客户端，禁止直接重跑。 |
-| `HUSH_SMOKE_SEND_NOT_CONFIRMED` | HTTP 2xx 响应不满足 `status=sent` 等 sent-confirmed 结构 | 先查真实客户端，禁止直接重跑。 |
-| `HUSH_SMOKE_NETWORK_ERROR` / connection interruption | send 的传输层结果有歧义 | 先查真实客户端，禁止直接重跑。 |
+| App send 非成功 / 网络错误 / connection interruption | send 结果不明确 | 先查真实客户端，禁止自动重试或再次确认发送。 |
 
 AI 是 bounded wait，不是完全异步。每次摘要或草稿请求最多等待
 `INBOX_STEPFUN_TIMEOUT_MS=15000`；超时使本次同步失败，Connector 按 backoff
@@ -545,8 +589,12 @@ Outlook/QQ 未配置不阻塞飞书/钉钉验证。CI、fixture 和 mock 只能�
 - [ ] 在指定 Mac 和正确 worktree 执行。
 - [ ] Node `20.19.x`、pnpm `9.15.9`、目标分支正确。
 - [ ] 两个 CLI 的固定版本 integrity 已逐字符比对后安装。
+- [ ] CLI version 分别精确对应 `1.0.77` / `1.0.54`，否则已停止。
+- [ ] preflight 使用的两个绝对 CLI path 与 `.env` 逐字一致。
 - [ ] server 依赖以 `--frozen-lockfile` 安装，比赛日未升级。
-- [ ] `.env` 只在本机，两个 Hush token 不同且各为 32 到 128 字符。
+- [ ] 根 `.env` 权限为 `600`，两个 Hush token 不同且各为 32 到 128 字符。
+- [ ] `server/.data` 权限为 `700`，专用状态文件启动前不存在。
+- [ ] server 创建专用状态文件后，其权限已验证为 `600`。
 - [ ] loopback 或 trusted-LAN 拓扑与目标 Apple 平台一致。
 - [ ] LAN 模式只在受信任网络开放，没有公网暴露。
 - [ ] 当前 provider 的官方 CLI 授权和一次性网络 preflight 通过。
@@ -561,7 +609,9 @@ Outlook/QQ 未配置不阻塞飞书/钉钉验证。CI、fixture 和 mock 只能�
 - [ ] 真实列表/详情、摘要/待办、草稿编辑、visible targets 已核对。
 - [ ] exact-revision acknowledge、下一张 digest 卡和 checkpoint 重启已核对。
 - [ ] 发送前 provider、会话、最终草稿、所有 `@` target 已核对。
-- [ ] 若发送，只使用一次临时开关，并在真实客户端确认只送达一次。
+- [ ] 若发送，仅由 App 使用 reviewed draft version -> confirmation -> send 契约，
+  并在真实客户端确认只送达一次。
+- [ ] 未将 CLI smoke send 当作用户审核等价路径或 fallback。
 - [ ] 任何 send 歧义先查真实客户端，未直接重跑。
 - [ ] 证据、状态文件决策和收尾已完成。
 
@@ -575,13 +625,16 @@ integration、summary/draft UI 和 guarded send 不得为 `PASS`。
 | `feishu` 或 `dingtalk` | `<local-date-time>` | `<status>` | `<status>` | `<status>` | `<status>` | `<status>` | `<initials>` |
 
 证据表不得附消息正文、摘要、草稿、raw JSON、任何 ID、server 日志、token、
-授权 URL、device code 或隐私截图。Mac LAN IP 也无需记录。
+授权 URL、device code、CLI path 或隐私截图。Mac LAN IP 也无需记录。
+`Backend read` 只记录本次新鲜专用状态的 `PASS` / `FAIL`，不得关联卡片内容或
+任何 ID。
 
 ## 14. 状态文件、清理与退出
 
-`<repository-root>/server/.data/unified-inbox-state.json` 是敏感文件，包含真实
-消息、草稿、私有 participant binding 和 checkpoint；还可能承载 digest、
-confirmation 与 send idempotency 状态。不得提交、共享、截图或用于抄取 ID。
+`<repository-root>/server/.data/unified-inbox-real-demo.json` 是敏感文件，包含
+真实消息、草稿、私有 participant binding 和 checkpoint；还可能承载 digest、
+confirmation 与 send idempotency 状态。文件权限必须为 `600`，父目录权限必须
+为 `700`；不得提交、共享、截图或用于抄取 ID。
 
 ### 14.1 保留状态
 
@@ -598,7 +651,7 @@ confirmation 与 send idempotency 状态。不得提交、共享、截图或用�
 
 ```bash
 cd "<repository-root>/server"
-rm -- .data/unified-inbox-state.json
+rm -- .data/unified-inbox-real-demo.json
 ```
 
 此删除不可通过本 Runbook 恢复，并会清空 checkpoint、digest、draft、
@@ -613,8 +666,6 @@ Terminal B，执行目录：`<repository-root>/server`
 cd "<repository-root>/server"
 unset HUSH_BASE_URL
 unset HUSH_APP_TOKEN
-unset HUSH_SMOKE_ALLOW_SEND
-unset HUSH_ITEM_ID
 ```
 
 确认 Terminal A 已停止。若曾启用 LAN listener，恢复 loopback 配置或确保本次
@@ -627,8 +678,8 @@ server 不再运行。
 
 ```bash
 cd "<repository-root>"
-lark-cli auth --help
-dws auth --help
+"$LARK_CLI_PATH" auth --help
+"$DWS_CLI_PATH" auth --help
 ```
 
 不要猜测 logout 参数。退出后如需再次 Demo，必须重新完成授权与 preflight。
