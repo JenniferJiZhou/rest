@@ -92,8 +92,8 @@ provider 登录态只保存在官方 CLI 的本地凭证存储。不得将 provi
 - 环境变量本身仍是敏感信息；只在当前 shell 使用并在收尾时 `unset`。
 - read smoke 不输出正文或 ID，也绝不发送消息。
 - 任何 `stage=send` 非 `PASS` 都属于歧义发送结果。遇到
-  `HUSH_SMOKE_SEND_NOT_CONFIRMED`、`HUSH_SMOKE_NETWORK_ERROR`、超时或连接
-  中断，先查真实客户端，禁止直接重跑。
+  `INBOX_SEND_UNKNOWN`、`HUSH_SMOKE_SEND_NOT_CONFIRMED`、
+  `HUSH_SMOKE_NETWORK_ERROR`、超时或连接中断，先查真实客户端，禁止直接重跑。
 - 不在公共 Wi-Fi 上运行，不做路由器端口转发、隧道或公网暴露。
 
 ## 3. Mac 工具链与分支准备
@@ -182,6 +182,8 @@ command -v dws
 
 配置文件位置是 `<repository-root>/.env`，不是 `server/.env`。以
 `.env.example` 为准创建本机文件；不得提交或共享。下面所有值均为占位符。
+这不是 `.env.example` 的全量复制；未列出的非 Inbox 字段沿用默认值或留空，
+不参与本验证。
 
 ### 5.1 macOS App 同机 loopback 模式
 
@@ -508,11 +510,11 @@ PASS provider=<feishu-or-dingtalk> stage=send sent=true confirmation=true idempo
 2. 只有真实客户端确认送达，guarded send 才记 `PASS`。
 3. 清除 integration harness 内部的 item id，并确保未进入日志或证据。
 
-smoke 将 backend 的未知发送结果映射为
-`HUSH_SMOKE_SEND_NOT_CONFIRMED`，不会向操作员显示字面量 `unknown`。任何
-`stage=send` 非 `PASS` 都表示结果有歧义，包括
-`HUSH_SMOKE_SEND_NOT_CONFIRMED`、`HUSH_SMOKE_NETWORK_ERROR`、超时或连接
-中断。先在真实客户端检查是否已送达，禁止直接重跑。
+`INBOX_SEND_UNKNOWN` 表示 backend 已明确持久化并返回歧义发送结果；
+`HUSH_SMOKE_SEND_NOT_CONFIRMED` 表示 HTTP 2xx 响应未满足 smoke 要求的
+`status=sent` 等 sent-confirmed 结构；`HUSH_SMOKE_NETWORK_ERROR` 或连接中断
+表示传输层结果有歧义。三者以及任何 `stage=send` 非 `PASS` 都必须先在真实
+客户端检查是否已送达，禁止直接重跑。
 
 ## 11. 故障排查
 
@@ -520,13 +522,14 @@ smoke 将 backend 的未知发送结果映射为
 | --- | --- | --- |
 | `/v1/health` 失败 | Fastify 不可达 | 确认 Terminal A、Base URL、Mac IP、listener 与防火墙；不要改为公网地址。 |
 | `/v1/health` 成功但 sync 未 ready | 只有进程存活，provider 链路未通过 | 执行官方 CLI preflight，核对 CLI path 和本地 account label。 |
-| `HUSH_SMOKE_NETWORK_ERROR` | smoke 与 Hush 的连接失败 | 查 Terminal A 和 `HUSH_BASE_URL`；若发生在 send，先查真实客户端，禁止直接重跑。 |
 | `HUSH_SMOKE_CONFIG_INVALID` | smoke 缺少 Base URL 或 App token | 重新普通 export Base URL，并用 `read -s` 输入 token；不得打印 token。 |
 | `HUSH_SMOKE_SYNC_NOT_READY` | provider 尚无 ready sync status | 核对 CLI 登录/权限和清洗后的 server 错误；不要反复重新授权。 |
 | `HUSH_SMOKE_PROVIDER_CARD_MISSING` | ready 但 lookback 内无卡 | 确认测试消息在 60 分钟内，等待至少一个 poll 周期后只重跑 read。 |
 | `INBOX_AI_UNAVAILABLE` 且 `reason=timeout` | StepFun 超过 15 秒上限 | 保持 server 运行，等待 Connector backoff；核对网络与 StepFun，不无限阻塞。 |
 | provider permission / entitlement 错误 | 登录存在但无读取或发送权限 | 飞书核对精确四 scope 和组织审批；钉钉按 CLI 提示处理 CLI Access Management。 |
-| `HUSH_SMOKE_SEND_NOT_CONFIRMED` | backend 未能确认发送 | 先查真实客户端，禁止直接重跑。 |
+| `INBOX_SEND_UNKNOWN` | backend 已持久化并返回歧义发送结果 | 先查真实客户端，禁止直接重跑。 |
+| `HUSH_SMOKE_SEND_NOT_CONFIRMED` | HTTP 2xx 响应不满足 `status=sent` 等 sent-confirmed 结构 | 先查真实客户端，禁止直接重跑。 |
+| `HUSH_SMOKE_NETWORK_ERROR` / connection interruption | send 的传输层结果有歧义 | 先查真实客户端，禁止直接重跑。 |
 
 AI 是 bounded wait，不是完全异步。每次摘要或草稿请求最多等待
 `INBOX_STEPFUN_TIMEOUT_MS=15000`；超时使本次同步失败，Connector 按 backoff
