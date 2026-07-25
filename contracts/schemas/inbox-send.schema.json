@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InboxSendContracts",
+  "$defs": {
+    "InboxSendRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "expected_version",
+        "confirmation_token"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1.0"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "confirmation_token": {
+          "type": "string",
+          "minLength": 16
+        }
+      }
+    },
+    "InboxSendResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "draft_id",
+        "provider",
+        "status",
+        "provider_message_id",
+        "sent_at"
+      ],
+      "properties": {
+        "draft_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["feishu", "dingtalk", "outlook", "qq_mail"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["sent", "failed", "unknown"]
+        },
+        "provider_message_id": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "sent_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+    "InboxConfirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmation_token", "expires_at"],
+      "properties": {
+        "confirmation_token": {
+          "type": "string",
+          "minLength": 16
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

@@ -26,7 +26,6 @@ COPY --from=build --chown=node:node /app/server/dist ./server/dist
 COPY --from=build --chown=node:node /app/server/node_modules ./server/node_modules
 COPY --chown=node:node content/rest-quests.json ./content/rest-quests.json
 COPY --chown=node:node contracts/fixtures/mail-items-demo.json ./contracts/fixtures/mail-items-demo.json
-COPY --chown=node:node contracts/fixtures/unified-inbox-items.json ./contracts/fixtures/unified-inbox-items.json
 
 WORKDIR /app/server
 USER node

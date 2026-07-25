@@ -125,8 +125,7 @@ Build context must remain the repository root. The image includes:
 - `server/dist`;
 - production `server/node_modules`;
 - `content/rest-quests.json`;
-- `contracts/fixtures/mail-items-demo.json`;
-- `contracts/fixtures/unified-inbox-items.json`.
+- `contracts/fixtures/mail-items-demo.json`.
 
 The runtime image uses Node 20.19.5, runs as the non-root `node` user, exposes
 port 3000, defines an image-level `/v1/health` check, and starts with:

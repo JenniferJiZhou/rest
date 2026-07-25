@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InboxSyncStatus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "provider",
+    "account_id",
+    "status",
+    "checkpoint",
+    "last_synced_at",
+    "last_error",
+    "coverage"
+  ],
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": ["feishu", "dingtalk", "outlook", "qq_mail"]
+    },
+    "account_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "degraded", "unavailable", "unknown"]
+    },
+    "checkpoint": {
+      "type": ["string", "null"]
+    },
+    "last_synced_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "last_error": {
+      "type": ["string", "null"]
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "complete", "note"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["official_api", "imap", "browser_fallback"]
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

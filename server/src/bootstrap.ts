@@ -10,29 +10,39 @@ import { loadConfig } from "./config.js";
 export function createApplicationServer(
   environment: NodeJS.ProcessEnv = process.env
 ): FastifyInstance {
+  const { dependencies } = createApplicationComposition(environment);
+  return createServer(dependencies);
+}
+
+function createApplicationComposition(
+  environment: NodeJS.ProcessEnv = process.env
+) {
   const config = loadConfig(environment);
   const normalRestDecisionProvider =
     config.HUSH_REST_DECISION_PROVIDER === "unavailable"
       ? new UnavailableRestDecisionProvider()
       : undefined;
-  return createServer(
-    buildServerDependencies(config, {
+  return {
+    config,
+    dependencies: buildServerDependencies(config, {
       ...(normalRestDecisionProvider
         ? { normalRestDecisionProvider }
         : {})
     })
-  );
+  };
 }
 
 export function createShutdownHandler(
   server: Pick<FastifyInstance, "close" | "log">,
-  exit: (code: number) => void = process.exit
+  exit: (code: number) => void = process.exit,
+  stopConnectorHost: () => Promise<void> = async () => undefined
 ): (signal: "SIGINT" | "SIGTERM") => Promise<void> {
   let shutdown: Promise<void> | undefined;
   return async (signal) => {
     shutdown ??= (async () => {
       server.log.info({ signal }, "shutting down");
       try {
+        await stopConnectorHost();
         await server.close();
         exit(0);
       } catch (error) {
@@ -48,8 +58,13 @@ export function createShutdownHandler(
 }
 
 async function run(): Promise<void> {
-  const server = createApplicationServer();
-  const shutdown = createShutdownHandler(server);
+  const { config, dependencies } = createApplicationComposition();
+  const server = createServer(dependencies);
+  const shutdown = createShutdownHandler(
+    server,
+    process.exit,
+    () => dependencies.connectorHost.stop()
+  );
   process.once("SIGINT", () => {
     void shutdown("SIGINT");
   });
@@ -58,11 +73,11 @@ async function run(): Promise<void> {
   });
 
   try {
-    const config = loadConfig();
     await server.listen({
       host: config.HOST,
       port: config.PORT
     });
+    dependencies.connectorHost.start();
     server.log.info(
       { host: config.HOST, port: config.PORT },
       "server listening"

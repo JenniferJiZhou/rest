@@ -20,6 +20,7 @@
     "test:vertical": "vitest run tests/vertical-slice",
     "test:deployment": "vitest run tests/unit/config.test.ts tests/unit/deployment-artifacts.test.ts tests/integration/deployment-readiness.test.ts tests/integration/smoke-script.test.ts",
     "smoke": "vitest run tests/integration/server.test.ts",
+    "smoke:inbox": "node scripts/smoke-inbox.mjs",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
@@ -28,11 +29,14 @@
     "ajv-formats": "^3.0.1",
     "dotenv": "^17.4.2",
     "fastify": "^5.10.0",
+    "imapflow": "^1.5.0",
+    "nodemailer": "^9.0.3",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "20.19.9",
+    "@types/nodemailer": "^8.0.1",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "vitest": "3.2.4"

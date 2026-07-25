@@ -28,23 +28,10 @@ import type {
   ProviderHealth
 } from "../domain/ports.js";
 import type { HandoffService } from "../application/handoff/handoff-service.js";
-import type { UnifiedInboxService } from "../application/inbox/unified-inbox-service.js";
+import type { InboxService } from "../application/inbox/inbox-service.js";
 import type { RestService } from "../application/rest/rest-service.js";
 import type { RestContractVersion } from "../application/rest/rest-service.js";
-import {
-  unifiedInboxAcknowledgeRequestSchema,
-  unifiedInboxConfirmationRequestSchema,
-  unifiedInboxListQuerySchema,
-  unifiedInboxPatchDraftRequestSchema,
-  unifiedInboxSendRequestSchema
-} from "../domain/unified-inbox.js";
-import {
-  toInboxConfirmation,
-  toInboxDraft,
-  toInboxItemDetail,
-  toInboxItemSummary,
-  toInboxSendResult
-} from "./unified-inbox-mappers.js";
+import { registerInboxRoutes } from "./inbox-routes.js";
 
 export interface ServerDependencies {
   config: AppConfig;
@@ -54,26 +41,27 @@ export interface ServerDependencies {
   restDecisionHealth: ProviderHealth;
   restOrigin: DataOrigin;
   handoffOrigin: DataOrigin;
+  inboxOrigin: DataOrigin;
   demoRestOrigin: DataOrigin;
   demoHandoffOrigin: DataOrigin;
-  inboxOrigin: DataOrigin;
   demoInboxOrigin: DataOrigin;
   rest: RestService;
   handoff: HandoffService;
+  inbox: InboxService;
   demoRest: RestService;
   demoHandoff: HandoffService;
-  inbox: UnifiedInboxService;
-  demoInbox: UnifiedInboxService;
+  demoInbox: InboxService;
   providerHealth(): Promise<Record<string, ProviderHealth>>;
 }
 
 interface RequestContext {
   requestId: string;
+  principalId: string;
   origin: DataOrigin;
   contractVersion: RestContractVersion;
   rest: RestService;
   handoff: HandoffService;
-  inbox: UnifiedInboxService;
+  inbox: InboxService;
 }
 
 type GraphKind =
@@ -97,6 +85,7 @@ export function createServer(
         paths: [
           "req.headers.authorization",
           "req.headers.x-hush-demo-token",
+          "req.headers.x-hush-app-session",
           "req.headers.cookie",
           "req.body",
           "res.headers.set-cookie",
@@ -210,7 +199,8 @@ export function createServer(
     const requestId = header(request, "x-request-id") ?? request.id;
     const origin =
       dependencies.restOrigin === "real" &&
-      dependencies.handoffOrigin === "real"
+      dependencies.handoffOrigin === "real" &&
+      dependencies.inboxOrigin === "real"
         ? "real"
         : "mock";
     setResponseHeaders(reply, requestId, origin, CONTRACT_VERSION);
@@ -339,192 +329,24 @@ export function createServer(
     return reply.status(202).send();
   });
 
-  server.get<{
-    Querystring: {
-      cursor?: string;
-      source?: string;
-      status?: string;
-      needs_reply?: string | boolean;
-    };
-  }>("/v1/inbox/items", async (request, reply) => {
-    const context = requestContext(
-      request,
-      reply,
-      dependencies,
-      false,
-      "inbox"
-    );
-    const query = unifiedInboxListQuerySchema.parse(request.query);
-    const page = await context.inbox.listItems(
-      {
-        ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
-        ...(query.source !== undefined ? { source: query.source } : {}),
-        ...(query.status !== undefined ? { status: query.status } : {}),
-        ...(query.needs_reply !== undefined
-          ? { needsReply: query.needs_reply }
-          : {})
-      },
-      context.requestId
-    );
-    return {
-      schema_version: CONTRACT_VERSION,
-      request_id: context.requestId,
-      items: page.items.map(toInboxItemSummary),
-      next_cursor: page.nextCursor
-    };
-  });
-
-  server.get<{
-    Params: { itemId: string };
-  }>("/v1/inbox/items/:itemId", async (request, reply) => {
-    const context = requestContext(
-      request,
-      reply,
-      dependencies,
-      false,
-      "inbox"
-    );
-    const item = await context.inbox.getItem(
-      request.params.itemId,
-      context.requestId
-    );
-    return {
-      schema_version: CONTRACT_VERSION,
-      request_id: context.requestId,
-      item: toInboxItemDetail(item)
-    };
-  });
-
-  server.post<{
-    Params: { itemId: string };
-  }>("/v1/inbox/items/:itemId", async (request, reply) => {
-    const context = requestContext(
-      request,
-      reply,
-      dependencies,
-      true,
-      "inbox"
-    );
-    const itemId = stripOperationSuffix(
-      request.params.itemId,
-      ":acknowledge"
-    );
-    const idempotencyKey = requiredIdempotencyKey(request);
-    const input = unifiedInboxAcknowledgeRequestSchema.parse(request.body);
-    assertBodyRequestId(input.request_id, context.requestId);
-    const item = await context.inbox.acknowledge(
-      itemId,
-      context.requestId,
-      idempotencyKey
-    );
-    return {
-      schema_version: CONTRACT_VERSION,
-      request_id: context.requestId,
-      item: toInboxItemDetail(item)
-    };
-  });
-
-  server.get<{
-    Params: { draftId: string };
-  }>("/v1/inbox/drafts/:draftId", async (request, reply) => {
-    const context = requestContext(
-      request,
-      reply,
-      dependencies,
-      false,
-      "inbox"
-    );
-    const draft = await context.inbox.getDraft(
-      request.params.draftId,
-      context.requestId
-    );
-    return {
-      schema_version: CONTRACT_VERSION,
-      request_id: context.requestId,
-      draft: toInboxDraft(draft)
-    };
-  });
-
-  server.patch<{
-    Params: { draftId: string };
-  }>("/v1/inbox/drafts/:draftId", async (request, reply) => {
-    const context = requestContext(
-      request,
-      reply,
-      dependencies,
-      true,
-      "inbox"
-    );
-    const idempotencyKey = requiredIdempotencyKey(request);
-    const input = unifiedInboxPatchDraftRequestSchema.parse(request.body);
-    assertBodyRequestId(input.request_id, context.requestId);
-    const draft = await context.inbox.updateDraft(
-      request.params.draftId,
-      input,
-      idempotencyKey
-    );
-    return {
-      schema_version: CONTRACT_VERSION,
-      request_id: context.requestId,
-      draft: toInboxDraft(draft)
-    };
-  });
-
-  server.post<{
-    Params: { draftId: string };
-  }>("/v1/inbox/drafts/:draftId/confirmation", async (request, reply) => {
-    const context = requestContext(
-      request,
-      reply,
-      dependencies,
-      true,
-      "inbox"
-    );
-    const idempotencyKey = requiredIdempotencyKey(request);
-    const input = unifiedInboxConfirmationRequestSchema.parse(request.body);
-    assertBodyRequestId(input.request_id, context.requestId);
-    const confirmation = await context.inbox.createConfirmation(
-      request.params.draftId,
-      input,
-      idempotencyKey
-    );
-    return reply.status(201).send({
-      schema_version: CONTRACT_VERSION,
-      request_id: context.requestId,
-      confirmation: toInboxConfirmation(confirmation)
-    });
-  });
-
-  server.post<{
-    Params: { draftId: string };
-  }>("/v1/inbox/drafts/:draftId", async (request, reply) => {
-    const context = requestContext(
-      request,
-      reply,
-      dependencies,
-      true,
-      "inbox"
-    );
-    const draftId = stripOperationSuffix(request.params.draftId, ":send");
-    const idempotencyKey = requiredIdempotencyKey(request);
-    const input = unifiedInboxSendRequestSchema.parse(request.body);
-    assertBodyRequestId(input.request_id, context.requestId);
-    const cancellation = requestCancellation(request, reply);
-    try {
-      const result = await context.inbox.sendDraft(
-        draftId,
-        input,
-        idempotencyKey,
-        { signal: cancellation.signal }
+  registerInboxRoutes(server, {
+    context: (request, reply, hasBody, access) => {
+      const context = requestContext(
+        request,
+        reply,
+        dependencies,
+        hasBody,
+        "inbox",
+        access
       );
       return {
-        schema_version: CONTRACT_VERSION,
-        request_id: context.requestId,
-        result: toInboxSendResult(result)
+        requestId: context.requestId,
+        principalId: context.principalId,
+        inbox: context.inbox
       };
-    } finally {
-      cancellation.dispose();
-    }
+    },
+    assertBodyRequestId,
+    requiredIdempotencyKey
   });
 
   return server;
@@ -535,7 +357,8 @@ function requestContext(
   reply: FastifyReply,
   dependencies: ServerDependencies,
   hasBody: boolean,
-  graph: GraphKind
+  graph: GraphKind,
+  inboxAccess: "app" | "connector" = "app"
 ): RequestContext {
   const requestId = requiredHeader(request, "x-request-id");
   requiredHeader(request, "x-client-version");
@@ -579,6 +402,14 @@ function requestContext(
     }
     demo = true;
   }
+  const principalId = authenticateInboxRequest(
+    request,
+    dependencies.config,
+    graph,
+    inboxAccess,
+    demo,
+    demoToken
+  );
   if (hasBody && request.body === null) {
     throw new AppError({
       code: "INVALID_REQUEST",
@@ -604,12 +435,87 @@ function requestContext(
   );
   return {
     requestId,
+    principalId,
     origin,
     contractVersion: negotiatedContractVersion,
     rest: demo ? dependencies.demoRest : dependencies.rest,
     handoff: demo ? dependencies.demoHandoff : dependencies.handoff,
     inbox: demo ? dependencies.demoInbox : dependencies.inbox
   };
+}
+
+function authenticateInboxRequest(
+  request: FastifyRequest,
+  config: AppConfig,
+  graph: GraphKind,
+  access: "app" | "connector",
+  demo: boolean,
+  demoToken: string | null
+): string {
+  if (graph !== "inbox") {
+    return "not-applicable";
+  }
+  if (demo) {
+    if (access === "connector") {
+      return `demo-connector:${tokenDigest(demoToken ?? "")}`;
+    }
+    return appSessionPrincipal(
+      request,
+      `demo:${tokenDigest(demoToken ?? "")}`
+    );
+  }
+  const expected =
+    access === "connector"
+      ? config.HUSH_CONNECTOR_TOKEN
+      : config.HUSH_APP_TOKEN;
+  const supplied = bearerToken(header(request, "authorization"));
+  if (!expected || !supplied || !safeTokenEqual(supplied, expected)) {
+    throw new AppError({
+      code: "INBOX_AUTH_REQUIRED",
+      message:
+        access === "connector"
+          ? "需要有效的 Connector 凭证。"
+          : "需要有效的 Hush App 会话。",
+      statusCode: 401,
+      retryable: false
+    });
+  }
+  const authenticatedPrincipal = `${access}:${tokenDigest(supplied)}`;
+  return access === "app"
+    ? appSessionPrincipal(request, authenticatedPrincipal)
+    : authenticatedPrincipal;
+}
+
+function appSessionPrincipal(
+  request: FastifyRequest,
+  authenticatedPrincipal: string
+): string {
+  const session = header(request, "x-hush-app-session");
+  if (
+    !session ||
+    session.length < 32 ||
+    session.length > 128 ||
+    /[\u0000-\u001F\u007F-\u009F]/u.test(session)
+  ) {
+    throw new AppError({
+      code: "INBOX_AUTH_REQUIRED",
+      message: "需要有效的 Hush App 会话标识。",
+      statusCode: 401,
+      retryable: false
+    });
+  }
+  return `app-session:${tokenDigest(
+    `${authenticatedPrincipal}\u0000${session}`
+  )}`;
+}
+
+function bearerToken(value: string | null): string | null {
+  const match = /^Bearer ([^\s]+)$/iu.exec(value ?? "");
+  return match?.[1] ?? null;
+}
+
+function tokenDigest(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function graphOrigin(

@@ -1,8 +1,8 @@
 # Dynamic Rest Task Contract 1.1
 
 Status: W1 local closeout complete; review, credentialed staging, Apple builds,
-and device acceptance remain external validation  
-Owners/reviewers: W1 / P2, M1 / P1, M2 / P4  
+and device acceptance remain external validation
+Owners/reviewers: W1 / P2, M1 / P1, M2 / P4
 Prompt versions: `dynamic-rest-decision-v1.1`,
 `dynamic-manual-rest-v1.1`
 

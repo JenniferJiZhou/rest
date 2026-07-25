@@ -5,8 +5,8 @@
 > `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`。1.1 不复用本文的 Quest
 > allowlist、cooldown 旁路或语义内容 Guard。
 
-Status: implementation ready for credentialed staging evaluation  
-Owner: W1 / P2  
+Status: implementation ready for credentialed staging evaluation
+Owner: W1 / P2
 Prompt version: `rest-decision-v1.0`
 
 ## Responsibility

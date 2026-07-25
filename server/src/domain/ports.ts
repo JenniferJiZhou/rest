@@ -10,16 +10,6 @@ import type {
   RestRecommendationRequestV1,
   RestSuggestion
 } from "./contracts.js";
-import type {
-  UnifiedInboxConfirmation,
-  UnifiedInboxDeliveryReceipt,
-  UnifiedInboxDeliveryRequest,
-  UnifiedInboxDraft,
-  UnifiedInboxItemDetail,
-  UnifiedInboxListFilter,
-  UnifiedInboxListPage,
-  UnifiedInboxSnapshot
-} from "./unified-inbox.js";
 
 export interface MailFetchContext {
   accountId: string | null;
@@ -305,91 +295,6 @@ export type IdempotencyClaimResult<T> =
   | { kind: "created"; value: T }
   | { kind: "existing_same_request"; value: T }
   | { kind: "conflict_different_request" };
-
-export interface UnifiedInboxProvider {
-  readonly dataOrigin: DataOrigin;
-  health(): Promise<ProviderHealth>;
-  loadSnapshot(
-    options?: ProviderCallOptions
-  ): Promise<UnifiedInboxSnapshot>;
-  deliver(
-    request: UnifiedInboxDeliveryRequest,
-    options?: ProviderCallOptions
-  ): Promise<UnifiedInboxDeliveryReceipt>;
-}
-
-export interface UnifiedInboxRepository {
-  initialize(snapshot: UnifiedInboxSnapshot): Promise<void>;
-  list(
-    filter: UnifiedInboxListFilter,
-    offset: number,
-    limit: number
-  ): Promise<UnifiedInboxListPage>;
-  getItem(id: string): Promise<UnifiedInboxItemDetail | null>;
-  acknowledge(
-    id: string,
-    acknowledgedAt: string
-  ): Promise<UnifiedInboxItemDetail | null>;
-  getDraft(id: string): Promise<UnifiedInboxDraft | null>;
-  updateDraft(input: {
-    id: string;
-    expectedVersion: number;
-    body?: string;
-    discard: boolean;
-    updatedAt: string;
-  }): Promise<UnifiedInboxDraftMutationResult>;
-  createConfirmation(input: {
-    draftId: string;
-    expectedVersion: number;
-    confirmation: UnifiedInboxConfirmation;
-  }): Promise<UnifiedInboxConfirmationMutationResult>;
-  claimSend(input: {
-    draftId: string;
-    expectedVersion: number;
-    confirmationId: string;
-    now: string;
-  }): Promise<UnifiedInboxSendClaimResult>;
-  completeSend(input: {
-    draftId: string;
-    expectedVersion: number;
-    sentAt: string;
-  }): Promise<UnifiedInboxDraftMutationResult>;
-  releaseSend(input: {
-    draftId: string;
-    expectedVersion: number;
-    updatedAt: string;
-  }): Promise<void>;
-}
-
-export type UnifiedInboxDraftMutationResult =
-  | { kind: "updated"; draft: UnifiedInboxDraft }
-  | { kind: "not_found" }
-  | { kind: "version_conflict"; draft: UnifiedInboxDraft }
-  | { kind: "invalid_state"; draft: UnifiedInboxDraft };
-
-export type UnifiedInboxConfirmationMutationResult =
-  | {
-      kind: "created";
-      confirmation: UnifiedInboxConfirmation;
-      draft: UnifiedInboxDraft;
-    }
-  | { kind: "not_found" }
-  | { kind: "version_conflict"; draft: UnifiedInboxDraft }
-  | { kind: "invalid_state"; draft: UnifiedInboxDraft };
-
-export type UnifiedInboxSendClaimResult =
-  | {
-      kind: "claimed";
-      item: UnifiedInboxItemDetail;
-      draft: UnifiedInboxDraft;
-      confirmation: UnifiedInboxConfirmation;
-    }
-  | { kind: "not_found" }
-  | { kind: "version_conflict"; draft: UnifiedInboxDraft }
-  | { kind: "invalid_state"; draft: UnifiedInboxDraft }
-  | { kind: "confirmation_missing" }
-  | { kind: "confirmation_mismatch" }
-  | { kind: "confirmation_expired"; draft: UnifiedInboxDraft };
 
 export interface FeedbackRepository {
   record(feedback: RestFeedback): Promise<void>;

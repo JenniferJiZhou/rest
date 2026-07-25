@@ -31,6 +31,12 @@ describe("deployment artifacts", () => {
         };
       };
     };
+    const appToken = workflow.match(
+      /--env HUSH_APP_TOKEN=([^\s\\]+)/u
+    )?.[1];
+    const connectorToken = workflow.match(
+      /--env HUSH_CONNECTOR_TOKEN=([^\s\\]+)/u
+    )?.[1];
     const env = new Map(
       environment
         .trim()
@@ -54,6 +60,11 @@ describe("deployment artifacts", () => {
     expect(workflow).toContain("docker buildx imagetools create");
     expect(workflow).toContain("GITHUB_SHA");
     expect(workflow).toContain("http://127.0.0.1:3000/v1/health");
+    expect(appToken).toContain("ci-health-smoke");
+    expect(connectorToken).toContain("ci-health-smoke");
+    expect(appToken?.length).toBeGreaterThanOrEqual(32);
+    expect(connectorToken?.length).toBeGreaterThanOrEqual(32);
+    expect(appToken).not.toBe(connectorToken);
     expect(workflow).toContain("github.ref == 'refs/heads/main'");
     expect(workflow).toContain("workflow_dispatch");
     expect(workflow).toContain("inputs.publish");
@@ -107,12 +118,6 @@ describe("deployment artifacts", () => {
       "contracts/fixtures/mail-items-demo.json"
     );
     expect(dockerfile).toContain(
-      "contracts/fixtures/unified-inbox-items.json"
-    );
-    expect(dockerignore).toContain(
-      "!contracts/fixtures/unified-inbox-items.json"
-    );
-    expect(dockerfile).toContain(
       'CMD ["node", "dist/bootstrap.js"]'
     );
     expect(dockerfile).toContain("HEALTHCHECK");
@@ -123,25 +128,15 @@ describe("deployment artifacts", () => {
     expect(dockerignore).toContain("*.key");
   });
 
-  it("keeps Unified Inbox smoke opt-in and on the existing HTTPS origin", () => {
+  it("keeps W2 Unified Inbox send smoke explicitly opt-in", () => {
     const smoke = readFileSync(
-      resolve(repositoryRoot, "scripts/smoke-unified-inbox.ps1"),
+      resolve(repositoryRoot, "server/scripts/smoke-inbox.mjs"),
       "utf8"
     );
 
-    expect(smoke).toContain("[string]$BaseUrl");
-    expect(smoke).toContain("[switch]$AllowSimulatedSend");
-    expect(smoke).toContain(
-      "HTTPS smoke requires an https BaseUrl"
-    );
-    expect(smoke).toContain(
-      "no network request was made"
-    );
-    expect(smoke).not.toContain(
-      'BaseUrl = "https://'
-    );
-    expect(smoke).toContain(
-      'delivery_mode -ne "simulated"'
-    );
+    expect(smoke).toContain('HUSH_SMOKE_ALLOW_SEND !== "true"');
+    expect(smoke).toContain("HUSH_SMOKE_SEND_DISABLED");
+    expect(smoke).toContain('"x-hush-app-session": session');
+    expect(smoke).toContain("confirmation_token");
   });
 });

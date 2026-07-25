@@ -64,8 +64,28 @@ describe("server listener configuration", () => {
       LLM_TIMEOUT_MS: 15_000,
       MAIL_FETCH_TIMEOUT_MS: 10_000,
       DRAFT_CREATE_TIMEOUT_MS: 10_000,
-      COMPLETION_SEND_TIMEOUT_MS: 5_000
+      COMPLETION_SEND_TIMEOUT_MS: 5_000,
+      INBOX_POLL_INTERVAL_MS: 30_000,
+      INBOX_STEPFUN_TIMEOUT_MS: 15_000,
+      INBOX_INITIAL_LOOKBACK_MINUTES: 60,
+      INBOX_SYNC_BATCH_LIMIT: 100
     });
+  });
+
+  it("provides safe Inbox intelligence and state defaults", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      LOG_LEVEL: "silent"
+    });
+
+    expect(config.INBOX_STEPFUN_BASE_URL).toBe(
+      "https://api.stepfun.com/step_plan/v1"
+    );
+    expect(config.INBOX_STEPFUN_MODEL).toBe("step-3.7-flash");
+    expect(config.INBOX_STEPFUN_API_KEY).toBeUndefined();
+    expect(config.INBOX_STATE_FILE).toBe(
+      ".data/unified-inbox-state.json"
+    );
   });
 
   it.each([
@@ -76,7 +96,11 @@ describe("server listener configuration", () => {
     ["STEPFUN_TIMEOUT_MS", "120001"],
     ["MAIL_FETCH_TIMEOUT_MS", "-1"],
     ["DRAFT_CREATE_TIMEOUT_MS", "NaN"],
-    ["COMPLETION_SEND_TIMEOUT_MS", "120001"]
+    ["COMPLETION_SEND_TIMEOUT_MS", "120001"],
+    ["INBOX_POLL_INTERVAL_MS", "99"],
+    ["INBOX_STEPFUN_TIMEOUT_MS", "99"],
+    ["INBOX_INITIAL_LOOKBACK_MINUTES", "0"],
+    ["INBOX_SYNC_BATCH_LIMIT", "0"]
   ])("rejects invalid %s=%s", (name, value) => {
     expect(() =>
       loadConfig({
@@ -85,6 +109,35 @@ describe("server listener configuration", () => {
         [name]: value
       })
     ).toThrow("Invalid server configuration");
+  });
+
+  it("accepts empty optional Inbox credentials as unconfigured", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      LOG_LEVEL: "silent",
+      LARK_CLI_PATH: "",
+      DWS_CLI_PATH: "",
+      OUTLOOK_ACCESS_TOKEN: "",
+      QQ_EMAIL_AUTH_CODE: "",
+      HUSH_APP_TOKEN: "",
+      HUSH_CONNECTOR_TOKEN: ""
+    });
+
+    expect(config.LARK_CLI_PATH).toBeUndefined();
+    expect(config.OUTLOOK_ACCESS_TOKEN).toBeUndefined();
+    expect(config.QQ_EMAIL_AUTH_CODE).toBeUndefined();
+  });
+
+  it("rejects interchangeable App and Connector credentials", () => {
+    const shared = "shared-token-00000000000000000000";
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "test",
+        LOG_LEVEL: "silent",
+        HUSH_APP_TOKEN: shared,
+        HUSH_CONNECTOR_TOKEN: shared
+      })
+    ).toThrow(/must be different/u);
   });
 
   it("requires an explicit public HTTPS base URL in production", () => {
@@ -107,6 +160,8 @@ describe("server listener configuration", () => {
       loadConfig({
         NODE_ENV: "production",
         PUBLIC_BASE_URL: publicBaseUrl,
+        HUSH_APP_TOKEN: "app-token-000000000000000000000000",
+        HUSH_CONNECTOR_TOKEN: "connector-token-00000000000000000000",
         LOG_LEVEL: "silent"
       })
     ).toThrow("PUBLIC_BASE_URL");
@@ -116,6 +171,8 @@ describe("server listener configuration", () => {
     const config = loadConfig({
       NODE_ENV: "production",
       PUBLIC_BASE_URL: "https://hush-staging.example.com///",
+      HUSH_APP_TOKEN: "app-token-000000000000000000000000",
+      HUSH_CONNECTOR_TOKEN: "connector-token-00000000000000000000",
       LOG_LEVEL: "silent"
     });
 
@@ -178,19 +235,4 @@ describe("server listener configuration", () => {
     ).toBe("unavailable");
   });
 
-  it("keeps Normal Unified Inbox unavailable unless Canned is explicit", () => {
-    expect(
-      loadConfig({
-        NODE_ENV: "test",
-        LOG_LEVEL: "silent"
-      }).HUSH_UNIFIED_INBOX_PROVIDER
-    ).toBe("unavailable");
-    expect(
-      loadConfig({
-        NODE_ENV: "test",
-        HUSH_UNIFIED_INBOX_PROVIDER: "canned",
-        LOG_LEVEL: "silent"
-      }).HUSH_UNIFIED_INBOX_PROVIDER
-    ).toBe("canned");
-  });
 });

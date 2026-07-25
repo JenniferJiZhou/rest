@@ -172,6 +172,8 @@ describe("HTTPS deployment readiness", () => {
     const server = createApplicationServer({
       NODE_ENV: "production",
       PUBLIC_BASE_URL: "https://hush-staging.example.com",
+      HUSH_APP_TOKEN: "app-token-000000000000000000000000",
+      HUSH_CONNECTOR_TOKEN: "connector-token-00000000000000000000",
       HUSH_REST_DECISION_PROVIDER: "unavailable",
       LOG_LEVEL: "silent"
     });

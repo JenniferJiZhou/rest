@@ -1,12 +1,11 @@
 # Hush Server
 
-W1/P2 owns the API boundary, Agent orchestration, Rest application service,
-Handoff Job state machine, contracts implementation, bootstrap, and provider
-ports and the final Composition Root. Gmail Owner owns only Gmail/OAuth
-adapters. W2/P3 owns only Photon messaging and webhook adapters.
+W1/P2 maintains the existing Rest and Handoff backend. W2/P3 owns Unified
+Inbox end to end: contracts, API, storage, AI orchestration, Connector Host,
+provider adapters, confirmed send flow, and its Composition Root wiring.
 
-Business routes call application services. They never call Gmail, Photon, or
-Claude SDKs directly.
+Business routes call application services. They never call provider CLIs,
+Graph, IMAP/SMTP, or AI SDKs directly.
 
 ## Toolchain
 
@@ -59,6 +58,35 @@ The body `request_id` must equal `X-Request-ID`. Mutating idempotent routes also
 require an `Idempotency-Key` of 8–128 Unicode characters after trimming, with
 no control characters.
 
+Unified Inbox exposes:
+
+```text
+POST /v1/inbox/events:batch
+GET  /v1/inbox/items
+GET  /v1/inbox/items/{itemId}
+POST /v1/inbox/items/{itemId}/summary
+POST /v1/inbox/items/{itemId}/draft
+GET/PATCH /v1/inbox/drafts/{draftId}
+POST /v1/inbox/drafts/{draftId}/confirmation
+POST /v1/inbox/drafts/{draftId}:send
+GET  /v1/inbox/sync-status
+```
+
+Sending requires the current draft version, an unconsumed five-minute
+confirmation token bound to the authenticated App session, and
+`Idempotency-Key`. AI providers receive message text but never provider
+credentials, confirmation tokens, or a send tool.
+
+Normal Inbox routes require `Authorization: Bearer <HUSH_APP_TOKEN>` plus a
+32–128 character, per-launch high-entropy `X-Hush-App-Session`; confirmation
+tokens are bound to the authenticated digest of both values.
+`POST /v1/inbox/events:batch` instead requires
+`Authorization: Bearer <HUSH_CONNECTOR_TOKEN>`; the two credentials are not
+interchangeable and configuration rejects equal values. Both values must
+contain at least 32 characters and are mandatory in production. Sample Mode
+may use `X-Hush-Demo-Token` and always selects the isolated Fixture graph;
+its App routes still require `X-Hush-App-Session`.
+
 ## Commands
 
 ```powershell
@@ -72,8 +100,9 @@ corepack pnpm test:vertical
 corepack pnpm test:deployment
 ```
 
-`test:contracts` validates fixtures and local OpenAPI references. The
-full suite is deterministic. W1-04
+`test:contracts` validates fixtures and local OpenAPI references. Vertical
+slice tests include the credential-free Unified Inbox flow, and the full
+suite is deterministic. W1-04
 vertical-slice tests use real TCP/HTTP on a random `127.0.0.1` port and do not
 expose a stable development port.
 
@@ -94,6 +123,14 @@ expose a stable development port.
 - Until Gmail Owner supplies a Gmail adapter, the real Handoff path completes with
   user-submitted open loops only and explicitly marks Gmail as unavailable.
 - A valid demo token switches to fixture mail and canned Agent behavior.
+- A valid demo token also switches Unified Inbox to independent Fixture
+  intelligence, repositories, confirmation store, idempotency store, and
+  senders for Feishu, DingTalk, Outlook, and QQ Mail.
+- Without provider configuration, normal Unified Inbox adapters report
+  `unavailable`. Configured adapters are `lark-cli`, DingTalk `dws`,
+  Microsoft Graph, and QQ IMAP/SMTP.
+- Real provider credentials have not been exercised by CI. Tenant/admin
+  approval and account-specific smoke tests remain required.
 - `X-Hush-Data-Origin` is computed from the complete selected dependency
   graph. A normal graph containing Canned, Fixture, Recording, Noop, or
   Console providers is conservatively marked `mock`; it is `real` only when
@@ -113,11 +150,13 @@ LLM_TIMEOUT_MS=15000
 MAIL_FETCH_TIMEOUT_MS=10000
 DRAFT_CREATE_TIMEOUT_MS=10000
 COMPLETION_SEND_TIMEOUT_MS=5000
+INBOX_POLL_INTERVAL_MS=30000
 ```
 
 Legacy Rest Decision accepts 500–4500 milliseconds. StepFun accepts
 500–120000 milliseconds and defaults to 30000. The other timeouts accept an
-integer from 100 through 120000 milliseconds. Handoff
+integer from 100 through 120000 milliseconds.
+`INBOX_POLL_INTERVAL_MS` accepts 1000 through 3600000 milliseconds. Handoff
 cancellation aborts the active Agent, Mail, Draft, or Completion call.
 Rest Decision timeout and HTTP client disconnect also abort the active model
 call. Timeout, unavailable infrastructure, and invalid model output return
@@ -127,7 +166,13 @@ logged by correlation ID but does not reverse an already persisted
 `succeeded` Job. A failed draft remains in `drafts` with `saved=false` and in
 the Pause Receipt as `held_items:not_saved`.
 
-Jobs and idempotency claims remain process-local. New Handoff starts run a
+Jobs and idempotency claims remain process-local. Unified Inbox items,
+drafts, checkpoints, confirmation tokens, and send idempotency claims are
+also process-local in this Demo implementation; restarting the server loses
+them. The repository and checkpoint ports are the boundary for a durable
+production implementation.
+
+New Handoff starts run a
 five-minute-throttled opportunistic cleanup of expired terminal Jobs and
 claims; running Jobs are never deleted. Restarting the server loses all Job
 IDs and in-memory claims.
@@ -152,15 +197,22 @@ an immutable GHCR image for a Zeabur Docker Image service. See
 `../docs/18_ZEABUR_STAGING_DEPLOYMENT.md`. No cloud resource or certificate is
 created by the checked-in files.
 
-## Provider integration points
+## Unified Inbox integration points
 
-Provider Owners implement W1-owned interfaces from `src/domain/ports.ts`
-without modifying that file:
+Provider-neutral interfaces live in `src/inbox/ports.ts`. Implementations and
+vendor payloads stay under `src/inbox/providers/`; application and route code
+must not import provider SDK or CLI types.
 
-- Gmail Owner implements `MailProvider`: Gmail health, unread fetch, and
-  idempotent draft creation.
-- W2 implements `MessagingChannel`, inbound mapping, and Photon-backed
-  completion delivery.
+```text
+LARK_CLI_PATH / LARK_ACCOUNT_ID
+DWS_CLI_PATH / DINGTALK_ACCOUNT_ID
+OUTLOOK_ACCOUNT_ID / OUTLOOK_ACCESS_TOKEN
+QQ_EMAIL_ADDRESS / QQ_EMAIL_AUTH_CODE
+```
+
+Empty values mean unconfigured. Secrets are resolved only inside adapters and
+are redacted from HTTP errors and logs. QQ SMTP and Graph timeouts return
+`unknown`; they are not retried automatically.
 
 Gmail-specific code stays under `src/mail/`; Photon code stays under
 `src/messaging/`. Each Owner exports factories or registration functions. W1
@@ -190,26 +242,7 @@ messages.
 See `../docs/19_REAL_REST_DECISION_AGENT.md` for Contract 1.0 and
 `../docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md` for Contract 1.1.
 
-## Unified Inbox Mock Vertical Slice
-
-Seven `/v1/inbox/**` operations implement provider-neutral list/detail,
-acknowledge, draft CAS updates/discard, short-lived confirmation, and send.
-Normal defaults to `HUSH_UNIFIED_INBOX_PROVIDER=unavailable`; explicit
-`canned` and the isolated Demo graph use fixed fixtures. Canned send returns
-`delivery_mode=simulated` with `X-Hush-Data-Origin: mock` and never contacts
-Feishu, DingTalk, Outlook, or QQ Mail.
-
-Drafts, confirmations, idempotency claims, and atomic send claims are
-process-local. Restart and multiple instances do not preserve or share this
-state. Swift mapping and the remaining real-integration work are documented
-in `../docs/21_UNIFIED_INBOX_CONTRACT_AND_SWIFT_MAPPING.md`.
-
-Local smoke defaults to read/edit/confirm without send:
-
-```powershell
-..\scripts\smoke-unified-inbox.ps1 `
-  -BaseUrl "http://127.0.0.1:3000" `
-  -Mode LocalHttp
-```
-
-Only a controlled mock environment may add `-AllowSimulatedSend`.
+The W2 Unified Inbox API, isolated Demo graph, provider adapters, and
+credential-gated real validation are documented in
+`../docs/unified-inbox-apple-frontend-handoff.md` and
+`../docs/feishu-dingtalk-real-validation/README.md`.

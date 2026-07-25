@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InboxEventBatch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "checkpoint", "events"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "checkpoint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/InboxEvent"
+      }
+    }
+  },
+  "$defs": {
+    "InboxEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "account_id",
+        "conversation_id",
+        "conversation_type",
+        "conversation_name",
+        "provider_message_id",
+        "sender",
+        "sender_ref",
+        "recipients",
+        "subject",
+        "content",
+        "received_at",
+        "coverage"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["feishu", "dingtalk", "outlook", "qq_mail"]
+        },
+        "account_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "conversation_id": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "conversation_type": {
+          "type": "string",
+          "enum": ["direct", "group"]
+        },
+        "conversation_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "provider_message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sender": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sender_ref": {
+          "type": ["string", "null"],
+          "pattern": "^participant_[a-zA-Z0-9_-]{8,64}$"
+        },
+        "recipients": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "subject": {
+          "type": ["string", "null"]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1
+        },
+        "received_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        }
+      }
+    },
+    "Coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "complete", "note"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["official_api", "imap", "browser_fallback"]
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

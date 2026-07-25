@@ -1,0 +1,41 @@
+{
+  "id": "inbox-item-demo-001",
+  "provider": "outlook",
+  "account_id": "demo@example.com",
+  "conversation_id": "conversation-demo-001",
+  "conversation_type": "direct",
+  "conversation_name": "同事私聊",
+  "provider_message_id": "message-demo-001",
+  "sender": "colleague@example.com",
+  "sender_ref": "participant_demo_0002",
+  "recipients": ["demo@example.com"],
+  "subject": "周五演示确认",
+  "content": "请在周五上午十点前确认演示材料，并回复最终版本。",
+  "received_at": "2026-07-24T09:30:00+08:00",
+  "coverage": {
+    "source": "official_api",
+    "complete": true,
+    "note": null
+  },
+  "item_kind": "message",
+  "revision": 1,
+  "message_count": 1,
+  "window_started_at": "2026-07-24T09:30:00+08:00",
+  "window_ended_at": "2026-07-24T09:30:00+08:00",
+  "sealed_at": null,
+  "acknowledged_at": null,
+  "summary": "同事要求在周五上午十点前确认演示材料并回复最终版本。",
+  "important_points": ["截止时间为周五上午十点"],
+  "todos": ["检查并确认演示材料"],
+  "priority": "urgent",
+  "needs_reply": true,
+  "reply_targets": [
+    {
+      "target_id": "participant_demo_0002",
+      "display_name": "同事",
+      "reason": "发起了演示材料确认请求"
+    }
+  ],
+  "draft_id": "inbox-draft-demo-001",
+  "sync_status": "ready"
+}

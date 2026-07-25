@@ -3,7 +3,7 @@ info:
   title: Hush API
   version: 1.1.0
   description: >
-    Contract for Hush Apple clients, Agent backend, Gmail handoff, and Photon adapter.
+    Contract for Hush Apple clients, Agent backend, and Unified Inbox.
     Contract 1.0 keeps canonical fixed Quest content. Contract 1.1 Rest
     evaluate can return a StepFun-generated structured rest task.
 servers:
@@ -303,115 +303,27 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
 
-  /v1/inbox/items:
-    get:
-      tags: [Inbox]
-      operationId: listUnifiedInboxItems
-      description: Lists provider-neutral Unified Inbox items in stable received_at descending order.
-      parameters:
-        - $ref: "#/components/parameters/RequestId"
-        - $ref: "#/components/parameters/ClientVersion"
-        - $ref: "#/components/parameters/ContractVersion"
-        - $ref: "#/components/parameters/DemoToken"
-        - name: cursor
-          in: query
-          schema: { type: string, minLength: 1, maxLength: 256 }
-        - name: source
-          in: query
-          schema:
-            $ref: "./schemas/unified-inbox.schema.json#/$defs/Source"
-        - name: status
-          in: query
-          schema:
-            $ref: "./schemas/unified-inbox.schema.json#/$defs/ItemStatus"
-        - name: needs_reply
-          in: query
-          schema: { type: boolean }
-      responses:
-        "200":
-          description: Stable filtered Inbox page
-          headers:
-            X-Request-ID:
-              $ref: "#/components/headers/RequestId"
-            X-Contract-Version:
-              $ref: "#/components/headers/ContractVersion"
-            X-Hush-Data-Origin:
-              $ref: "#/components/headers/DataOrigin"
-          content:
-            application/json:
-              schema:
-                $ref: "./schemas/unified-inbox.schema.json#/$defs/ListResponse"
-              examples:
-                mock:
-                  externalValue: "./fixtures/unified-inbox-items.json"
-        "400":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "503":
-          $ref: "#/components/responses/Error"
-
-  /v1/inbox/items/{itemId}:
-    get:
-      tags: [Inbox]
-      operationId: getUnifiedInboxItem
-      parameters:
-        - $ref: "#/components/parameters/InboxItemId"
-        - $ref: "#/components/parameters/RequestId"
-        - $ref: "#/components/parameters/ClientVersion"
-        - $ref: "#/components/parameters/ContractVersion"
-        - $ref: "#/components/parameters/DemoToken"
-      responses:
-        "200":
-          description: Provider-neutral Inbox item detail
-          headers:
-            X-Request-ID:
-              $ref: "#/components/headers/RequestId"
-            X-Contract-Version:
-              $ref: "#/components/headers/ContractVersion"
-            X-Hush-Data-Origin:
-              $ref: "#/components/headers/DataOrigin"
-          content:
-            application/json:
-              schema:
-                $ref: "./schemas/unified-inbox.schema.json#/$defs/ItemResponse"
-              examples:
-                mock:
-                  externalValue: "./fixtures/unified-inbox-item-detail.json"
-        "400":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "503":
-          $ref: "#/components/responses/Error"
-
-  /v1/inbox/items/{itemId}:acknowledge:
+  /v1/inbox/events:batch:
     post:
       tags: [Inbox]
-      operationId: acknowledgeUnifiedInboxItem
+      operationId: ingestInboxEvents
+      security:
+        - ConnectorBearer: []
+        - DemoTokenAuth: []
       parameters:
-        - $ref: "#/components/parameters/InboxItemId"
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
-        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "./schemas/unified-inbox.schema.json#/$defs/AcknowledgeRequest"
-            example:
-              schema_version: "1.0"
-              request_id: req_inbox_ack
+              $ref: "./schemas/inbox-event-batch.schema.json"
       responses:
-        "200":
-          description: Idempotently acknowledged item
+        "202":
+          description: Events accepted after deduplication
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
@@ -422,12 +334,216 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./schemas/unified-inbox.schema.json#/$defs/ItemResponse"
-              examples:
-                acknowledged:
-                  externalValue: "./fixtures/unified-inbox-item-acknowledged.json"
+                type: object
+                additionalProperties: false
+                required: [accepted, duplicates, item_ids]
+                properties:
+                  accepted: { type: integer, minimum: 0 }
+                  duplicates: { type: integer, minimum: 0 }
+                  item_ids:
+                    type: array
+                    items: { type: string }
         "400":
           $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /v1/inbox/items:
+    get:
+      tags: [Inbox]
+      operationId: listInboxItems
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientVersion"
+        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Unified Inbox page
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "./schemas/inbox-item.schema.json"
+                  next_cursor:
+                    type: [string, "null"]
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /v1/inbox/items/{itemId}:
+    get:
+      tags: [Inbox]
+      operationId: getInboxItem
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientVersion"
+        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
+      responses:
+        "200":
+          description: Unified Inbox item
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/inbox-item.schema.json"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /v1/inbox/items/{itemId}:acknowledge:
+    post:
+      tags: [Inbox]
+      operationId: acknowledgeInboxItem
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientVersion"
+        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/inbox-acknowledge.schema.json"
+      responses:
+        "200":
+          description: Exact digest revision acknowledged
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/inbox-item.schema.json"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /v1/inbox/items/{itemId}/summary:
+    post:
+      tags: [Inbox]
+      operationId: summarizeInboxItem
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientVersion"
+        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
+      responses:
+        "200":
+          description: Item with refreshed AI summary
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/inbox-item.schema.json"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+
+  /v1/inbox/items/{itemId}/draft:
+    post:
+      tags: [Inbox]
+      operationId: createInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientVersion"
+        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
+      responses:
+        "200":
+          description: Existing or generated reply draft
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/inbox-draft.schema.json"
         "404":
           $ref: "#/components/responses/Error"
         "409":
@@ -438,16 +554,23 @@ paths:
   /v1/inbox/drafts/{draftId}:
     get:
       tags: [Inbox]
-      operationId: getUnifiedInboxDraft
+      operationId: getInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
-        - $ref: "#/components/parameters/InboxDraftId"
+        - name: draftId
+          in: path
+          required: true
+          schema: { type: string }
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
       responses:
         "200":
-          description: Current Inbox draft
+          description: Reply draft
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
@@ -458,43 +581,36 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./schemas/unified-inbox.schema.json#/$defs/DraftResponse"
-              examples:
-                editable:
-                  externalValue: "./fixtures/unified-inbox-draft-editable.json"
-        "400":
-          $ref: "#/components/responses/Error"
+                $ref: "./schemas/inbox-draft.schema.json"
         "404":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
-        "503":
-          $ref: "#/components/responses/Error"
     patch:
       tags: [Inbox]
-      operationId: updateUnifiedInboxDraft
+      operationId: updateInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
-        - $ref: "#/components/parameters/InboxDraftId"
+        - name: draftId
+          in: path
+          required: true
+          schema: { type: string }
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
-        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/AppSession"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "./schemas/unified-inbox.schema.json#/$defs/PatchDraftRequest"
-            example:
-              schema_version: "1.0"
-              request_id: req_inbox_patch
-              operation: update_body
-              expected_version: 1
-              body: Thanks. I will review the mock document.
+              $ref: "./schemas/inbox-draft.schema.json#/$defs/InboxDraftPatch"
       responses:
         "200":
-          description: Updated or discarded Inbox draft
+          description: User-edited reply draft
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
@@ -505,43 +621,32 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./schemas/unified-inbox.schema.json#/$defs/DraftResponse"
-              examples:
-                updated:
-                  externalValue: "./fixtures/unified-inbox-draft-editable.json"
-        "400":
-          $ref: "#/components/responses/Error"
+                $ref: "./schemas/inbox-draft.schema.json"
         "404":
           $ref: "#/components/responses/Error"
         "409":
-          $ref: "#/components/responses/Error"
-        "503":
           $ref: "#/components/responses/Error"
 
   /v1/inbox/drafts/{draftId}/confirmation:
     post:
       tags: [Inbox]
-      operationId: createUnifiedInboxConfirmation
+      operationId: confirmInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
-        - $ref: "#/components/parameters/InboxDraftId"
+        - name: draftId
+          in: path
+          required: true
+          schema: { type: string }
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "./schemas/unified-inbox.schema.json#/$defs/ConfirmationRequest"
-            example:
-              schema_version: "1.0"
-              request_id: req_inbox_confirmation
-              expected_version: 2
+        - $ref: "#/components/parameters/AppSession"
       responses:
-        "201":
-          description: Short-lived confirmation bound to the current draft version
+        "200":
+          description: Short-lived one-time user confirmation
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
@@ -552,11 +657,51 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./schemas/unified-inbox.schema.json#/$defs/ConfirmationResponse"
-              examples:
-                mock:
-                  externalValue: "./fixtures/unified-inbox-confirmation.json"
-        "400":
+                $ref: "./schemas/inbox-send.schema.json#/$defs/InboxConfirmation"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /v1/inbox/drafts/{draftId}:send:
+    post:
+      tags: [Inbox]
+      operationId: sendInboxDraft
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
+      parameters:
+        - name: draftId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientVersion"
+        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/DemoToken"
+        - $ref: "#/components/parameters/AppSession"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/inbox-send.schema.json#/$defs/InboxSendRequest"
+      responses:
+        "200":
+          description: Unified delivery result
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+            X-Contract-Version:
+              $ref: "#/components/headers/ContractVersion"
+            X-Hush-Data-Origin:
+              $ref: "#/components/headers/DataOrigin"
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/inbox-send.schema.json#/$defs/InboxSendResult"
+        "403":
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
@@ -565,31 +710,22 @@ paths:
         "503":
           $ref: "#/components/responses/Error"
 
-  /v1/inbox/drafts/{draftId}:send:
-    post:
+  /v1/inbox/sync-status:
+    get:
       tags: [Inbox]
-      operationId: sendUnifiedInboxDraft
+      operationId: getInboxSyncStatus
+      security:
+        - AppBearer: []
+        - DemoTokenAuth: []
       parameters:
-        - $ref: "#/components/parameters/InboxDraftId"
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
         - $ref: "#/components/parameters/ContractVersion"
         - $ref: "#/components/parameters/DemoToken"
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "./schemas/unified-inbox.schema.json#/$defs/SendRequest"
-            example:
-              schema_version: "1.0"
-              request_id: req_inbox_send
-              confirmation_id: confirmation_mock_001
-              expected_version: 2
+        - $ref: "#/components/parameters/AppSession"
       responses:
         "200":
-          description: Simulated or future real delivery result
+          description: Per-account provider coverage and checkpoint state
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
@@ -600,17 +736,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./schemas/unified-inbox.schema.json#/$defs/SendResponse"
-              examples:
-                simulated:
-                  externalValue: "./fixtures/unified-inbox-send-simulated.json"
-        "400":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
+                type: array
+                items:
+                  $ref: "./schemas/inbox-sync-status.schema.json"
         "409":
-          $ref: "#/components/responses/Error"
-        "503":
           $ref: "#/components/responses/Error"
 
   /v1/auth/gmail/start:
@@ -695,17 +824,22 @@ paths:
           description: Invalid signature
 
 components:
+  securitySchemes:
+    AppBearer:
+      type: http
+      scheme: bearer
+      description: Hush App session token. Cannot ingest connector events.
+    ConnectorBearer:
+      type: http
+      scheme: bearer
+      description: Connector Host token. Cannot query items or send drafts.
+    DemoTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Hush-Demo-Token
+      description: Available only when HUSH_DEMO_MODE=true.
+
   parameters:
-    InboxItemId:
-      name: itemId
-      in: path
-      required: true
-      schema: { type: string, minLength: 1, maxLength: 128 }
-    InboxDraftId:
-      name: draftId
-      in: path
-      required: true
-      schema: { type: string, minLength: 1, maxLength: 128 }
     RequestId:
       name: X-Request-ID
       in: header
@@ -746,6 +880,17 @@ components:
       schema:
         type: string
         minLength: 8
+    AppSession:
+      name: X-Hush-App-Session
+      in: header
+      required: true
+      description: >
+        Per-launch high-entropy App session secret. Confirmation tokens are
+        bound to its authenticated digest.
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 128
     IdempotencyKey:
       name: Idempotency-Key
       in: header

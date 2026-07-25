@@ -11,6 +11,7 @@ node_modules/
 dist/
 coverage/
 .pnpm-store/
+.data/
 
 # Environment and secrets
 .env
@@ -28,6 +29,10 @@ logs/
 # IDE
 .vscode/
 .idea/
+
+# Agent worktrees
+.worktrees/
+.superpowers/
 
 # Demo artifacts
 demo-output/
