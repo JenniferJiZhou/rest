@@ -49,9 +49,8 @@ final class HushDemoStore: ObservableObject {
     private let manualRestProvider: (any HushManualRestTaskProviding)?
 
     init(
-        provider: any HushRestContentProviding = BundledHushRestContentProvider.automatic,
-        manualRestProvider: (any HushManualRestTaskProviding)? =
-            HTTPManualRestTaskProvider.automatic,
+        provider: any HushRestContentProviding,
+        manualRestProvider: (any HushManualRestTaskProviding)?,
         initialQuestID: String? = nil,
         initialGeneratedRestTask: GeneratedRestTask? = nil
     ) {
@@ -62,6 +61,21 @@ final class HushDemoStore: ObservableObject {
            let initialIndex = content.quests.firstIndex(where: { $0.id == initialQuestID }) {
             selectedQuestIndex = initialIndex
         }
+    }
+
+    convenience init(
+        provider: any HushRestContentProviding =
+            BundledHushRestContentProvider.automatic,
+        initialQuestID: String? = nil,
+        initialGeneratedRestTask: GeneratedRestTask? = nil
+    ) {
+        self.init(
+            provider: provider,
+            manualRestProvider:
+                HTTPManualRestTaskProvider.automatic,
+            initialQuestID: initialQuestID,
+            initialGeneratedRestTask: initialGeneratedRestTask
+        )
     }
 
     var currentQuest: HushQuestContent {

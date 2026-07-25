@@ -21,6 +21,17 @@ export class StepFunRestDecisionClient
     request: RestDecisionModelRequest,
     options?: ProviderCallOptions
   ): Promise<string> {
+    const serializedSchema = JSON.stringify(request.outputSchema);
+    const schemaInstruction = [
+      request.system,
+      "",
+      "Output JSON Schema:",
+      serializedSchema,
+      "",
+      "Return one JSON object matching this schema exactly.",
+      "Use the exact camelCase property names shown in the schema.",
+      "Do not return Markdown or explanatory text."
+    ].join("\n");
     const response = await this.fetcher(
       `${this.baseUrl}/chat/completions`,
       {
@@ -32,7 +43,7 @@ export class StepFunRestDecisionClient
         body: JSON.stringify({
           model: request.model,
           messages: [
-            { role: "system", content: request.system },
+            { role: "system", content: schemaInstruction },
             { role: "user", content: request.input }
           ],
           response_format: { type: "json_object" },

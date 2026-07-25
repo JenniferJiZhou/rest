@@ -9,7 +9,7 @@ Gmail OAuth、Photon SDK 或 Photon Webhook 的具体实现。
 |---|---|---|
 | fatigue type 包含 `unknown` | 已满足 | `common.schema.json`、`fatigue-reflection.schema.json`、TS Zod |
 | check-in 最多一个 follow-up | 运行时满足 | 响应只有单一 `follow_up` 对象；Application 禁止有回答后再次追问；Schema 未表达跨字段条件 |
-| recommend 只返回固定 `quest_id` | 已满足 | Schema 仅返回 ID；`RestService` 验证 ID 必须来自过滤后的固定库 |
+| Contract 1.0 recommend 只返回固定 `quest_id` | 已满足 | 1.0 Schema 仅返回 ID；`RestService` 验证 ID 必须来自过滤后的固定库 |
 | `include_gmail=false` | 已满足 | Schema、无 Gmail fixture、Integration Test |
 | 用户主动提交 `open_loops` | 已满足 | Handoff request、Open Loops Only fixtures |
 | handoff 支持 `uncertain` | 已满足 | Schema、fixtures、Agent 与 Application 归一化 |
@@ -401,7 +401,9 @@ Provider PR 必须：
 
 ## 10. Contract 1.1 动态 Rest Decision 例外
 
-`recommend` 和 Contract 1.0 继续遵守上表。Contract 1.1
-`rest/evaluate` 是经批准的独立动态任务路径：使用 provider-neutral
-`RestDecisionProvider`、专用 Prompt/Schema Router 和 StepFun Adapter，不读取
-Quest Repository。完整边界见 `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`。
+Contract 1.0 recommend 继续遵守上表。Contract 1.1 的
+`rest/evaluate`（Mode A）和 `rest/recommend`（Mode B）是经批准的独立动态
+任务路径：使用 provider-neutral Provider、专用 Prompt/Schema Router 和
+StepFun Adapter，不读取 Quest Repository。Mode C 不生成休息任务；Sleep
+Handoff 不属于此例外。完整边界见
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`。

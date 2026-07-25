@@ -97,9 +97,12 @@ POST <STEPFUN_BASE_URL>/chat/completions
 Authorization: Bearer <STEPFUN_API_KEY>
 ```
 
-It is non-streaming and sends the selected system Prompt and serialized
-provider-neutral input as `messages`, with
-`response_format.type=json_object`. The adapter reads only
+It is non-streaming and sends the selected system Prompt, the Router's actual
+serialized output JSON Schema, an exact-camelCase instruction, and the
+serialized provider-neutral input as `messages`, with
+`response_format.type=json_object`. Mode A and Mode B therefore receive their
+distinct schemas without assuming provider-side strict-schema support. The
+schema is not logged or returned to clients. The adapter reads only
 `choices[0].message.content`; the server then parses JSON and validates the
 mode-specific structure. It does not assume strict JSON Schema support in
 the configured model. Raw provider bodies never cross into the application

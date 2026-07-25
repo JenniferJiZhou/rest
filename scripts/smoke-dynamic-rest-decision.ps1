@@ -75,6 +75,7 @@ function SendJson(
         [System.Net.Http.HttpMethod]::new($Method),
         "$base$Path"
     )
+    $response = $null
     foreach ($entry in $Headers.GetEnumerator()) {
         [void]$request.Headers.TryAddWithoutValidation(
             $entry.Key,
@@ -93,7 +94,12 @@ function SendJson(
         $response = $client.SendAsync($request).GetAwaiter().GetResult()
         $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         return [pscustomobject]@{
-            Response = $response
+            StatusCode = [int]$response.StatusCode
+            ContentType = $response.Content.Headers.ContentType.MediaType
+            RequestId = HeaderValue $response "X-Request-ID"
+            ContractVersion =
+                HeaderValue $response "X-Contract-Version"
+            DataOrigin = HeaderValue $response "X-Hush-Data-Origin"
             Body = $body
         }
     }
@@ -101,6 +107,9 @@ function SendJson(
         Fail "request timed out or failed before an HTTP response was received."
     }
     finally {
+        if ($null -ne $response) {
+            $response.Dispose()
+        }
         $request.Dispose()
     }
 }
@@ -110,19 +119,16 @@ function AssertCommonResponse(
     [string]$RequestId,
     $Result
 ) {
-    if ($Result.Response.Content.Headers.ContentType.MediaType -ne
-        "application/json") {
+    if ($Result.ContentType -ne "application/json") {
         Fail "$Name Content-Type is not application/json."
     }
-    if ((HeaderValue $Result.Response "X-Request-ID") -ne $RequestId) {
+    if ($Result.RequestId -ne $RequestId) {
         Fail "$Name X-Request-ID does not echo the request."
     }
-    if ((HeaderValue $Result.Response "X-Contract-Version") -ne
-        $ContractVersion) {
+    if ($Result.ContractVersion -ne $ContractVersion) {
         Fail "$Name X-Contract-Version mismatch."
     }
-    if ((HeaderValue $Result.Response "X-Hush-Data-Origin") -ne
-        $ExpectedDataOrigin) {
+    if ($Result.DataOrigin -ne $ExpectedDataOrigin) {
         Fail "$Name X-Hush-Data-Origin mismatch."
     }
 
@@ -252,11 +258,10 @@ function AssertSuccessfulManualRest($Body) {
 
 try {
     $health = SendJson "GET" "/v1/health" @{} $null
-    if ([int]$health.Response.StatusCode -ne 200) {
-        Fail "health returned HTTP $([int]$health.Response.StatusCode)."
+    if ($health.StatusCode -ne 200) {
+        Fail "health returned HTTP $($health.StatusCode)."
     }
-    if ($health.Response.Content.Headers.ContentType.MediaType -ne
-        "application/json") {
+    if ($health.ContentType -ne "application/json") {
         Fail "health Content-Type is not application/json."
     }
     $healthBody = $health.Body | ConvertFrom-Json
@@ -301,7 +306,7 @@ try {
             New-DynamicPayload $requestId $name
         }
         $result = SendJson "POST" $path $headers $payload
-        $status = [int]$result.Response.StatusCode
+        $status = $result.StatusCode
         $expectedStatus = if ($ExpectProviderUnavailable) { 503 } else { 200 }
         if ($status -ne $expectedStatus) {
             Fail "$name returned HTTP $status, expected $expectedStatus."

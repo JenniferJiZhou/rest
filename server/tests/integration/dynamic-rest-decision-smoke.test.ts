@@ -25,7 +25,9 @@ describe("Contract 1.1 dynamic Rest Decision smoke script", () => {
     const result = await runSmoke([]);
 
     expect(result.code).not.toBe(0);
-    expect(result.output).toContain("no network request was made");
+    expect(combinedOutput(result)).toContain(
+      "no network request was made"
+    );
   }, smokeTestTimeoutMs);
 
   it("rejects a remote HTTP BaseUrl", async () => {
@@ -35,7 +37,7 @@ describe("Contract 1.1 dynamic Rest Decision smoke script", () => {
     ]);
 
     expect(result.code).not.toBe(0);
-    expect(result.output).toContain(
+    expect(combinedOutput(result)).toContain(
       "Remote BaseUrl must use HTTPS"
     );
   }, smokeTestTimeoutMs);
@@ -52,15 +54,15 @@ describe("Contract 1.1 dynamic Rest Decision smoke script", () => {
       "All"
     ]);
 
-    expect(result.code).toBe(0);
-    expect(result.output).toContain("PASS health");
-    expect(result.output).toContain("PASS Offer HTTP 200");
-    expect(result.output).toContain("PASS Companion HTTP 200");
-    expect(result.output).toContain("PASS Manual HTTP 200");
-    expect(result.output).toContain(
+    assertSmokeSucceeded(result);
+    expect(result.stdout).toContain("PASS health");
+    expect(result.stdout).toContain("PASS Offer HTTP 200");
+    expect(result.stdout).toContain("PASS Companion HTTP 200");
+    expect(result.stdout).toContain("PASS Manual HTTP 200");
+    expect(result.stdout).toContain(
       "PASS dynamic rest decision smoke summary"
     );
-    expect(result.output).not.toContain("Smoke dynamic app");
+    expect(combinedOutput(result)).not.toContain("Smoke dynamic app");
   }, smokeTestTimeoutMs);
 
   it("validates the versioned unavailable response locally", async () => {
@@ -76,9 +78,9 @@ describe("Contract 1.1 dynamic Rest Decision smoke script", () => {
       "Offer"
     ]);
 
-    expect(result.code).toBe(0);
-    expect(result.output).toContain("PASS health");
-    expect(result.output).toContain("PASS Offer HTTP 503");
+    assertSmokeSucceeded(result);
+    expect(result.stdout).toContain("PASS health");
+    expect(result.stdout).toContain("PASS Offer HTTP 503");
   }, smokeTestTimeoutMs);
 
   it("validates unavailable Contract 1.1 manual generation locally", async () => {
@@ -94,9 +96,9 @@ describe("Contract 1.1 dynamic Rest Decision smoke script", () => {
       "Manual"
     ]);
 
-    expect(result.code).toBe(0);
-    expect(result.output).toContain("PASS health");
-    expect(result.output).toContain("PASS Manual HTTP 503");
+    assertSmokeSucceeded(result);
+    expect(result.stdout).toContain("PASS health");
+    expect(result.stdout).toContain("PASS Manual HTTP 503");
   }, smokeTestTimeoutMs);
 
   it("fails when X-Hush-Data-Origin is not the expected value", async () => {
@@ -112,7 +114,9 @@ describe("Contract 1.1 dynamic Rest Decision smoke script", () => {
     ]);
 
     expect(result.code).not.toBe(0);
-    expect(result.output).toContain("X-Hush-Data-Origin mismatch");
+    expect(combinedOutput(result)).toContain(
+      "X-Hush-Data-Origin mismatch"
+    );
   }, smokeTestTimeoutMs);
 });
 
@@ -134,7 +138,7 @@ async function listen(
 
 async function runSmoke(
   arguments_: string[]
-): Promise<{ code: number | null; output: string }> {
+): Promise<SmokeResult> {
   return await new Promise((resolveRun, reject) => {
     const child = spawn(
       powershellExecutable,
@@ -151,16 +155,97 @@ async function runSmoke(
         windowsHide: true
       }
     );
-    let output = "";
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const settle = (
+      callback: () => void
+    ): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
     child.stdout.on("data", (chunk) => {
-      output += String(chunk);
+      stdout += String(chunk);
     });
     child.stderr.on("data", (chunk) => {
-      output += String(chunk);
+      stderr += String(chunk);
     });
-    child.on("error", reject);
+    const timeout = setTimeout(() => {
+      child.kill();
+      settle(() => {
+        reject(
+          new Error(
+            formatSmokeFailure(
+              "Smoke timed out and was killed.",
+              { code: null, stdout, stderr }
+            )
+          )
+        );
+      });
+    }, 30_000);
+    child.on("error", (error) => {
+      settle(() => {
+        reject(
+          new Error(
+            formatSmokeFailure(
+              `Smoke process failed to start: ${error.message}`,
+              { code: null, stdout, stderr }
+            )
+          )
+        );
+      });
+    });
     child.on("close", (code) => {
-      resolveRun({ code, output });
+      settle(() => {
+        resolveRun({ code, stdout, stderr });
+      });
     });
   });
+}
+
+interface SmokeResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+function combinedOutput(result: SmokeResult): string {
+  return `${result.stdout}\n${result.stderr}`;
+}
+
+function assertSmokeSucceeded(result: SmokeResult): void {
+  if (result.code !== 0) {
+    throw new Error(
+      formatSmokeFailure(
+        `Smoke exited with code ${String(result.code)}.`,
+        result
+      )
+    );
+  }
+}
+
+function formatSmokeFailure(
+  summary: string,
+  result: SmokeResult
+): string {
+  return [
+    summary,
+    "--- stdout ---",
+    sanitizeSmokeOutput(result.stdout),
+    "--- stderr ---",
+    sanitizeSmokeOutput(result.stderr)
+  ].join("\n");
+}
+
+function sanitizeSmokeOutput(output: string): string {
+  return output
+    .replace(/Bearer\s+\S+/giu, "Bearer [REDACTED]")
+    .replace(
+      /(api[_-]?key|token|secret)\s*[:=]\s*\S+/giu,
+      "$1=[REDACTED]"
+    );
 }

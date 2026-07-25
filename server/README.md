@@ -52,8 +52,8 @@ X-Client-Version
 X-Contract-Version: 1.0
 ```
 
-`POST /v1/rest/evaluate` additionally accepts `X-Contract-Version: 1.1`.
-Every other route remains 1.0-only.
+`POST /v1/rest/evaluate` and `POST /v1/rest/recommend` additionally accept
+`X-Contract-Version: 1.1`. Every other route remains 1.0-only.
 
 The body `request_id` must equal `X-Request-ID`. Mutating idempotent routes also
 require an `Idempotency-Key` of 8–128 Unicode characters after trimming, with
@@ -175,13 +175,17 @@ Contract 1.0 uses the versioned `rest-decision-v1.0` System Prompt,
 Anthropic structured output, fixed reason/Quest allowlists, and the legacy
 Output Guard.
 
-Contract 1.1 uses the independent `dynamic-rest-decision-v1.1` Prompt,
-StepFun Responses API strict JSON Schema, and a provider-neutral dynamic
-execution path. It does not send allowed Quest IDs, read the Quest Repository,
-apply the 15-minute cooldown bypass, or use the 3500 ms legacy deadline.
-The server injects actions and always returns `default_quest_id=null`.
-Neither version gives the model tools or control over Shield, notifications,
-request IDs, or checkpoints.
+Contract 1.1 uses the independent `dynamic-rest-decision-v1.1` Mode A Prompt
+and `dynamic-manual-rest-v1.1` Mode B Prompt with StepFun Chat Completions
+JSON mode. The selected Router schema is serialized into the system message
+with exact camelCase instructions; the server still parses and validates the
+mode-specific result. It does not send allowed Quest IDs, read the Quest
+Repository, apply the 15-minute cooldown bypass, or use the 3500 ms legacy
+deadline. Mode C does not generate a rest task, and Sleep Handoff is outside
+this path. The server injects actions and always returns
+`default_quest_id=null`. Neither version gives the model tools or control
+over Shield, notifications, Lockdown, request IDs, checkpoints, email, or
+messages.
 
 See `../docs/19_REAL_REST_DECISION_AGENT.md` for Contract 1.0 and
 `../docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md` for Contract 1.1.

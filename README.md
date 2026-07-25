@@ -26,9 +26,11 @@
 - `main` 永远能够在 Sample Mode 下完成主流程。
 - 公共契约、Xcode 工程文件、根依赖文件均有唯一 Owner。
 - 业务代码只依赖协议，不直接依赖 Gmail、Photon、Claude 或 DeviceActivity。
-- Contract 1.0、manual rest、Guided Drift 与 Blue Box 继续使用固定 JSON。
-  唯一例外是 Contract 1.1 Mode A：StepFun 可在受控 Prompt 下生成结构化、
-  一次性的办公休息任务，但不能控制设备、通知、Shield 或 checkpoint。
+- Contract 1.0、Guided Drift、Blue Box 与未迁移的本地流程继续使用固定 JSON。
+- Contract 1.1 Mode A 可由 StepFun 动态判断并生成一次性办公休息任务；
+  Contract 1.1 Mode B 在用户已选择休息后动态生成任务。Mode C 不生成休息
+  任务。两个动态模式都不能控制设备、通知、Shield、Lockdown、checkpoint、
+  邮件或消息；Sleep Handoff 不属于该动态任务例外。
 
 ## 当前包的性质
 

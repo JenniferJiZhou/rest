@@ -214,9 +214,10 @@ HandoffJobRepository
 
 ### Rest Quest
 
-- Canonical steps 位于 `content/rest-quests.json`。
-- 后端只选择 `quest_id`，不替换步骤。
-- 内容版本不匹配时，客户端使用本地 fallback Quest。
+- Contract 1.0 的 Canonical steps 位于 `content/rest-quests.json`；后端只选择
+  `quest_id`，不替换步骤，内容版本不匹配时客户端使用本地 fallback Quest。
+- Contract 1.1 Mode A / Mode B 直接使用结构化 `generated_task`，不查询固定
+  Quest；Mode C 不生成休息任务。
 
 ### Day Reset
 
