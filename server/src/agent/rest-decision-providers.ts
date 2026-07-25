@@ -1,4 +1,8 @@
 import type {
+  DynamicRestDecisionCandidate,
+  DynamicManualRestCandidate,
+  DynamicManualRestContext,
+  DynamicManualRestProvider,
   ProviderCallOptions,
   ProviderHealth,
   RestContentRepository,
@@ -6,6 +10,103 @@ import type {
   RestDecisionContext,
   RestDecisionProvider
 } from "../domain/ports.js";
+
+export class CannedDynamicRestDecisionProvider
+  implements
+    RestDecisionProvider<DynamicRestDecisionCandidate>,
+    DynamicManualRestProvider
+{
+  readonly dataOrigin = "mock" as const;
+  readonly configurationHealth = "ready" as const;
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async decide(
+    context: RestDecisionContext,
+    _options?: ProviderCallOptions
+  ): Promise<DynamicRestDecisionCandidate> {
+    const shouldOfferRest =
+      context.usage.continuousMinutes >= 20 ||
+      (context.usage.dailyMinutes ?? 0) >= 45 ||
+      (context.selfReportedEnergy ?? 5) <= 2 ||
+      context.localHour >= 23 ||
+      context.localHour <= 5;
+    if (!shouldOfferRest) {
+      return {
+        shouldOfferRest: false,
+        reasonCode: "insufficient_signal",
+        message: "先照着现在的节奏继续，我在这里陪你。",
+        generatedTask: null
+      };
+    }
+    return {
+      shouldOfferRest: true,
+      reasonCode:
+        (context.selfReportedEnergy ?? 5) <= 2
+          ? "low_energy"
+          : context.localHour >= 23 || context.localHour <= 5
+            ? "late_hour"
+            : "long_continuous_use",
+      message: "现在可以暂时把注意力从屏幕上移开。",
+      generatedTask: {
+        title: "一分钟桌边重置",
+        durationSeconds: 60,
+        steps: [
+          "暂时让双手离开键盘",
+          "看向比屏幕更远的位置",
+          "肩膀放松后再回来"
+        ]
+      }
+    };
+  }
+
+  async generate(
+    context: DynamicManualRestContext,
+    _options?: ProviderCallOptions
+  ): Promise<DynamicManualRestCandidate> {
+    return {
+      message: "好，现在给自己留一点空间。",
+      generatedTask: {
+        title: "一分钟桌边重置",
+        durationSeconds: Math.min(context.availableMinutes * 60, 60),
+        steps: [
+          "暂时让双手离开键盘",
+          "看向比屏幕更远的位置",
+          "肩膀放松后再回来"
+        ]
+      }
+    };
+  }
+}
+
+export class UnavailableDynamicRestDecisionProvider
+  implements
+    RestDecisionProvider<DynamicRestDecisionCandidate>,
+    DynamicManualRestProvider
+{
+  readonly dataOrigin = "mock" as const;
+  readonly configurationHealth = "unavailable" as const;
+
+  async health(): Promise<ProviderHealth> {
+    return "unavailable";
+  }
+
+  async decide(
+    _context: RestDecisionContext,
+    _options?: ProviderCallOptions
+  ): Promise<DynamicRestDecisionCandidate> {
+    throw new Error("Dynamic Rest Decision Provider is unavailable.");
+  }
+
+  async generate(
+    _context: DynamicManualRestContext,
+    _options?: ProviderCallOptions
+  ): Promise<DynamicManualRestCandidate> {
+    throw new Error("Dynamic Rest Decision Provider is unavailable.");
+  }
+}
 
 export class CannedRestDecisionProvider
   implements RestDecisionProvider

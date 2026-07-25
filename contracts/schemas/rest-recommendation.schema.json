@@ -2,7 +2,30 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RestRecommendationContracts",
   "$defs": {
-    "RestRecommendationRequest": {
+    "fatigueType": {
+      "type": "string",
+      "enum": [
+        "physical",
+        "sensory_overload",
+        "cognitive_overload",
+        "emotional_social",
+        "bedtime_arousal",
+        "unknown"
+      ]
+    },
+    "userPreference": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "quiet",
+        "move",
+        "surprise",
+        null
+      ]
+    },
+    "RestRecommendationRequestV1": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -20,36 +43,22 @@
           "const": "1.0"
         },
         "request_id": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "session_id": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "content_version": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "fatigue_type": {
-          "type": "string",
-          "enum": [
-            "physical",
-            "sensory_overload",
-            "cognitive_overload",
-            "emotional_social",
-            "bedtime_arousal",
-            "unknown"
-          ]
+          "$ref": "#/$defs/fatigueType"
         },
         "user_preference": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "quiet",
-            "move",
-            "surprise",
-            null
-          ]
+          "$ref": "#/$defs/userPreference"
         },
         "available_minutes": {
           "type": "integer",
@@ -57,7 +66,8 @@
           "maximum": 10
         },
         "source": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "location_tags": {
           "type": "array",
@@ -79,6 +89,63 @@
         }
       }
     },
+    "RestRecommendationRequestV1_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "session_id",
+        "fatigue_type",
+        "available_minutes",
+        "source"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1.1"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fatigue_type": {
+          "$ref": "#/$defs/fatigueType"
+        },
+        "user_preference": {
+          "$ref": "#/$defs/userPreference"
+        },
+        "available_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location_tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "RestRecommendationRequest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RestRecommendationRequestV1"
+        },
+        {
+          "$ref": "#/$defs/RestRecommendationRequestV1_1"
+        }
+      ]
+    },
     "RestQuestRecommendation": {
       "type": "object",
       "additionalProperties": false,
@@ -95,16 +162,20 @@
           "const": "1.0"
         },
         "request_id": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "content_version": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "quest_id": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "reason_code": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "intro": {
           "type": [
@@ -120,6 +191,66 @@
           ]
         }
       }
+    },
+    "DynamicRestTaskRecommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "message",
+        "generated_task",
+        "default_quest_id",
+        "actions"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1.1"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        },
+        "generated_task": {
+          "$ref": "./rest-suggestion.schema.json#/$defs/generatedRestTask"
+        },
+        "default_quest_id": {
+          "type": "null",
+          "deprecated": true,
+          "description": "Deprecated compatibility field. Contract 1.1 always returns null."
+        },
+        "actions": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "start_rest_session"
+            },
+            {
+              "const": "remind_later"
+            },
+            {
+              "const": "dismiss"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      }
+    },
+    "RestRecommendation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RestQuestRecommendation"
+        },
+        {
+          "$ref": "#/$defs/DynamicRestTaskRecommendation"
+        }
+      ]
     }
   }
 }

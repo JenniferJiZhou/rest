@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.1",
+  "request_id": "req_dynamic_unavailable",
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "休息建议服务暂时不可用。",
+    "retryable": true,
+    "fallback": null,
+    "details": {
+      "reason": "REST_DECISION_PROVIDER_UNAVAILABLE"
+    }
+  }
+}

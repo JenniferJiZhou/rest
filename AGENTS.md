@@ -60,10 +60,27 @@ Photon 已退出本阶段范围。AI 只能生成摘要和可编辑草稿，不�
 - 绕过企业管理员、应用 scope、租户策略或会话可见性。
 - 将 Browser/DOM 自动化伪装成官方 API，或默认启用该降级方式。
 - 将 Mock/Fixture 数据展示为真实 Provider 结果。
-- 让 LLM 自由生成 Rest Quest 动作。
+- 让 LLM 自由生成 Rest Quest 动作（下述 Contract 1.1 局部例外除外）。
 - 保存 Guided Drift 的用户答案。
 - 声称诊断疲劳、焦虑、失眠或其他医学状态。
 - 修改当前任务范围之外的 Apple UI、Rest、Session 或 DeviceActivity 代码。
+
+### 3.1 Contract 1.1 动态任务局部例外
+
+经 Product Owner 批准，Contract 1.1 的
+`work_state_or_rest_decision`（Mode A）和
+`POST /v1/rest/recommend` 的 `manual_rest_quest`（Mode B）可由 StepFun
+在版本化受控 Prompt 和严格结构 Schema 下生成一次性的办公休息任务。
+该例外只允许返回
+`title`、`duration_seconds`、`steps`；不得让模型控制通知、Shield、Lockdown、
+设备、下一 checkpoint、邮件或消息。
+
+以下流程继续使用固定内容，不在例外范围内：
+
+- Contract 1.0 Rest Decision；
+- Contract 1.0 manual rest / `POST /v1/rest/recommend`；
+- fatigue reflection；
+- Guided Drift、Blue Reset 和其他本地内容流程。
 
 ## 4. 所有外部能力必须可替换
 
@@ -156,6 +173,13 @@ W2/P3 维护的接口实现页面；M1/P1 负责 Apple 客户端模型与最终�
 - 同一 `provider + account_id + provider_message_id` 只生成一个 Inbox item。
 - 每个 API 变更必须同步更新 OpenAPI、Schema、TS 类型、fixtures、contract
   tests 和受影响消费者说明。
+- 所有客户端入口只生成 `RestEntryContext`，不得复制业务流程。
+- Contract 1.0 和其他固定内容流程返回 Quest 时优先返回 `quest_id`，
+  步骤以固定内容库为准。
+- Contract 1.1 的 Mode A / Mode B 返回结构化 `generated_task`；
+  `default_quest_id` 必须为 `null`。
+- Contract 1.1 Mode A / Mode B 的 `generated_task` 是一次性结构化任务，
+  `default_quest_id` 必须为 `null`，不得查询固定 Quest Repository。
 
 ## 7. Superpowers Style 工作流
 

@@ -1,9 +1,70 @@
 # Apple Rest Decision HTTPS Handoff
 
-Status: phase 1 protocol and HTTPS deployment readiness are complete. The
-actual HTTPS staging URL has not been created, and Apple iPhone/Mac device
-verification remains manual.
+## Contract 1.1 handoff
+
+The upgraded iOS DeviceActivity, Mac App, and Mac website clients now request
+`X-Contract-Version: 1.1` and use a 35-second timeout. They decode
+`generated_task` directly and do not query a local Quest using
+`default_quest_id`.
+
+- `true`: requires a task object; Apple may notify, and opening the
+  notification shows the wave home, message, title, ordered steps, and timer.
+  This path never automatically applies Shield or Lockdown.
+- `false`: accepts the companion `message`, does not notify, does not open a
+  task, and does not change Shield, Lockdown, or the next checkpoint.
+- error/timeout/malformed response: ends generating, keeps the page usable,
+  and does not fall back to a fixed Quest.
+
+User-initiated Mode B uses `POST /v1/rest/recommend` with Contract 1.1.
+The request omits content version and allowed/excluded Quest IDs because the
+user has already chosen to rest. The response has no `should_offer_rest`; it
+contains the same `GeneratedRestTask`, `default_quest_id=null`, and the three
+start/later/dismiss actions. The shared Apple client uses the configured
+HTTPS root, a 35-second timeout, and never falls back to a bundled Quest on
+failure. Legacy recommend Contract 1.0 remains available to old clients.
+
+The existing 1.0 handoff below remains valid for legacy clients. The canonical
+1.1 runbook is `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`.
+
+Contract 1.1 status: W1 local automated/static verification is complete.
+Credentialed StepFun staging, Contract 1.1 remote smoke, Apple builds, and
+iPhone/Mac device verification remain external. The deployment statements in
+the legacy 1.0 sections below describe the earlier 1.0 handoff and are not
+evidence that 1.1 has been deployed.
 Owner: W1 / P2 -> Apple Owner
+
+## Contract 1.1 M1/M2 build and device acceptance
+
+Run from the repository root on macOS:
+
+```bash
+xcodebuild -project apps/HushApp/Hush.xcodeproj \
+  -scheme Hush -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' build
+xcodebuild -project apps/HushApp/Hush.xcodeproj \
+  -scheme HushMac -configuration Debug build
+xcodebuild -project apps/HushApp/Hush.xcodeproj \
+  -scheme HushDeviceActivityMonitor -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' build
+```
+
+M1 owns the iOS App/Extension and shared UI verification; M2 owns the Mac App
+and Mac Website verification. For each applicable surface, test true, false,
+503, timeout, and malformed response:
+
+| Result | Pass criterion |
+|---|---|
+| true | notification opens generated title, ordered steps, and timer initialized from `duration_seconds`; remind later/dismiss work |
+| false | companion appears without notification, task navigation, Shield, or Lockdown |
+| 503/timeout/malformed | generating ends and no fixed Quest fallback or notification appears |
+| Mode B manual rest | generated title, ordered steps, and timer use the 1.1 recommend response; no fixed Quest lookup |
+| all results | checkpoint cadence and monitoring limits remain unchanged |
+
+Any Debug build failure, stuck generating state, fixed Quest lookup/fallback,
+message-driven false notification, automatic Shield/Lockdown, reordered
+steps, wrong timer, or checkpoint change fails acceptance. See
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md` for the full matrix and HTTPS
+smoke.
 
 ## Runtime matrix
 
@@ -30,7 +91,7 @@ Estimated iOS continuous usage must not be described as exact foreground
 time. No raw App identity, full URL, URL path/query, search term, or page
 title is available to the Provider.
 
-## HTTP behavior
+## Contract 1.0 HTTP behavior
 
 | Result | Apple behavior |
 |---|---|
@@ -61,12 +122,12 @@ checkpoint.
   rejects a non-null user label;
 - do not perform eTLD+1 or registrable-domain merging.
 
-## HTTPS client contract
+## Contract 1.0 HTTPS client contract
 
 Apple configures the platform-provided root HTTPS Base URL:
 
 ```text
-https://<deployed-origin>
+https://hush-server-staging.preview.aliyun-zeabur.cn
 ```
 
 The Base URL does not include `/v1/rest/evaluate`; current Swift clients append
@@ -90,7 +151,11 @@ reminder. The backend does not control Shield and does not modify the next
 checkpoint.
 
 Canned staging returns `X-Hush-Data-Origin: mock`; it is not a Real Agent.
-The HTTPS staging URL remains pending.
+The current HTTPS staging root is:
+
+```text
+https://hush-server-staging.preview.aliyun-zeabur.cn
+```
 
 ## Configuration
 
@@ -111,9 +176,8 @@ Cloud staging:
 
 ```text
 HOST=0.0.0.0
-PORT=<platform-supplied>
 NODE_ENV=production
-PUBLIC_BASE_URL=https://<deployed-origin>
+PUBLIC_BASE_URL=https://hush-server-staging.preview.aliyun-zeabur.cn
 TRUST_PROXY=true
 HUSH_DEMO_MODE=false
 HUSH_REST_DECISION_PROVIDER=canned
@@ -123,6 +187,23 @@ Production requires an explicit public HTTPS `PUBLIC_BASE_URL`. Normal does
 not need a Demo Token. Set `HUSH_REST_DECISION_PROVIDER=unavailable` only for
 the immediate 503 failure-injection path; it does not call a network service.
 Normal Canned and Demo Canned both report origin `mock`.
+
+The current OCI image listens on port 3000. Zeabur maps its service port to
+that container port; no `PORT` environment variable is configured.
+
+Credentialed Real staging keeps the same HTTPS settings and uses:
+
+```text
+HUSH_REST_DECISION_PROVIDER=real
+CLAUDE_API_KEY=<secret>
+CLAUDE_BASE_URL=https://api.anthropic.com
+REST_DECISION_MODEL=<deployment-selected-model>
+REST_DECISION_TIMEOUT_MS=3500
+```
+
+`REST_DECISION_MODEL` falls back to `CLAUDE_MODEL`. Incomplete Real
+configuration is Unavailable and never silently falls back to Canned. See
+`docs/19_REAL_REST_DECISION_AGENT.md` for the Prompt and failure contract.
 
 Demo is selected only when server configuration and request Header all match:
 
@@ -156,14 +237,13 @@ curl.exe -i http://127.0.0.1:3000/v1/health
 HTTPS staging health:
 
 ```bash
-BASE_URL="https://<deployed-origin>"
+BASE_URL="https://hush-server-staging.preview.aliyun-zeabur.cn"
 curl -i "$BASE_URL/v1/health"
 ```
 
 Apple receives only the root Base URL and does not add an API path during
-configuration. Swift appends the endpoint path. The actual staging URL is
-pending. A trusted-LAN HTTP address such as
-`http://<windows-lan-ipv4>:3000` is only for manual smoke.
+configuration. Swift appends the endpoint path. A trusted-LAN HTTP address
+such as `http://<windows-lan-ipv4>:3000` is only for manual smoke.
 
 ## curl examples
 
@@ -252,7 +332,7 @@ HTTPS staging:
 
 ```powershell
 .\scripts\smoke-https-staging.ps1 `
-  -BaseUrl "https://<deployed-origin>" `
+  -BaseUrl "https://hush-server-staging.preview.aliyun-zeabur.cn" `
   -Mode Https `
   -ExpectedDataOrigin mock
 ```
@@ -263,7 +343,7 @@ Content-Type, `X-Request-ID`, `X-Contract-Version`,
 type. It exits non-zero on mismatch or timeout and does not print the Demo
 Token or complete user Payload.
 
-## Apple handoff
+## Contract 1.0 Apple handoff
 
 The Apple Owner must:
 
@@ -278,14 +358,22 @@ The Apple Owner must:
 
 ## Manual remaining checks
 
-1. Create Render or an equivalent cloud service.
-2. Obtain the real HTTPS staging URL.
-3. Run `/v1/health` against staging.
-4. Run all three checkpoint types against staging.
-5. Verify true, false, 503, timeout, and malformed JSON on iPhone and Mac.
-6. Confirm notifications and Shield remain entirely Apple-controlled.
-7. Run standard CI with Node 20.19.5 and pnpm 9.15.9.
-8. When Docker daemon is available, verify build, health, and SIGTERM.
-9. Integrate a Real Rest Decision Provider in a separate task.
-10. Add production client authentication, abuse protection, and rate limiting
-    only through a later Contract Change.
+Completed:
+
+1. Published immutable GHCR image
+   `1938cc88d062ef3ece2547b384ec6085dbf7a20b`.
+2. Created the Zeabur Docker Image service and managed HTTPS domain.
+3. Verified `/v1/health`, TLS, HSTS, request headers, and HTTP-to-HTTPS
+   redirect behavior.
+4. Verified iOS App, Mac App, and Mac Website checkpoint payloads remotely.
+
+Remaining manual/device checks:
+
+1. Verify true, false, 503, timeout, and malformed JSON on iPhone and Mac.
+2. Confirm notifications and Shield remain entirely Apple-controlled.
+3. Run standard CI with Node 20.19.5 and pnpm 9.15.9.
+4. When Docker daemon is available, verify build, health, and SIGTERM.
+5. Configure credentials and run the implemented Real Provider staging
+   evaluation without logging model payloads or Secrets.
+6. Add production client authentication, abuse protection, and rate limiting
+   only through a later Contract Change.

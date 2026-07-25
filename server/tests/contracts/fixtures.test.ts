@@ -3,9 +3,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  dynamicRestTaskRecommendationSchema,
   inboxAcknowledgeRequestSchema,
   inboxDraftSchema,
   inboxEventBatchSchema,
+  restRecommendationRequestV1_1Schema,
   unifiedInboxItemSchema,
   usageSummarySchema
 } from "../../src/domain/contracts.js";
@@ -130,5 +132,28 @@ describe("contract fixtures", () => {
     ) as unknown;
 
     expect(usageSummarySchema.safeParse(input).success).toBe(true);
+  });
+
+  it.each([
+    [
+      "rest-recommendation-dynamic-request.json",
+      restRecommendationRequestV1_1Schema
+    ],
+    [
+      "rest-recommendation-dynamic-success.json",
+      dynamicRestTaskRecommendationSchema
+    ]
+  ])("%s matches the runtime dynamic manual-rest contract", (
+    fixture,
+    schema
+  ) => {
+    const input = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "../contracts/fixtures", fixture),
+        "utf8"
+      )
+    ) as unknown;
+
+    expect(schema.safeParse(input).success).toBe(true);
   });
 });

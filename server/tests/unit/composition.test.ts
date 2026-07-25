@@ -39,6 +39,39 @@ describe("server dependency graph isolation", () => {
     );
   });
 
+  it("selects the real Rest Decision graph without changing the other Agent graph", async () => {
+    const dependencies = buildServerDependencies(
+      config({
+        HUSH_REST_DECISION_PROVIDER: "real",
+        STEPFUN_API_KEY: "not-used-unless-called",
+        STEPFUN_MODEL: "step-3.7-flash"
+      })
+    );
+
+    expect(dependencies.restDecisionOrigin).toBe("real");
+    expect(dependencies.restOrigin).toBe("mock");
+    await expect(
+      dependencies.providerHealth()
+    ).resolves.toMatchObject({
+      rest_decision: "ready"
+    });
+  });
+
+  it("makes an incompletely configured real Provider unavailable instead of falling back to Canned", async () => {
+    const dependencies = buildServerDependencies(
+      config({
+        HUSH_REST_DECISION_PROVIDER: "real"
+      })
+    );
+
+    expect(dependencies.restDecisionOrigin).toBe("mock");
+    await expect(
+      dependencies.providerHealth()
+    ).resolves.toMatchObject({
+      rest_decision: "unavailable"
+    });
+  });
+
   it("marks normal graphs with missing Claude as mock", () => {
     const dependencies = buildServerDependencies(config());
 

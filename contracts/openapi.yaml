@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: Hush API
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Contract for Hush Apple clients, Agent backend, and Unified Inbox.
-    Quest steps are canonical in the fixed content library; the backend primarily returns quest_id.
+    Contract 1.0 keeps canonical fixed Quest content. Contract 1.1 Rest
+    evaluate can return a StepFun-generated structured rest task.
 servers:
   - url: http://localhost:3000
     description: Local protocol smoke; HTTPS staging pending
@@ -59,7 +60,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
-        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/RestContractVersion"
         - $ref: "#/components/parameters/DemoToken"
       requestBody:
         required: true
@@ -74,7 +75,7 @@ paths:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
             X-Contract-Version:
-              $ref: "#/components/headers/ContractVersion"
+              $ref: "#/components/headers/RestContractVersion"
             X-Hush-Data-Origin:
               $ref: "#/components/headers/DataOrigin"
           content:
@@ -82,11 +83,11 @@ paths:
               schema:
                 $ref: "./schemas/rest-suggestion.schema.json"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/RestContractError"
         "409":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/RestContractError"
         "503":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/RestContractError"
 
   /v1/rest/check-in:
     post:
@@ -125,11 +126,17 @@ paths:
   /v1/rest/recommend:
     post:
       tags: [Rest]
-      operationId: recommendQuest
+      operationId: recommendRest
+      description: >
+        Contract 1.0 selects a Quest from fixed content for legacy clients.
+        Contract 1.1 generates one manual rest task after the user has
+        already chosen to rest. request_id is the idempotency key: an
+        identical retry returns the stored result, while reuse with
+        different content returns 409.
       parameters:
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
-        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/RestContractVersion"
         - $ref: "#/components/parameters/DemoToken"
       requestBody:
         required: true
@@ -137,24 +144,34 @@ paths:
           application/json:
             schema:
               $ref: "./schemas/rest-recommendation.schema.json#/$defs/RestRecommendationRequest"
+            examples:
+              dynamic:
+                externalValue: "./fixtures/rest-recommendation-dynamic-request.json"
       responses:
         "200":
-          description: Quest ID selected from fixed content
+          description: Legacy fixed Quest or Contract 1.1 generated task
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
             X-Contract-Version:
-              $ref: "#/components/headers/ContractVersion"
+              $ref: "#/components/headers/RestContractVersion"
             X-Hush-Data-Origin:
               $ref: "#/components/headers/DataOrigin"
           content:
             application/json:
               schema:
-                $ref: "./schemas/rest-recommendation.schema.json#/$defs/RestQuestRecommendation"
+                $ref: "./schemas/rest-recommendation.schema.json#/$defs/RestRecommendation"
+              examples:
+                legacy:
+                  externalValue: "./fixtures/rest-recommendation-success.json"
+                dynamic:
+                  externalValue: "./fixtures/rest-recommendation-dynamic-success.json"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/RestContractError"
         "409":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/RestContractError"
+        "503":
+          $ref: "#/components/responses/RestContractError"
 
   /v1/rest/feedback:
     post:
@@ -845,6 +862,16 @@ components:
       schema:
         type: string
         const: "1.0"
+    RestContractVersion:
+      name: X-Contract-Version
+      in: header
+      required: true
+      description: >
+        Rest evaluate and recommend support legacy fixed-Quest Contract 1.0
+        and dynamic generated-task Contract 1.1.
+      schema:
+        type: string
+        enum: ["1.0", "1.1"]
     DemoToken:
       name: X-Hush-Demo-Token
       in: header
@@ -882,12 +909,29 @@ components:
       schema:
         type: string
         const: "1.0"
+    RestContractVersion:
+      schema:
+        type: string
+        enum: ["1.0", "1.1"]
     DataOrigin:
       schema:
         type: string
         enum: [real, mock, cached]
 
   responses:
+    RestContractError:
+      description: Versioned Rest operation error
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        X-Contract-Version:
+          $ref: "#/components/headers/RestContractVersion"
+        X-Hush-Data-Origin:
+          $ref: "#/components/headers/DataOrigin"
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/error-response.schema.json"
     Error:
       description: Error
       headers:

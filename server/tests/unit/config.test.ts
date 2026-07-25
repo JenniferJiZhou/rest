@@ -23,6 +23,23 @@ describe("server listener configuration", () => {
     expect(config.HUSH_REST_DECISION_PROVIDER).toBe("unavailable");
   });
 
+  it("accepts real dynamic Rest Decision configuration with StepFun defaults", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      HUSH_REST_DECISION_PROVIDER: "real",
+      STEPFUN_API_KEY: "not-used-in-test",
+      STEPFUN_MODEL: "step-3.7-flash",
+      LOG_LEVEL: "silent"
+    });
+
+    expect(config).toMatchObject({
+      HUSH_REST_DECISION_PROVIDER: "real",
+      STEPFUN_BASE_URL: "https://api.stepfun.com/v1",
+      STEPFUN_MODEL: "step-3.7-flash",
+      STEPFUN_TIMEOUT_MS: 30_000
+    });
+  });
+
   it("allows an explicit trusted-LAN listener and custom port", () => {
     const config = loadConfig({
       NODE_ENV: "demo",
@@ -73,6 +90,10 @@ describe("server listener configuration", () => {
 
   it.each([
     ["LLM_TIMEOUT_MS", "0"],
+    ["REST_DECISION_TIMEOUT_MS", "499"],
+    ["REST_DECISION_TIMEOUT_MS", "4501"],
+    ["STEPFUN_TIMEOUT_MS", "499"],
+    ["STEPFUN_TIMEOUT_MS", "120001"],
     ["MAIL_FETCH_TIMEOUT_MS", "-1"],
     ["DRAFT_CREATE_TIMEOUT_MS", "NaN"],
     ["COMPLETION_SEND_TIMEOUT_MS", "120001"],
@@ -213,4 +234,5 @@ describe("server listener configuration", () => {
       }).HUSH_REST_DECISION_PROVIDER
     ).toBe("unavailable");
   });
+
 });

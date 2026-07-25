@@ -33,6 +33,12 @@
 
 - 返回的 `quest_id` 在本地库存在。
 - Quest 1–6 分钟、无需持续看屏幕。
+
+以上固定内容验收适用于 Contract 1.0。Contract 1.1 Mode A 按
+`generated_task` 的结构与 true/false 关系验收，Mode B 按必有动态任务
+验收；两者均不增加时长范围、关键词、allowlist 或语义内容 Guard；专用
+测试矩阵见
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`。
 - 支持换一个。
 - 不生成危险动作或无边界家务。
 

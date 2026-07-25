@@ -336,11 +336,29 @@ describe("Rest Decision execution", () => {
       }
     ],
     [
+      "full URL inference",
+      {
+        shouldOfferRest: true,
+        reasonCode: "manual",
+        message: "我知道你正在浏览 https://example.com/private?q=secret。",
+        defaultQuestId: "look_far_01"
+      }
+    ],
+    [
       "precise continuous-use claim",
       {
         shouldOfferRest: true,
         reasonCode: "manual",
         message: "你已经精确连续使用了 30 分钟。",
+        defaultQuestId: "look_far_01"
+      }
+    ],
+    [
+      "numeric estimated continuous-use claim",
+      {
+        shouldOfferRest: true,
+        reasonCode: "long_continuous_use",
+        message: "你刚才持续用了 30 分钟，可以休息一下。",
         defaultQuestId: "look_far_01"
       }
     ],
@@ -351,6 +369,33 @@ describe("Rest Decision execution", () => {
         reasonCode: "manual",
         message: "现在关闭 App 并修改下一次 threshold。",
         defaultQuestId: "look_far_01"
+      }
+    ],
+    [
+      "next-checkpoint instruction",
+      {
+        shouldOfferRest: true,
+        reasonCode: "manual",
+        message: "下一次 checkpoint 改到十分钟后。",
+        defaultQuestId: "look_far_01"
+      }
+    ],
+    [
+      "shaming and productivity pressure",
+      {
+        shouldOfferRest: true,
+        reasonCode: "manual",
+        message: "你太懒了，再不休息就会损失生产力。",
+        defaultQuestId: "look_far_01"
+      }
+    ],
+    [
+      "no-offer message",
+      {
+        shouldOfferRest: false,
+        reasonCode: "insufficient_signal",
+        message: "还是休息一下吧。",
+        defaultQuestId: null
       }
     ]
   ])("rejects Provider output containing %s", async (_case, candidate) => {

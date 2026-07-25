@@ -91,7 +91,10 @@ describe("HTTPS deployment readiness", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       status: "ok",
-      contract_version: "1.0"
+      contract_version: "1.0",
+      providers: {
+        rest_decision: "ready"
+      }
     });
     expect(providerHealth).not.toHaveBeenCalled();
   });

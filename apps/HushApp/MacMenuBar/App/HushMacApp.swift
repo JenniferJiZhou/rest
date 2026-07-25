@@ -5,7 +5,7 @@ import UserNotifications
 struct HushMacRestSuggestion: Codable, Equatable, Sendable {
     let requestID: String
     let message: String
-    let questID: String?
+    let generatedTask: GeneratedRestTask
 }
 
 extension Notification.Name {
@@ -22,9 +22,14 @@ final class HushMacRestNotificationController:
 
     private static let storedSuggestionKey =
         "mac.notifications.lastOpenedRestSuggestion"
+    private static let companionMessageKey =
+        "mac.agent.lastCompanionMessage"
     private static let requestIDKey = "request_id"
     private static let messageKey = "message"
-    private static let questIDKey = "quest_id"
+    private static let taskTitleKey = "generated_task_title"
+    private static let taskDurationSecondsKey =
+        "generated_task_duration_seconds"
+    private static let taskStepsKey = "generated_task_steps"
 
     private override init() {
         super.init()
@@ -38,9 +43,12 @@ final class HushMacRestNotificationController:
 
     func sendRestSuggestion(
         message: String,
-        questID: String?,
+        generatedTask: GeneratedRestTask,
         requestID: String
     ) {
+        UserDefaults.standard.removeObject(
+            forKey: Self.companionMessageKey
+        )
         let trimmedMessage = message.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -53,7 +61,9 @@ final class HushMacRestNotificationController:
         content.userInfo = [
             Self.requestIDKey: requestID,
             Self.messageKey: trimmedMessage,
-            Self.questIDKey: questID ?? ""
+            Self.taskTitleKey: generatedTask.title,
+            Self.taskDurationSecondsKey: generatedTask.durationSeconds,
+            Self.taskStepsKey: generatedTask.steps
         ]
 
         let request = UNNotificationRequest(
@@ -64,10 +74,44 @@ final class HushMacRestNotificationController:
         UNUserNotificationCenter.current().add(request)
     }
 
+    func updateCompanionMessage(_ message: String) {
+        let trimmedMessage = message.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if trimmedMessage.isEmpty {
+            UserDefaults.standard.removeObject(
+                forKey: Self.companionMessageKey
+            )
+        } else {
+            UserDefaults.standard.set(
+                trimmedMessage,
+                forKey: Self.companionMessageKey
+            )
+        }
+        NotificationCenter.default.post(
+            name: .hushCompanionMessageUpdated,
+            object: trimmedMessage
+        )
+    }
+
+    func lastCompanionMessage() -> String? {
+        UserDefaults.standard.string(
+            forKey: Self.companionMessageKey
+        )
+    }
+
     func sendTestSuggestion() {
         sendRestSuggestion(
             message: "先把手机留在这里，去洗一把脸。",
-            questID: "wash_face_01",
+            generatedTask: GeneratedRestTask(
+                title: "一分钟桌边重置",
+                durationSeconds: 60,
+                steps: [
+                    "暂时让双手离开键盘",
+                    "看向比屏幕更远的位置",
+                    "肩膀放松后再回来"
+                ]
+            ),
             requestID: "req_mac_notification_test_\(UUID().uuidString)"
         )
     }
@@ -145,11 +189,22 @@ final class HushMacRestNotificationController:
         }
 
         let message = userInfo[messageKey] as? String ?? ""
-        let rawQuestID = userInfo[questIDKey] as? String
+        guard
+            let title = userInfo[taskTitleKey] as? String,
+            let durationSeconds =
+                userInfo[taskDurationSecondsKey] as? Int,
+            let steps = userInfo[taskStepsKey] as? [String]
+        else {
+            return nil
+        }
         return HushMacRestSuggestion(
             requestID: requestID,
             message: message,
-            questID: rawQuestID?.isEmpty == false ? rawQuestID : nil
+            generatedTask: GeneratedRestTask(
+                title: title,
+                durationSeconds: durationSeconds,
+                steps: steps
+            )
         )
     }
 }
@@ -290,7 +345,10 @@ private struct HushMacHomeView: View {
                 openWindow(id: "settings")
                 NSApplication.shared.activate(ignoringOtherApps: true)
             },
-            suggestedQuestID: suggestion?.questID,
+            suggestedGeneratedTask: suggestion?.generatedTask,
+            initialCompanionMessage:
+                HushMacRestNotificationController.shared
+                    .lastCompanionMessage(),
             suggestionMessage: suggestion?.message,
             suggestionEventID: suggestion?.requestID
         )

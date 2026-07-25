@@ -1,16 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ZodError, type ZodType } from "zod";
 import {
-  CONTRACT_VERSION,
-  fatigueReflectionSchema,
   restQuestRecommendationSchema,
   type FatigueCheckIn,
   type FatigueReflection,
   type RestQuest,
   type RestQuestRecommendation,
-  type RestRecommendationRequest
+  type RestRecommendationRequestV1
 } from "../domain/contracts.js";
 import { AppError } from "../domain/errors.js";
+import {
+  buildLegacyManualRestQuestPrompt,
+  routeRestAgentMode
+} from "./rest-mode-router.js";
 import type {
   AgentLLM,
   DataOrigin,
@@ -62,41 +64,24 @@ export class ClaudeAgentLLM implements AgentLLM {
     input: FatigueCheckIn,
     options?: ProviderCallOptions
   ): Promise<FatigueReflection> {
+    const route = routeRestAgentMode({
+      mode: "fatigue_reflection",
+      request: input
+    });
     return this.completeJson(
-      [
-        "You classify a user's self-described tiredness for a rest product.",
-        "Return JSON only. Do not diagnose a medical condition.",
-        "Allowed fatigue_type: physical, sensory_overload, cognitive_overload, emotional_social, bedtime_arousal, unknown.",
-        "Ask at most one follow-up. If follow_up_answer is present, needs_follow_up must be false.",
-        `schema_version must be "${CONTRACT_VERSION}" and request_id must be "${input.request_id}".`,
-        `Input: ${JSON.stringify(input)}`
-      ].join("\n"),
-      fatigueReflectionSchema,
+      route.prompt,
+      route.outputSchema,
       options
     );
   }
 
   async chooseQuest(
-    input: RestRecommendationRequest,
+    input: RestRecommendationRequestV1,
     allowedQuests: RestQuest[],
     options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation> {
     return this.completeJson(
-      [
-        "Select exactly one quest from the provided fixed library.",
-        "Never invent a quest ID, steps, medical advice, or safety advice.",
-        `schema_version must be "${CONTRACT_VERSION}", request_id must be "${input.request_id}", content_version must be "${input.content_version}".`,
-        `Request: ${JSON.stringify(input)}`,
-        `Allowed quests: ${JSON.stringify(
-          allowedQuests.map((quest) => ({
-            id: quest.id,
-            fatigue_types: quest.fatigue_types,
-            duration_seconds: quest.duration_seconds,
-            energy_required: quest.energy_required,
-            location_tags: quest.location_tags
-          }))
-        )}`
-      ].join("\n"),
+      buildLegacyManualRestQuestPrompt(input, allowedQuests),
       restQuestRecommendationSchema,
       options
     );

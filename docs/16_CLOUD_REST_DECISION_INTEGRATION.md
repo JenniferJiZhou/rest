@@ -1,5 +1,8 @@
 # Cloud Rest Decision Integration
 
+> 本文记录 Contract 1.0 固定 Quest 链路。Contract 1.1 的 StepFun 动态任务
+> 见 `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`；两条链路并存。
+
 Status: Contract Change, phase 1 foundation  
 Owner: W1 / P2
 

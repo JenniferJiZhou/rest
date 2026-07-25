@@ -1,7 +1,5 @@
-import { z } from "zod";
 import {
   CONTRACT_VERSION,
-  restSuggestionReasonCodeSchema,
   restSuggestionSchema,
   usageSummarySchema,
   type RestSuggestion,
@@ -9,11 +7,17 @@ import {
 } from "../../domain/contracts.js";
 import { AppError } from "../../domain/errors.js";
 import type {
+  ProviderCallOptions,
   RestContentRepository,
   RestDecisionCandidate,
   RestDecisionContext,
   RestDecisionProvider
 } from "../../domain/ports.js";
+import {
+  ProviderCallAbortedError,
+  withProviderTimeout
+} from "../../infra/provider-call.js";
+import { restDecisionCandidateSchema } from "../../agent/rest-decision/rest-decision-output.js";
 
 export type RestDecisionExecutionState =
   | "received"
@@ -47,24 +51,21 @@ export type RestDecisionExecutionResult =
       states: RestDecisionExecutionState[];
     };
 
-const candidateSchema = z
-  .object({
-    shouldOfferRest: z.boolean(),
-    reasonCode: restSuggestionReasonCodeSchema,
-    message: z.string().max(240).optional(),
-    defaultQuestId: z.string().nullable().optional()
-  })
-  .strict();
+export interface RestDecisionExecutorOptions {
+  timeoutMs?: number;
+}
 
 export class RestDecisionExecutor {
   constructor(
     private readonly provider: RestDecisionProvider,
-    private readonly content: RestContentRepository
+    private readonly content: RestContentRepository,
+    private readonly options: RestDecisionExecutorOptions = {}
   ) {}
 
   async execute(
     input: unknown,
-    verifiedRequestId: string
+    verifiedRequestId: string,
+    callOptions?: ProviderCallOptions
   ): Promise<RestDecisionExecutionResult> {
     const states: RestDecisionExecutionState[] = ["received"];
     let request: UsageSummary;
@@ -107,19 +108,20 @@ export class RestDecisionExecutor {
         if ((await this.provider.health()) === "unavailable") {
           throw new Error("provider unavailable");
         }
-        candidate = await this.provider.decide(context);
-      } catch {
+        candidate = await withProviderTimeout({
+          ...(callOptions?.signal
+            ? { signal: callOptions.signal }
+            : {}),
+          timeoutMs: this.options.timeoutMs ?? 3_500,
+          timeoutError: restDecisionTimeoutError,
+          operation: (signal) =>
+            this.provider.decide(context, { signal })
+        });
+      } catch (error) {
         states.push("provider_unavailable");
         return {
           kind: "provider_unavailable",
-          error: new AppError({
-            code: "INTERNAL_ERROR",
-            message: "休息建议服务暂时不可用。",
-            statusCode: 503,
-            retryable: true,
-            fallback: "LOCAL_RULES",
-            details: { reason: "REST_DECISION_PROVIDER_UNAVAILABLE" }
-          }),
+          error: providerFailure(error),
           states
         };
       }
@@ -151,6 +153,43 @@ export class RestDecisionExecutor {
       };
     }
   }
+}
+
+function restDecisionTimeoutError(): AppError {
+  return new AppError({
+    code: "LLM_TIMEOUT",
+    message: "休息建议服务响应超时。",
+    statusCode: 503,
+    retryable: true,
+    fallback: "LOCAL_RULES",
+    details: { reason: "timeout", operation: "rest_decision" }
+  });
+}
+
+function providerFailure(error: unknown): AppError {
+  if (error instanceof AppError) {
+    return error;
+  }
+  if (error instanceof ProviderCallAbortedError) {
+    return new AppError({
+      code: "INTERNAL_ERROR",
+      message: "休息建议请求已取消。",
+      statusCode: 503,
+      retryable: true,
+      fallback: "LOCAL_RULES",
+      details: { reason: "aborted" },
+      cause: error
+    });
+  }
+  return new AppError({
+    code: "INTERNAL_ERROR",
+    message: "休息建议服务暂时不可用。",
+    statusCode: 503,
+    retryable: true,
+    fallback: "LOCAL_RULES",
+    details: { reason: "REST_DECISION_PROVIDER_UNAVAILABLE" },
+    cause: error
+  });
 }
 
 export function normalizeRestDecisionContext(
@@ -230,35 +269,56 @@ function validateCandidate(
   input: unknown,
   context: RestDecisionContext
 ): RestDecisionCandidate {
-  const candidate = candidateSchema.parse(input);
-  const message = candidate.message ?? "";
+  const candidate = restDecisionCandidateSchema.parse(input);
+  const message = candidate.message;
   const prohibited = [
     /诊断|患有|失眠症|焦虑症|diagnos(?:e|ed|is)|you have insomnia/iu,
     /真实\s*App|Bundle\s*ID|读取了.*App|正在使用的.*App|read.*app identity/iu,
+    /https?:\/\/|完整\s*URL|full\s*url/iu,
     /精确连续|已经连续使用|exact continuous/iu,
-    /关闭\s*App|屏蔽|Shield|修改.*threshold|change.*threshold/iu
+    /关闭\s*App|屏蔽|Shield|修改.*threshold|change.*threshold/iu,
+    /下一次.*(?:checkpoint|检查点)|next\s*checkpoint|checkpoint.*(?:修改|改到|设为|安排)/iu,
+    /太懒|没用|道德失败|生产力|productivity|moral failure|lazy/iu
   ];
   if (prohibited.some((pattern) => pattern.test(message))) {
     throw invalidProviderOutput();
   }
   if (
     context.usage.continuousIsEstimated &&
-    /精确.*连续|exact.*continuous/iu.test(message)
+    (
+      /精确.*连续|exact.*continuous/iu.test(message) ||
+      /(?:持续|连续).{0,12}(?:\d+|[一二三四五六七八九十百两]+)\s*(?:分钟|分)/u.test(
+        message
+      ) ||
+      /(?:continuous|straight).{0,12}\d+\s*minutes?/iu.test(
+        message
+      )
+    )
+  ) {
+    throw invalidProviderOutput();
+  }
+  if (!candidate.shouldOfferRest && message !== "") {
+    throw invalidProviderOutput();
+  }
+  if (
+    !candidate.shouldOfferRest &&
+    !["cooldown", "insufficient_signal"].includes(
+      candidate.reasonCode
+    )
   ) {
     throw invalidProviderOutput();
   }
   if (!candidate.shouldOfferRest && candidate.defaultQuestId) {
     throw invalidProviderOutput();
   }
+  if (candidate.shouldOfferRest && message.trim().length === 0) {
+    throw invalidProviderOutput();
+  }
   return {
     shouldOfferRest: candidate.shouldOfferRest,
     reasonCode: candidate.reasonCode,
-    ...(candidate.message === undefined
-      ? {}
-      : { message: candidate.message }),
-    ...(candidate.defaultQuestId === undefined
-      ? {}
-      : { defaultQuestId: candidate.defaultQuestId })
+    message: candidate.message,
+    defaultQuestId: candidate.defaultQuestId
   };
 }
 
@@ -314,7 +374,8 @@ function invalidProviderOutput(): AppError {
     message: "休息建议输出不符合安全约束。",
     statusCode: 503,
     retryable: true,
-    fallback: "LOCAL_RULES"
+    fallback: "LOCAL_RULES",
+    details: { reason: "invalid_schema" }
   });
 }
 

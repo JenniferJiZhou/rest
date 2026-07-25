@@ -26,16 +26,23 @@
 - 公共契约、Xcode 工程文件、根依赖文件均有唯一 Owner。
 - 业务代码只依赖协议，不直接依赖具体消息、邮件、AI Provider 或 DeviceActivity。
 - AI 只生成摘要和可编辑回复草稿；用户在 Hush 内拥有最终修改权，且只有用户主动确认后才能通过 Provider Adapter 发送。
-- Rest Quest 与 Blue Box 内容来自固定 JSON；LLM 只能选择和组织，不能自由生成危险动作。
+- Contract 1.0、Guided Drift、Blue Box 与未迁移的本地流程继续使用固定 JSON。
+- Contract 1.1 Mode A 可由 StepFun 动态判断并生成一次性办公休息任务；
+  Contract 1.1 Mode B 在用户已选择休息后动态生成任务。两个动态模式都不能
+  控制设备、通知、Shield、Lockdown、checkpoint、邮件或消息。
 
 ## 当前包的性质
 
-这是**协议、可执行后端和分阶段客户端工程并存的开发仓库**，不是已完成的生产系统。Unified Inbox 的 Fixture 端到端路径和四渠道 Real Adapter 已实现；飞书/钉钉租户审批、Outlook delegated token、QQ 邮箱授权码、Apple 真机最后一跳和 HTTPS staging 仍需真实环境验证。
+这是**协议、可执行后端和分阶段客户端工程并存的开发仓库**，不是已完成的生产系统。Unified Inbox 的 Fixture 端到端路径和四渠道 Real Adapter 已实现；飞书/钉钉租户审批、Outlook delegated token、QQ 邮箱授权码和 Apple 真机最后一跳仍需真实环境验证。
 
-HTTPS staging、Render、Docker 与 Apple 真机交接步骤见
-`docs/18_HTTPS_STAGING_AND_CLOUD_DEPLOYMENT.md` 和
-`docs/17_APPLE_REST_DECISION_HANDOFF.md`。仓库只提供可重复配置，不包含已创建的
-云资源、证书或 Secret。
+HTTPS staging、Zeabur、GHCR 镜像与 Apple 真机交接步骤见
+`docs/18_ZEABUR_STAGING_DEPLOYMENT.md` 和
+`docs/17_APPLE_REST_DECISION_HANDOFF.md`。仓库保留可重复配置，不保存证书私钥、
+身份资料或 Secret。
+
+Real Rest Decision Provider 与 Contract 1.1 StepFun 动态任务已实现，见
+`docs/19_REAL_REST_DECISION_AGENT.md` 和
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`。
 
 ## Unified Inbox 真实账号 Demo
 

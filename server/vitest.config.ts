@@ -5,6 +5,7 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     hookTimeout: 30_000,
+    fileParallelism: false,
     mockReset: true,
     restoreMocks: true,
     coverage: {

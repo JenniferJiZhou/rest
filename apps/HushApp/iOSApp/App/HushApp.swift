@@ -328,10 +328,15 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     @Published private(set) var snapshot: HushCompanionSnapshot?
     @Published private(set) var elapsedSeconds = 0
     @Published private(set) var restSeconds = 0
+    @Published private(set) var companionMessage: String?
+    @Published private(set) var isGeneratingRestTask = false
 
     private let provider: any HushCompanionSnapshotProviding
     private var timer: AnyCancellable?
     private var nextOfferAtElapsedSeconds = 50 * 60
+    private let sharedDefaults = UserDefaults(
+        suiteName: "group.com.JenniferJi.Hush"
+    )
 
     init(
         provider: any HushCompanionSnapshotProviding =
@@ -353,6 +358,14 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     }
 
     var statusText: String {
+        if phase == .working || phase == .approachingRest {
+            if isGeneratingRestTask {
+                return "Hush 正在为此刻留出一点空间……"
+            }
+            if let companionMessage, !companionMessage.isEmpty {
+                return companionMessage
+            }
+        }
         switch phase {
         case .idle:
             return "准备好后，让 Hush 在旁边陪你工作。"
@@ -368,6 +381,7 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     }
 
     func start() async {
+        refreshAgentState()
         snapshot = await provider.currentSnapshot()
         elapsedSeconds = (snapshot?.continuousMinutes ?? 0) * 60
         nextOfferAtElapsedSeconds = max(50 * 60, elapsedSeconds + 60)
@@ -429,6 +443,7 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     }
 
     private func tick() {
+        refreshAgentState()
         switch phase {
         case .working, .approachingRest:
             elapsedSeconds += 1
@@ -449,6 +464,27 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     private func offerRest() {
         phase = .restSuggested
         UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    }
+
+    private func refreshAgentState() {
+        isGeneratingRestTask = sharedDefaults?.bool(
+            forKey: "agent.isGeneratingRestTask"
+        ) ?? false
+        guard
+            sharedDefaults?.object(
+                forKey: "agent.lastDecisionShouldOfferRest"
+            ) != nil,
+            sharedDefaults?.bool(
+                forKey: "agent.lastDecisionShouldOfferRest"
+            ) == false
+        else {
+            companionMessage = nil
+            return
+        }
+        let message = sharedDefaults?.string(
+            forKey: "agent.lastDecisionMessage"
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        companionMessage = message?.isEmpty == false ? message : nil
     }
 
     private func setScreenAwake(_ awake: Bool) {

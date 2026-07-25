@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.1",
+  "request_id": "req_rest_recommend_dynamic_001",
+  "message": "好，现在给自己留一点空间。",
+  "generated_task": {
+    "title": "桌边缓一缓",
+    "duration_seconds": 90,
+    "steps": [
+      "暂时让双手离开键盘",
+      "看向比屏幕更远的位置",
+      "肩膀放松后再回来"
+    ]
+  },
+  "default_quest_id": null,
+  "actions": [
+    "start_rest_session",
+    "remind_later",
+    "dismiss"
+  ]
+}

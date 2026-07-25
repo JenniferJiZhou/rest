@@ -1,5 +1,21 @@
 # Apple Client Integration Kit
 
+## Contract 1.1 Rest Decision addendum
+
+`POST /v1/rest/evaluate` and `POST /v1/rest/recommend` support 1.1. The
+upgraded DeviceActivity, Mac App, and Mac website clients use Mode A for
+dynamic true/false evaluation; shared manual rest uses Mode B after the user
+has already chosen to rest. Both wait up to 35 seconds, decode
+`generated_task`, and never resolve `default_quest_id`. Mode A `false` may
+carry a non-empty companion message but creates no notification, task,
+Shield, or Lockdown. Mode A `true` and every successful Mode B response
+require a generated task. Apple retains all presentation and device-control
+authority.
+
+The remaining examples in this kit are Contract 1.0 unless explicitly
+labelled otherwise. The complete 1.1 mapping and M1 checklist are in
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`.
+
 Status: Contract v1 (`1.0`) frozen.  
 Audience: M1/M2 Apple client developers and W1 integration owner.
 
@@ -16,7 +32,7 @@ The focused Rest Decision runbook and Apple handoff are in
 |---|---|
 | Windows-local backend smoke | `http://127.0.0.1:3000` |
 | Trusted-LAN HTTP smoke for manual tools | `http://<windows-lan-ipv4>:<port>` |
-| Current Apple clients / HTTPS staging | pending (`https://<staging-host>`) |
+| Current Apple clients / HTTPS staging | `https://hush-server-staging.preview.aliyun-zeabur.cn` |
 
 The current iOS DeviceActivity, Mac App, and Mac website clients reject
 non-HTTPS Base URLs. Localhost and trusted-LAN HTTP are only for backend or
@@ -24,7 +40,7 @@ manual smoke tools; they are not Base URLs that the current Apple clients can
 use. After staging deployment, configure Apple with the platform-provided
 root HTTPS origin. It must not include `/v1/rest/evaluate`, because the Swift
 clients append that path. Keep the Base URL in the client configuration layer,
-not inside feature views. The real HTTPS staging URL remains pending.
+not inside feature views.
 
 An iPhone or a different Mac must not use `127.0.0.1`; that address points
 back to the Apple device itself. The HTTP LAN URL is for the PowerShell/curl
@@ -379,6 +395,9 @@ the live runtime rules described in this document.
 | `/v1/rest/feedback` | 5 s |
 | `/v1/handoff/start` | 5 s |
 | `/v1/handoff/{jobId}` | 5 s |
+
+The `/v1/rest/recommend` value above is the Contract 1.0 legacy timeout.
+Contract 1.1 Mode B uses the shared 35-second dynamic-task timeout.
 
 Retry:
 

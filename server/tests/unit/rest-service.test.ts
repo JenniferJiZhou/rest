@@ -7,6 +7,15 @@ import {
   InMemoryFeedbackRepository,
   InMemoryIdempotencyStore
 } from "../../src/infra/in-memory.js";
+import type {
+  DynamicManualRestCandidate,
+  DynamicManualRestContext,
+  DynamicManualRestProvider,
+  DynamicRestDecisionCandidate,
+  ProviderHealth,
+  RestDecisionContext,
+  RestDecisionProvider
+} from "../../src/domain/ports.js";
 
 const createService = (): RestService => {
   const content = new FileRestContentRepository();
@@ -75,6 +84,56 @@ describe("RestService", () => {
     expect(result.reason_code).toBe("cooldown");
   });
 
+  it("routes Contract 1.1 evaluate through the dynamic executor", async () => {
+    const content = new FileRestContentRepository();
+    const dynamicProvider = new FixedDynamicProvider({
+      shouldOfferRest: false,
+      reasonCode: "insufficient_signal",
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generatedTask: null
+    });
+    const service = new RestService(
+      new CannedAgentLLM(),
+      content,
+      new InMemoryFeedbackRepository(),
+      new InMemoryIdempotencyStore<unknown>(),
+      new CannedRestDecisionProvider(content),
+      { dynamicDecisionProvider: dynamicProvider }
+    );
+
+    const result = await service.evaluate(
+      {
+        schema_version: "1.0",
+        request_id: "req_dynamic_service",
+        measured_at: "2026-07-25T04:00:00Z",
+        platform: "ios",
+        trigger_source: "device_activity_threshold",
+        user_provided_context_label: "写作",
+        daily_app_usage_minutes: 35,
+        estimated_continuous_app_usage_minutes: 5,
+        continuous_usage_is_estimated: true,
+        app_switches_last_10_minutes: null,
+        local_hour: 14,
+        minutes_since_last_rest: 5,
+        self_reported_energy: null,
+        recent_feedback: [],
+        raw_app_names_included: false
+      },
+      "req_dynamic_service",
+      { contractVersion: "1.1" }
+    );
+
+    expect(result).toMatchObject({
+      schema_version: "1.1",
+      should_offer_rest: false,
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generated_task: null,
+      default_quest_id: null,
+      actions: []
+    });
+    expect(dynamicProvider.calls).toBe(1);
+  });
+
   it("only returns a quest from the fixed content library", async () => {
     const service = createService();
     const result = await service.recommend({
@@ -92,6 +151,92 @@ describe("RestService", () => {
     });
 
     expect(result.quest_id).toBe("look_far_01");
+  });
+
+  it("returns a Contract 1.1 generated task without a Quest lookup", async () => {
+    const content = {
+      contentVersion(): string {
+        throw new Error("Contract 1.1 must not read content version");
+      },
+      quests(): never {
+        throw new Error("Contract 1.1 must not query Quest content");
+      },
+      questById(): never {
+        throw new Error("Contract 1.1 must not query Quest content");
+      }
+    };
+    const manualProvider = new FixedManualProvider({
+      message: "好，现在给自己留一点空间。",
+      generatedTask: {
+        title: "桌边缓一缓",
+        durationSeconds: 90,
+        steps: ["放下双手", "看向远处", "慢慢呼吸"]
+      }
+    });
+    const service = new RestService(
+      new CannedAgentLLM(),
+      content,
+      new InMemoryFeedbackRepository(),
+      new InMemoryIdempotencyStore<unknown>(),
+      new FixedDynamicProvider({
+        shouldOfferRest: false,
+        reasonCode: "insufficient_signal",
+        message: "",
+        generatedTask: null
+      }),
+      { dynamicManualRestProvider: manualProvider }
+    );
+    const input = dynamicManualRequest("req_manual_dynamic_service");
+
+    const first = await service.recommend(
+      input,
+      input.request_id,
+      { contractVersion: "1.1" }
+    );
+    const replay = await service.recommend(
+      input,
+      input.request_id,
+      { contractVersion: "1.1" }
+    );
+
+    expect(first).toEqual({
+      schema_version: "1.1",
+      request_id: input.request_id,
+      message: "好，现在给自己留一点空间。",
+      generated_task: {
+        title: "桌边缓一缓",
+        duration_seconds: 90,
+        steps: ["放下双手", "看向远处", "慢慢呼吸"]
+      },
+      default_quest_id: null,
+      actions: ["start_rest_session", "remind_later", "dismiss"]
+    });
+    expect(replay).toEqual(first);
+    expect(manualProvider.contexts).toHaveLength(1);
+  });
+
+  it("does not fall back to a fixed Quest when Contract 1.1 generation fails", async () => {
+    const content = new FileRestContentRepository();
+    const service = new RestService(
+      new CannedAgentLLM(),
+      content,
+      new InMemoryFeedbackRepository(),
+      new InMemoryIdempotencyStore<unknown>(),
+      new CannedRestDecisionProvider(content)
+    );
+    const input = dynamicManualRequest("req_manual_unavailable");
+
+    await expect(
+      service.recommend(input, input.request_id, {
+        contractVersion: "1.1"
+      })
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      fallback: null,
+      details: {
+        reason: "REST_DECISION_PROVIDER_UNAVAILABLE"
+      }
+    });
   });
 
   it("never asks a second follow-up after follow_up_answer is present", async () => {
@@ -189,3 +334,58 @@ describe("RestService", () => {
     expect(repository.all()).toHaveLength(1);
   });
 });
+
+class FixedDynamicProvider
+  implements RestDecisionProvider<DynamicRestDecisionCandidate>
+{
+  readonly dataOrigin = "mock" as const;
+  calls = 0;
+
+  constructor(
+    private readonly candidate: DynamicRestDecisionCandidate
+  ) {}
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async decide(
+    _context: RestDecisionContext
+  ): Promise<DynamicRestDecisionCandidate> {
+    this.calls += 1;
+    return structuredClone(this.candidate);
+  }
+}
+
+class FixedManualProvider implements DynamicManualRestProvider {
+  readonly dataOrigin = "mock" as const;
+  readonly contexts: DynamicManualRestContext[] = [];
+
+  constructor(
+    private readonly candidate: DynamicManualRestCandidate
+  ) {}
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async generate(
+    context: DynamicManualRestContext
+  ): Promise<DynamicManualRestCandidate> {
+    this.contexts.push(structuredClone(context));
+    return structuredClone(this.candidate);
+  }
+}
+
+function dynamicManualRequest(requestId: string) {
+  return {
+    schema_version: "1.1" as const,
+    request_id: requestId,
+    session_id: "session_manual_dynamic",
+    fatigue_type: "cognitive_overload" as const,
+    user_preference: "quiet" as const,
+    available_minutes: 2,
+    source: "manual_ios",
+    location_tags: ["desk"]
+  };
+}

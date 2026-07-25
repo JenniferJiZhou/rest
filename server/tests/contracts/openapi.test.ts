@@ -41,13 +41,20 @@ describe("OpenAPI contract", () => {
 
     for (const [path, method] of operations) {
       const responses = document.paths[path]![method]!.responses;
+      const expectedError =
+        path === "/v1/rest/evaluate" ||
+        path === "/v1/rest/recommend"
+          ? "#/components/responses/RestContractError"
+          : "#/components/responses/Error";
       expect(responses["409"]).toEqual({
-        $ref: "#/components/responses/Error"
+        $ref: expectedError
       });
       for (const response of Object.values(responses)) {
         const definition =
           "$ref" in response
-            ? document.components.responses.Error
+            ? document.components.responses[
+                response.$ref!.split("/").at(-1)!
+              ]!
             : response;
         expect(definition.headers).toMatchObject({
           "X-Request-ID": expect.any(Object),
@@ -86,7 +93,7 @@ describe("OpenAPI contract", () => {
     ).toEqual({ $ref: "./schemas/inbox-acknowledge.schema.json" });
   });
 
-  it("declares Provider unavailable for Rest evaluate", () => {
+  it("declares Provider unavailable for dynamic Rest operations", () => {
     const document = parse(
       readFileSync(openApiPath, "utf8")
     ) as OpenApiDocument;
@@ -94,9 +101,41 @@ describe("OpenAPI contract", () => {
     expect(
       document.paths["/v1/rest/evaluate"]!.post!.responses["503"]
     ).toEqual({
-      $ref: "#/components/responses/Error"
+      $ref: "#/components/responses/RestContractError"
+    });
+    expect(
+      document.paths["/v1/rest/recommend"]!.post!.responses["503"]
+    ).toEqual({
+      $ref: "#/components/responses/RestContractError"
     });
   });
+
+  it("negotiates Contract 1.0 and 1.1 for evaluate and recommend", () => {
+    const document = parse(
+      readFileSync(openApiPath, "utf8")
+    ) as OpenApiDocument;
+    for (const path of [
+      "/v1/rest/evaluate",
+      "/v1/rest/recommend"
+    ]) {
+      const operation = document.paths[path]!.post!;
+      const contractParameter = operation.parameters?.find(
+        (parameter) =>
+          "$ref" in parameter &&
+          parameter.$ref ===
+            "#/components/parameters/RestContractVersion"
+      );
+      expect(contractParameter).toBeDefined();
+    }
+    expect(
+      document.components.parameters.RestContractVersion!
+        .schema.enum
+    ).toEqual(["1.0", "1.1"]);
+    expect(
+      document.components.parameters.ContractVersion!.schema.const
+    ).toBe("1.0");
+  });
+
 });
 
 interface OpenApiResponse {
@@ -110,6 +149,8 @@ interface OpenApiDocument {
     Record<
       string,
       {
+        operationId?: string;
+        parameters?: Array<{ $ref?: string }>;
         responses: Record<string, OpenApiResponse>;
         requestBody?: {
           content: Record<string, { schema: unknown }>;
@@ -118,7 +159,11 @@ interface OpenApiDocument {
     >
   >;
   components: {
-    responses: { Error: OpenApiResponse };
+    parameters: Record<
+      string,
+      { schema: { const?: string; enum?: string[] } }
+    >;
+    responses: Record<string, OpenApiResponse>;
   };
 }
 

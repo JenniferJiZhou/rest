@@ -13,10 +13,10 @@ import { ZodError } from "zod";
 import type { AppConfig } from "../config.js";
 import {
   CONTRACT_VERSION,
+  DYNAMIC_REST_CONTRACT_VERSION,
   fatigueCheckInSchema,
   handoffStartRequestSchema,
-  restFeedbackSchema,
-  restRecommendationRequestSchema
+  restFeedbackSchema
 } from "../domain/contracts.js";
 import {
   AppError,
@@ -30,10 +30,15 @@ import type {
 import type { HandoffService } from "../application/handoff/handoff-service.js";
 import type { InboxService } from "../application/inbox/inbox-service.js";
 import type { RestService } from "../application/rest/rest-service.js";
+import type { RestContractVersion } from "../application/rest/rest-service.js";
 import { registerInboxRoutes } from "./inbox-routes.js";
 
 export interface ServerDependencies {
   config: AppConfig;
+  restDecisionOrigin: DataOrigin;
+  manualRestOrigin: DataOrigin;
+  legacyRestDecisionOrigin: DataOrigin;
+  restDecisionHealth: ProviderHealth;
   restOrigin: DataOrigin;
   handoffOrigin: DataOrigin;
   inboxOrigin: DataOrigin;
@@ -53,12 +58,18 @@ interface RequestContext {
   requestId: string;
   principalId: string;
   origin: DataOrigin;
+  contractVersion: RestContractVersion;
   rest: RestService;
   handoff: HandoffService;
   inbox: InboxService;
 }
 
-type GraphKind = "rest" | "handoff" | "inbox";
+type GraphKind =
+  | "rest_decision"
+  | "rest_manual"
+  | "rest"
+  | "handoff"
+  | "inbox";
 
 export function createServer(
   dependencies: ServerDependencies
@@ -163,16 +174,25 @@ export function createServer(
         suppliedDemoToken,
         dependencies.config.HUSH_DEMO_TOKEN
       );
-    const graph: GraphKind = request.url.startsWith("/v1/handoff")
-      ? "handoff"
-      : request.url.startsWith("/v1/inbox")
+    const origin = graphOrigin(
+      dependencies,
+      demo,
+      request.url.startsWith("/v1/inbox")
         ? "inbox"
-        : "rest";
-    const origin = graphOrigin(dependencies, demo, graph);
-    setResponseHeaders(reply, requestId, origin);
+        : request.url.startsWith("/v1/handoff")
+          ? "handoff"
+          : request.url.startsWith("/v1/rest/evaluate")
+            ? "rest_decision"
+            : request.url.startsWith("/v1/rest/recommend")
+              ? "rest_manual"
+              : "rest",
+      responseContractVersion(request)
+    );
+    const contractVersion = responseContractVersion(request);
+    setResponseHeaders(reply, requestId, origin, contractVersion);
     void reply
       .status(appError.statusCode)
-      .send(toErrorResponse(appError, requestId));
+      .send(toErrorResponse(appError, requestId, contractVersion));
   });
 
   server.get("/v1/health", async (request, reply) => {
@@ -183,10 +203,13 @@ export function createServer(
       dependencies.inboxOrigin === "real"
         ? "real"
         : "mock";
-    setResponseHeaders(reply, requestId, origin);
+    setResponseHeaders(reply, requestId, origin, CONTRACT_VERSION);
     return {
       status: "ok",
-      contract_version: CONTRACT_VERSION
+      contract_version: CONTRACT_VERSION,
+      providers: {
+        rest_decision: dependencies.restDecisionHealth
+      }
     };
   });
 
@@ -196,9 +219,21 @@ export function createServer(
       reply,
       dependencies,
       true,
-      "rest"
+      "rest_decision"
     );
-    return context.rest.evaluate(request.body, context.requestId);
+    const cancellation = requestCancellation(request, reply);
+    try {
+      return await context.rest.evaluate(
+        request.body,
+        context.requestId,
+        {
+          signal: cancellation.signal,
+          contractVersion: context.contractVersion
+        }
+      );
+    } finally {
+      cancellation.dispose();
+    }
   });
 
   server.post("/v1/rest/check-in", async (request, reply) => {
@@ -220,11 +255,21 @@ export function createServer(
       reply,
       dependencies,
       true,
-      "rest"
+      "rest_manual"
     );
-    const input = restRecommendationRequestSchema.parse(request.body);
-    assertBodyRequestId(input.request_id, context.requestId);
-    return context.rest.recommend(input);
+    const cancellation = requestCancellation(request, reply);
+    try {
+      return await context.rest.recommend(
+        request.body,
+        context.requestId,
+        {
+          signal: cancellation.signal,
+          contractVersion: context.contractVersion
+        }
+      );
+    } finally {
+      cancellation.dispose();
+    }
   });
 
   server.post("/v1/rest/feedback", async (request, reply) => {
@@ -318,7 +363,11 @@ function requestContext(
   const requestId = requiredHeader(request, "x-request-id");
   requiredHeader(request, "x-client-version");
   const contractVersion = requiredHeader(request, "x-contract-version");
-  if (contractVersion !== CONTRACT_VERSION) {
+  const supportedContractVersions =
+    graph === "rest_decision" || graph === "rest_manual"
+      ? [CONTRACT_VERSION, DYNAMIC_REST_CONTRACT_VERSION]
+      : [CONTRACT_VERSION];
+  if (!supportedContractVersions.includes(contractVersion as never)) {
     throw new AppError({
       code: "CONTRACT_VERSION_UNSUPPORTED",
       message: "客户端契约版本不受支持。",
@@ -326,7 +375,7 @@ function requestContext(
       retryable: false,
       details: {
         requested: contractVersion,
-        supported: CONTRACT_VERSION
+        supported: supportedContractVersions
       }
     });
   }
@@ -370,12 +419,25 @@ function requestContext(
     });
   }
 
-  const origin = graphOrigin(dependencies, demo, graph);
-  setResponseHeaders(reply, requestId, origin);
+  const negotiatedContractVersion =
+    contractVersion as RestContractVersion;
+  const origin = graphOrigin(
+    dependencies,
+    demo,
+    graph,
+    negotiatedContractVersion
+  );
+  setResponseHeaders(
+    reply,
+    requestId,
+    origin,
+    negotiatedContractVersion
+  );
   return {
     requestId,
     principalId,
     origin,
+    contractVersion: negotiatedContractVersion,
     rest: demo ? dependencies.demoRest : dependencies.rest,
     handoff: demo ? dependencies.demoHandoff : dependencies.handoff,
     inbox: demo ? dependencies.demoInbox : dependencies.inbox
@@ -459,22 +521,35 @@ function tokenDigest(value: string): string {
 function graphOrigin(
   dependencies: ServerDependencies,
   demo: boolean,
-  graph: GraphKind
+  graph: GraphKind,
+  contractVersion: RestContractVersion = CONTRACT_VERSION
 ): DataOrigin {
   if (demo) {
-    if (graph === "rest") {
-      return dependencies.demoRestOrigin;
+    if (graph === "inbox") {
+      return dependencies.demoInboxOrigin;
     }
-    return graph === "handoff"
-      ? dependencies.demoHandoffOrigin
-      : dependencies.demoInboxOrigin;
+    return graph === "rest" ||
+      graph === "rest_decision" ||
+      graph === "rest_manual"
+      ? dependencies.demoRestOrigin
+      : dependencies.demoHandoffOrigin;
   }
-  if (graph === "rest") {
-    return dependencies.restOrigin;
+  if (graph === "rest_decision") {
+    return contractVersion === DYNAMIC_REST_CONTRACT_VERSION
+      ? dependencies.restDecisionOrigin
+      : dependencies.legacyRestDecisionOrigin;
   }
-  return graph === "handoff"
-    ? dependencies.handoffOrigin
-    : dependencies.inboxOrigin;
+  if (graph === "rest_manual") {
+    return contractVersion === DYNAMIC_REST_CONTRACT_VERSION
+      ? dependencies.manualRestOrigin
+      : dependencies.restOrigin;
+  }
+  if (graph === "inbox") {
+    return dependencies.inboxOrigin;
+  }
+  return graph === "rest"
+    ? dependencies.restOrigin
+    : dependencies.handoffOrigin;
 }
 
 function assertBodyRequestId(
@@ -505,6 +580,19 @@ function requiredHeader(
     });
   }
   return value;
+}
+
+function stripOperationSuffix(value: string, suffix: string): string {
+  if (!value.endsWith(suffix) || value.length === suffix.length) {
+    throw new AppError({
+      code: "INVALID_REQUEST",
+      message: "Unified Inbox operation path 无效。",
+      statusCode: 404,
+      retryable: false,
+      details: { reason: "UNIFIED_INBOX_OPERATION_NOT_FOUND" }
+    });
+  }
+  return value.slice(0, -suffix.length);
 }
 
 function requiredIdempotencyKey(request: FastifyRequest): string {
@@ -538,11 +626,62 @@ function header(request: FastifyRequest, name: string): string | null {
 function setResponseHeaders(
   reply: FastifyReply,
   requestId: string,
-  origin: DataOrigin
+  origin: DataOrigin,
+  contractVersion: RestContractVersion
 ): void {
   reply.header("X-Request-ID", requestId);
-  reply.header("X-Contract-Version", CONTRACT_VERSION);
+  reply.header("X-Contract-Version", contractVersion);
   reply.header("X-Hush-Data-Origin", origin);
+}
+
+function responseContractVersion(
+  request: FastifyRequest
+): RestContractVersion {
+  return (
+    request.url.startsWith("/v1/rest/evaluate") ||
+    request.url.startsWith("/v1/rest/recommend")
+  ) &&
+    header(request, "x-contract-version") ===
+      DYNAMIC_REST_CONTRACT_VERSION
+    ? DYNAMIC_REST_CONTRACT_VERSION
+    : CONTRACT_VERSION;
+}
+
+function requestCancellation(
+  request: FastifyRequest,
+  reply: FastifyReply
+): {
+  signal: AbortSignal;
+  dispose(): void;
+} {
+  const controller = new AbortController();
+  const abort = (): void => {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error("HTTP client disconnected."));
+    }
+  };
+  const abortIncompleteResponse = (): void => {
+    if (!reply.raw.writableEnded) {
+      abort();
+    }
+  };
+  request.raw.once("aborted", abort);
+  reply.raw.once("close", abortIncompleteResponse);
+  request.raw.socket.once("close", abortIncompleteResponse);
+  if (request.raw.aborted) {
+    abort();
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      request.raw.removeListener("aborted", abort);
+      reply.raw.removeListener("close", abortIncompleteResponse);
+      request.raw.socket.removeListener(
+        "close",
+        abortIncompleteResponse
+      );
+    }
+  };
 }
 
 function isMalformedJsonError(error: unknown): boolean {
