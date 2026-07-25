@@ -18,6 +18,10 @@ describe("deployment artifacts", () => {
       resolve(repositoryRoot, "deploy/zeabur.env.example"),
       "utf8"
     );
+    const runbook = readFileSync(
+      resolve(repositoryRoot, "docs/18_ZEABUR_STAGING_DEPLOYMENT.md"),
+      "utf8"
+    );
     const document = parse(workflow) as {
       jobs: {
         build: {
@@ -92,9 +96,27 @@ describe("deployment artifacts", () => {
     expect(env.get("PUBLIC_BASE_URL")).toMatch(/^https:\/\//u);
     expect(env.get("HUSH_REST_DECISION_PROVIDER")).toBe("canned");
     expect(env.get("HUSH_DEMO_MODE")).toBe("false");
+    expect(environment).toContain("# PORT=3000");
+    expect(environment).toContain(
+      "# HUSH_APP_TOKEN=<32-to-128-character-app-secret>"
+    );
+    expect(environment).toContain(
+      "# HUSH_CONNECTOR_TOKEN=<different-32-to-128-character-connector-secret>"
+    );
     expect(env.has("PORT")).toBe(false);
+    expect(env.has("HUSH_APP_TOKEN")).toBe(false);
+    expect(env.has("HUSH_CONNECTOR_TOKEN")).toBe(false);
     expect(env.has("HUSH_DEMO_TOKEN")).toBe(false);
     expect(env.has("CLAUDE_API_KEY")).toBe(false);
+    expect(runbook).toContain(
+      "HUSH_APP_TOKEN=<32-to-128-character-app-secret>"
+    );
+    expect(runbook).toContain(
+      "HUSH_CONNECTOR_TOKEN=<different-32-to-128-character-connector-secret>"
+    );
+    expect(runbook).toMatch(
+      /must be\s+distinct, randomly generated secrets of at least 32 characters/u
+    );
   });
 
   it("defines a multi-stage non-root production container", () => {
@@ -121,7 +143,9 @@ describe("deployment artifacts", () => {
       'CMD ["node", "dist/bootstrap.js"]'
     );
     expect(dockerfile).toContain("HEALTHCHECK");
-    expect(dockerfile).toContain("http://127.0.0.1:3000/v1/health");
+    expect(dockerfile).not.toContain("EXPOSE 3000");
+    expect(dockerfile).toContain("process.env.PORT ?? '3000'");
+    expect(dockerfile).not.toContain("http://127.0.0.1:3000/v1/health");
     expect(dockerignore).toContain(".env");
     expect(dockerignore).toContain(".git");
     expect(dockerignore).toContain("*.pem");

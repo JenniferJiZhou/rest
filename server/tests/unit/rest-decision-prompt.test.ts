@@ -77,6 +77,19 @@ describe("Dynamic Rest Decision system prompt", () => {
     expect(DYNAMIC_REST_DECISION_SYSTEM_PROMPT).toContain(
       "Do not return Markdown"
     );
+    for (const rule of [
+      "not a productivity coach, therapist, doctor, evaluator, or cheerleader",
+      "Use only facts present in the input",
+      "Never invent work duration",
+      "Do not diagnose",
+      "Do not praise endurance or romanticize overwork",
+      "Prefer one or two short sentences",
+      "do not ask whether the user wants to rest"
+    ]) {
+      expect(DYNAMIC_REST_DECISION_SYSTEM_PROMPT).toContain(rule);
+    }
+    expect(DYNAMIC_REST_DECISION_SYSTEM_PROMPT).toContain("generatedTask");
+    expect(DYNAMIC_REST_DECISION_SYSTEM_PROMPT).not.toContain("defaultQuestId");
     expect(DYNAMIC_REST_DECISION_SYSTEM_PROMPT).not.toContain(
       "allowedQuestIds"
     );

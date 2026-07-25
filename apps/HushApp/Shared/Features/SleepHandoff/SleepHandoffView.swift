@@ -2,11 +2,45 @@ import Combine
 import Foundation
 import SwiftUI
 @preconcurrency import UserNotifications
+#if canImport(UIKit)
+import UIKit
+#endif
 
 extension Notification.Name {
     static let hushSleepHandoffRequested = Notification.Name(
         "hush.sleep-handoff-requested"
     )
+}
+
+enum HushSleepExitPolicy {
+    static func isEligible(
+        isComplete: Bool,
+        startLocation: CGPoint,
+        translation: CGSize,
+        containerSize: CGSize
+    ) -> Bool {
+        isComplete
+            && startLocation.y > containerSize.height * 0.6
+            && translation.height < 0
+            && abs(translation.height) > abs(translation.width) * 1.3
+    }
+
+    static func completionDuration(reduceMotion: Bool) -> TimeInterval {
+        reduceMotion ? 0.2 : 1.35
+    }
+
+    static func recapOffset(
+        reduceMotion: Bool,
+        isVisible: Bool
+    ) -> CGFloat {
+        reduceMotion ? 0 : (isVisible ? 0 : 18)
+    }
+
+    static func recapAnimationDuration(
+        reduceMotion: Bool
+    ) -> TimeInterval {
+        reduceMotion ? 0.2 : 0.75
+    }
 }
 
 @MainActor
@@ -117,8 +151,8 @@ final class HushSleepScheduleController: ObservableObject {
             from: sleepTime
         )
         let content = UNMutableNotificationContent()
-        content.title = "今晚先到这里"
-        content.body = "睡前交接已经准备好了。"
+        content.title = "该把今天轻轻放下了"
+        content.body = "睡前交接已经准备好。"
         content.sound = .default
         content.userInfo = [
             Self.routeUserInfoKey: Self.sleepRouteValue
@@ -168,6 +202,7 @@ final class HushSleepScheduleController: ObservableObject {
 }
 
 struct SleepHandoffView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var todaySummary: String
     @Binding var highlight: String
     @Binding var tomorrowFirstStep: String
@@ -175,80 +210,109 @@ struct SleepHandoffView: View {
 
     @State private var step = 0
     @State private var isComplete = false
-    @State private var completionStage = 0
+    @State private var visibleRecapCount = 0
+    @State private var isRecapLeaving = false
+    @State private var isClosingLineVisible = false
+    @State private var isBedtimeTaskVisible = false
+    // The page rests on the closing line + bedtime task; the 晚安 sign-off sits
+    // in the lower-right corner, on the tide, and stays with them.
+    @State private var isGoodnightVisible = false
+    // Finger-following exit: the deliberate upward swipe, reversible below the
+    // threshold, calm completion above it.
+    @State private var exitProgress: CGFloat = 0
+    @FocusState private var editorFocused: Bool
 
     private let prompts = [
         (
-            eyebrow: "今天",
-            title: "今天发生了什么？",
-            hint: "不用完整，只写下现在还记得的部分。",
-            placeholder: "例如：把演示流程走通了，也和大家确认了下一步……"
+            title: "今天，什么向前走了一点？",
+            hint: "完成了也好，只前进了一小步也好。",
+            placeholder: "例如：把那个一直模糊的想法说清楚了一点……"
         ),
         (
-            eyebrow: "留下",
-            title: "哪一件事最重要？",
-            hint: "可以是一件完成的事，也可以是一个不想忘记的瞬间。",
-            placeholder: "例如：终于把那个一直模糊的想法说清楚了……"
+            title: "今天，什么值得感谢？",
+            hint: "可以是一个人、一件小事，或者某个很短的瞬间。",
+            placeholder: "例如：有人认真听完了我想说的话……"
         ),
         (
-            eyebrow: "明天",
-            title: "明天醒来，先做什么？",
-            hint: "只留一个足够小的起点，其他事情今晚不用继续记着。",
+            title: "明天，从哪一小步开始？",
+            hint: "只留一个醒来后就能开始的小动作。",
             placeholder: "例如：先确认 Agent 的 HTTPS 地址……"
         )
     ]
 
     var body: some View {
-        ZStack {
-            RadialGradient(
-                colors: [
-                    Color(red: 0.16, green: 0.13, blue: 0.25).opacity(0.32),
-                    Color.clear
-                ],
-                center: .topTrailing,
-                startRadius: 10,
-                endRadius: 420
-            )
-            .allowsHitTesting(false)
+        GeometryReader { geometry in
+            let size = geometry.size
 
-            if isComplete {
-                completion
-                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
-            } else {
-                question
-                    .id(step)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .trailing)
-                                .combined(with: .opacity),
-                            removal: .move(edge: .leading)
-                                .combined(with: .opacity)
+            ZStack {
+
+                if isComplete {
+                    completion(size: size)
+                        .transition(.opacity)
+                        .simultaneousGesture(exitGesture(in: size))
+                } else {
+                    question
+                        .id(step)
+                        .transition(
+                            .asymmetric(
+                                insertion: .move(edge: .trailing)
+                                    .combined(with: .opacity),
+                                removal: .move(edge: .leading)
+                                    .combined(with: .opacity)
+                            )
                         )
-                    )
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The whole page rides the exit swipe upward and fades, so the
+            // gesture reads as lifting the night away rather than a page pop.
+            .offset(
+                y: reduceMotion
+                    ? 0
+                    : -exitProgress * size.height * 0.42
+            )
+            .opacity(1 - Double(min(exitProgress * 1.25, 1)))
+            .contentShape(Rectangle())
+            .animation(.easeInOut(duration: 0.36), value: step)
+            .animation(.easeInOut(duration: 0.5), value: isComplete)
         }
-        .animation(.easeInOut(duration: 0.36), value: step)
-        .animation(.easeInOut(duration: 0.5), value: isComplete)
     }
 
     private var question: some View {
+        ScrollView {
+            questionBody
+                .padding(.horizontal, 28)
+                .padding(.top, HushSpacing.xl)
+                .padding(.bottom, 120)
+                .frame(maxWidth: 520, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var questionBody: some View {
         VStack(alignment: .leading, spacing: HushSpacing.xl) {
             VStack(alignment: .leading, spacing: HushSpacing.sm) {
-                HStack(spacing: HushSpacing.xs) {
-                    Image(systemName: "moon.fill")
-                    Text("SLEEP HANDOFF · \(step + 1) / \(prompts.count)")
+                HStack(spacing: 7) {
+                    ForEach(0..<prompts.count, id: \.self) { index in
+                        Capsule()
+                            .fill(
+                                Color.white.opacity(index == step ? 0.72 : 0.14)
+                            )
+                            .frame(width: index == step ? 22 : 7, height: 4)
+                            .animation(
+                                .easeInOut(duration: 0.35),
+                                value: step
+                            )
+                    }
                 }
-                .font(HushType.eyebrow)
-                .tracking(1.1)
-                .foregroundStyle(Color.white.opacity(0.42))
-
-                Text(prompts[step].eyebrow)
-                    .font(HushType.caption)
-                    .foregroundStyle(Color.white.opacity(0.46))
+                .padding(.bottom, HushSpacing.sm)
 
                 Text(prompts[step].title)
-                    .font(.system(size: 29, weight: .medium, design: .rounded))
+                    .font(.system(size: 31, weight: .medium, design: .rounded))
                     .foregroundStyle(HushColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(prompts[step].hint)
                     .font(HushType.body)
@@ -271,6 +335,7 @@ struct SleepHandoffView: View {
                     .lineSpacing(5)
                     .foregroundStyle(HushColor.textPrimary)
                     .scrollContentBackground(.hidden)
+                    .focused($editorFocused)
                     .frame(minHeight: 156)
                     .padding(HushSpacing.md)
             }
@@ -351,105 +416,190 @@ struct SleepHandoffView: View {
                 .font(HushType.caption)
                 .foregroundStyle(Color.white.opacity(0.42))
             }
-
-            Text("演示模式 · 内容只保留在当前页面，退出后清除。")
-                .font(HushType.micro)
-                .foregroundStyle(Color.white.opacity(0.30))
         }
     }
 
-    private var completion: some View {
-        VStack(alignment: .leading, spacing: HushSpacing.xl) {
-            SleepClosingBadge()
+    private func completion(size: CGSize) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            // Night background covering the idle line composition behind us.
+            Color.black.ignoresSafeArea()
 
-            Text(completionSubtitle)
-                .font(HushType.body)
-                .lineSpacing(5)
-                .foregroundStyle(HushColor.textSecondary)
-                .opacity(completionStage >= 1 ? 1 : 0)
+            // The supplied layered watercolour tide, raised as high as it can go
+            // while its crest still clears the reading text above it.
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                SleepLayeredTide(reduceMotion: reduceMotion)
+                    .frame(height: size.height * 1.02)
+            }
+            .ignoresSafeArea()
 
-            SleepTideView()
-                .frame(height: 104)
-                .opacity(completionStage >= 1 ? 1 : 0)
-                .offset(y: completionStage >= 1 ? 0 : 44)
+            // 1) Cinematic recap — appears one by one, then drifts up and fades.
+            //    (Reduce Motion drops the travel and uses opacity only.)
+            cinematicRecap
+                .padding(.horizontal, 30)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .offset(y: reduceMotion ? 0 : (isRecapLeaving ? -size.height * 0.24 : 0))
+                .opacity(isRecapLeaving ? 0 : 1)
 
-            if hasHighlight || hasTomorrowFirstStep {
-                VStack(alignment: .leading, spacing: HushSpacing.lg) {
-                    if hasHighlight {
-                        VStack(
-                            alignment: .leading,
-                            spacing: HushSpacing.xs
-                        ) {
-                            HushSectionLabel(text: "今天留下")
-                            Text(highlight)
-                                .font(HushType.body)
-                                .lineLimit(3)
-                                .foregroundStyle(Color.white.opacity(0.70))
-                        }
-                    }
+            // 2) Closing line + bedtime task — appear and STAY: this is where the
+            //    page comes to rest.
+            VStack(alignment: .leading, spacing: 30) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(closingLine)
+                        .font(.system(size: 30, weight: .medium, design: .rounded))
+                        .lineSpacing(5)
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .opacity(isClosingLineVisible ? 1 : 0)
+                        .offset(y: reduceMotion ? 0 : (isClosingLineVisible ? 0 : 18))
 
-                    if hasTomorrowFirstStep {
-                        VStack(
-                            alignment: .leading,
-                            spacing: HushSpacing.xs
-                        ) {
-                            HushSectionLabel(text: "明天先做")
-                            Text(tomorrowFirstStep)
-                                .font(HushType.bodyStrong)
-                                .foregroundStyle(HushColor.textPrimary)
-                        }
-                    }
+                    bedtimeTask
+                        .opacity(isBedtimeTaskVisible ? 1 : 0)
+                        .offset(y: reduceMotion ? 0 : (isBedtimeTaskVisible ? 0 : 22))
                 }
-                .padding(HushSpacing.lg)
-                .background(
-                    Color.white.opacity(0.045),
-                    in: RoundedRectangle(
-                        cornerRadius: HushRadius.large,
-                        style: .continuous
-                    )
-                )
-                .opacity(completionStage >= 2 ? 1 : 0)
-                .offset(y: completionStage >= 2 ? 0 : 22)
             }
+            .padding(.horizontal, 30)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.top, size.height * 0.15)
 
-            VStack(alignment: .leading, spacing: HushSpacing.lg) {
-                HushSectionLabel(text: "睡前可以做")
-                sleepTip(
-                    "把手机放到伸手够不到一点的位置",
-                    "iphone.slash",
-                    stage: 3
-                )
-                sleepTip(
-                    "喝一小口水，不用再处理新的事情",
-                    "drop",
-                    stage: 4
-                )
-                sleepTip(
-                    "让房间的光再暗一点",
-                    "lightbulb.min",
-                    stage: 5
-                )
+            // 3) Sign-off — the wrapper positions the intrinsic button without
+            //    expanding its hit or accessibility frame across the screen.
+            VStack(spacing: 0) {
+                Button(action: onFinish) {
+                    goodnight
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .contentShape(Rectangle())
+                .accessibilityLabel("今晚先到这里")
+                .accessibilityHidden(!isGoodnightVisible)
             }
-            .opacity(completionStage >= 3 ? 1 : 0)
-
-            Button(action: onFinish) {
-                Text("今晚先到这里")
-                    .font(HushType.bodyStrong)
-                    .foregroundStyle(Color.white.opacity(0.82))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(Color.white.opacity(0.07), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .opacity(completionStage >= 6 ? 1 : 0)
+            .padding(.trailing, 26)
+            .padding(.bottom, size.height * 0.055)
+            .opacity(isGoodnightVisible ? 1 : 0)
+            .offset(y: reduceMotion ? 0 : (isGoodnightVisible ? 0 : 14))
         }
         .task {
             await runCompletionSequence()
         }
         .animation(
-            .easeOut(duration: 0.75),
-            value: completionStage
+            .easeOut(duration: reduceMotion ? 0.2 : 0.85),
+            value: isClosingLineVisible
         )
+        .animation(
+            .easeOut(duration: reduceMotion ? 0.2 : 0.85),
+            value: isBedtimeTaskVisible
+        )
+        .animation(
+            .easeInOut(duration: reduceMotion ? 0.2 : 1.35),
+            value: isRecapLeaving
+        )
+        .animation(
+            .easeOut(duration: reduceMotion ? 0.2 : 1.1),
+            value: isGoodnightVisible
+        )
+    }
+
+    private var cinematicRecap: some View {
+        VStack(alignment: .leading, spacing: 32) {
+            ForEach(
+                Array(recapEntries.enumerated()),
+                id: \.offset
+            ) { index, entry in
+                let isVisible = visibleRecapCount > index
+                VStack(alignment: .leading, spacing: 8) {
+                    // Question is secondary; the kept answer is primary.
+                    if !entry.question.isEmpty {
+                        Text(entry.question)
+                            .font(HushType.caption)
+                            .foregroundStyle(Color.white.opacity(0.32))
+                    }
+
+                    Text(entry.answer)
+                        .font(.system(size: 23, weight: .regular, design: .rounded))
+                        .lineSpacing(6)
+                        .foregroundStyle(Color.white.opacity(0.86))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .opacity(isVisible ? 1 : 0)
+                .offset(
+                    y: HushSleepExitPolicy.recapOffset(
+                        reduceMotion: reduceMotion,
+                        isVisible: isVisible
+                    )
+                )
+                .animation(
+                    .easeOut(
+                        duration: HushSleepExitPolicy.recapAnimationDuration(
+                            reduceMotion: reduceMotion
+                        )
+                    ),
+                    value: visibleRecapCount
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var goodnight: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("晚安")
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.white)
+
+            Text("😴")
+                .font(.system(size: 30))
+        }
+        // Sits on the watercolour waves, so a soft shadow keeps it legible over
+        // the lighter ivory areas.
+        .shadow(color: .black.opacity(0.55), radius: 10, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("晚安")
+    }
+
+    private var bedtimeTask: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("睡前，做一件很小的事")
+                .font(HushType.caption)
+                .foregroundStyle(Color.white.opacity(0.42))
+
+            sleepTip("把手机放到伸手够不到一点的位置", "iphone.slash")
+            sleepTip("喝一小口水，不再处理新的事情", "drop")
+            sleepTip("让房间的光再暗一点", "lightbulb.min")
+        }
+        .padding(.top, 2)
+    }
+
+    private var recapEntries: [(question: String, answer: String)] {
+        let candidates = [
+            (prompts[0].title, todaySummary),
+            (prompts[1].title, highlight),
+            (prompts[2].title, tomorrowFirstStep)
+        ]
+        let entries = candidates.compactMap { question, answer in
+            let trimmed = answer.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            return trimmed.isEmpty
+                ? nil
+                : (question: question, answer: trimmed)
+        }
+        if entries.isEmpty {
+            // Nothing was kept — one quiet fallback line, on its own.
+            return [
+                (question: "", answer: "今晚，没有什么一定要写下来。")
+            ]
+        }
+        return entries
+    }
+
+    private var closingLine: String {
+        if hasTomorrowFirstStep {
+            return "剩下的，交给明天醒来的你。"
+        }
+        if hasTodayReflection {
+            return "把今天轻轻放在这里吧。"
+        }
+        return "Put your mind to bed."
     }
 
     private var activeText: Binding<String> {
@@ -467,20 +617,16 @@ struct SleepHandoffView: View {
         !highlight.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var hasTodayReflection: Bool {
+        !todaySummary.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty || hasHighlight
+    }
+
     private var hasTomorrowFirstStep: Bool {
         !tomorrowFirstStep.trimmingCharacters(
             in: .whitespacesAndNewlines
         ).isEmpty
-    }
-
-    private var completionSubtitle: String {
-        if hasTomorrowFirstStep {
-            return "明天的第一步已经放在这里，今晚不用继续记着。"
-        }
-        if hasHighlight {
-            return "今天值得留下的部分已经在这里了。"
-        }
-        return "今晚不需要留下任何文字，也可以安心停在这里。"
     }
 
     private func advance() {
@@ -491,143 +637,208 @@ struct SleepHandoffView: View {
         }
     }
 
+    // MARK: - Deliberate upward-swipe exit
+
+    /// Finger-following exit, in the character of the Work page: progress tracks
+    /// the drag, is reversible below the threshold, and completes calmly above
+    /// it. It only begins from the lower region and only for a predominantly
+    /// upward drag, so ordinary text scrolling or editing never dismisses.
+    private func exitGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 16)
+            .onChanged { value in
+                guard HushSleepExitPolicy.isEligible(
+                    isComplete: isComplete,
+                    startLocation: value.startLocation,
+                    translation: value.translation,
+                    containerSize: size
+                ) else {
+                    return
+                }
+                dismissKeyboard()
+                let rise = -value.translation.height
+                exitProgress = min(1, max(0, rise / (size.height * 0.55)))
+            }
+            .onEnded { value in
+                guard HushSleepExitPolicy.isEligible(
+                    isComplete: isComplete,
+                    startLocation: value.startLocation,
+                    translation: value.translation,
+                    containerSize: size
+                ) else {
+                    if exitProgress > 0 {
+                        withAnimation(.easeOut(duration: 0.7)) { exitProgress = 0 }
+                    }
+                    return
+                }
+                let threshold = size.height * 0.25
+                if -value.translation.height >= threshold {
+                    let duration = HushSleepExitPolicy.completionDuration(
+                        reduceMotion: reduceMotion
+                    )
+                    let animation = reduceMotion
+                        ? Animation.easeOut(duration: duration)
+                        : Animation.timingCurve(
+                            0.26,
+                            0.03,
+                            0.2,
+                            1,
+                            duration: duration
+                        )
+                    withAnimation(animation) {
+                        exitProgress = 1
+                    }
+                    Task { @MainActor in
+                        let delay = reduceMotion ? duration : 1.32
+                        try? await Task.sleep(
+                            nanoseconds: UInt64(delay * 1_000_000_000)
+                        )
+                        onFinish()
+                    }
+                } else {
+                    // Below threshold: settle softly back, no bounce.
+                    withAnimation(.easeOut(duration: 0.7)) { exitProgress = 0 }
+                }
+            }
+    }
+
+    private func dismissKeyboard() {
+        editorFocused = false
+        #if os(iOS)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+        #endif
+    }
+
     @MainActor
     private func runCompletionSequence() async {
-        completionStage = 0
-        for stage in 1...6 {
-            do {
-                try await Task.sleep(nanoseconds: 430_000_000)
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            completionStage = stage
+        visibleRecapCount = 0
+        isRecapLeaving = false
+        isClosingLineVisible = false
+        isBedtimeTaskVisible = false
+        isGoodnightVisible = false
+
+        if reduceMotion {
+            // Simple opacity crossfades, no travel, brief waits — the content is
+            // shown, not performed, and the user is never held by a long play.
+            visibleRecapCount = recapEntries.count
+            guard await wait(milliseconds: 200) else { return }
+            isRecapLeaving = true
+            isClosingLineVisible = true
+            isBedtimeTaskVisible = true
+            isGoodnightVisible = true
+            return
         }
+
+        // Kept answers fade in one by one, like film-ending credits.
+        for count in 1...recapEntries.count {
+            guard await wait(milliseconds: count == 1 ? 500 : 720) else { return }
+            visibleRecapCount = count
+        }
+
+        // Read the group, then it drifts upward and fades.
+        guard await wait(milliseconds: 1_100) else { return }
+        isRecapLeaving = true
+
+        // Closing line, then the very small bedtime task — the page's resting
+        // state.
+        guard await wait(milliseconds: 1_350) else { return }
+        isClosingLineVisible = true
+        guard await wait(milliseconds: 900) else { return }
+        isBedtimeTaskVisible = true
+
+        // The 晚安 sign-off settles into the lower-right corner and stays; there
+        // is no separate page, and no automatic exit.
+        guard await wait(milliseconds: 800) else { return }
+        isGoodnightVisible = true
     }
 
     private func sleepTip(
         _ text: String,
-        _ systemImage: String,
-        stage: Int
+        _ systemImage: String
     ) -> some View {
         Label(text, systemImage: systemImage)
             .font(HushType.body)
             .foregroundStyle(Color.white.opacity(0.64))
-            .opacity(completionStage >= stage ? 1 : 0)
-            .offset(y: completionStage >= stage ? 0 : 12)
+    }
+
+    private func wait(milliseconds: Int) async -> Bool {
+        do {
+            try await Task.sleep(
+                nanoseconds: UInt64(milliseconds) * 1_000_000
+            )
+            return !Task.isCancelled
+        } catch {
+            return false
+        }
     }
 }
 
-private struct SleepClosingBadge: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathing = false
+/// The supplied layered watercolour tide, kept intact.
+///
+/// The exact bitmap is aspect-filled and slightly overscanned; nothing is
+/// traced, recoloured or redrawn. The safe fallback motion from the brief is
+/// used — the whole intact plate drifts slowly left/right with a tiny damped
+/// vertical bob on a long ~16 s cycle, and the overscan means an edge is never
+/// exposed. Reduce Motion shows the exact static crop.
+private struct SleepLayeredTide: View {
+    let reduceMotion: Bool
 
     var body: some View {
-        HStack(spacing: HushSpacing.sm) {
-            Image(systemName: "moon.stars.fill")
-                .font(.system(size: 18, weight: .light))
-            Text("今晚先到这里")
-                .font(.system(size: 24, weight: .medium, design: .rounded))
-        }
-        .foregroundStyle(Color.white.opacity(0.90))
-        .padding(.horizontal, 22)
-        .padding(.vertical, 15)
-        .background(
-            Capsule()
-                .fill(Color(red: 0.16, green: 0.13, blue: 0.24).opacity(0.72))
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
-        )
-        .shadow(
-            color: Color(
-                red: 0.48,
-                green: 0.40,
-                blue: 0.78
-            )
-            .opacity(breathing ? 0.42 : 0.16),
-            radius: breathing ? 26 : 10
-        )
-        .scaleEffect(breathing ? 1.012 : 0.994)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(
-                .easeInOut(duration: 3.4)
-                    .repeatForever(autoreverses: true)
-            ) {
-                breathing = true
-            }
-        }
-        .accessibilityAddTraits(.isHeader)
-    }
-}
+        GeometryReader { geometry in
+            let size = geometry.size
+            // Overscan so the slow drift never uncovers an empty edge.
+            let plateWidth = size.width + 96
+            let plateHeight = size.height + 60
 
-private struct SleepTideView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(
-            .animation(
-                minimumInterval: 1.0 / 30.0,
-                paused: reduceMotion
-            )
-        ) { timeline in
-            Canvas { context, size in
+            TimelineView(
+                .animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)
+            ) { timeline in
                 let elapsed = reduceMotion
                     ? 0
                     : timeline.date.timeIntervalSinceReferenceDate
-                for layer in 0..<3 {
-                    let progress = Double(layer) / 2
-                    let phase = elapsed * (0.22 + progress * 0.05)
-                    let path = tidePath(
-                        size: size,
-                        baseline: size.height * (0.52 + progress * 0.13),
-                        amplitude: 9 + progress * 5,
-                        phase: phase + progress * 1.7
-                    )
-                    context.stroke(
-                        path,
-                        with: .color(
-                            Color(
-                                red: 0.57,
-                                green: 0.51,
-                                blue: 0.82
-                            )
-                            .opacity(0.34 - progress * 0.08)
-                        ),
-                        style: StrokeStyle(
-                            lineWidth: 1.2,
-                            lineCap: .round
-                        )
-                    )
-                }
+                // Long, soft, incommensurate cycles: horizontal ~16 s, vertical
+                // ~22 s, so the loop never reads as a mechanical repeat.
+                let dx = reduceMotion
+                    ? 0
+                    : CGFloat(sin(elapsed * (2 * .pi / 16.0))) * 12
+                let dy = reduceMotion
+                    ? 0
+                    : CGFloat(sin(elapsed * (2 * .pi / 22.0) + 1.3)) * 7
+
+                sleepTideImage
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: plateWidth, height: plateHeight)
+                    .offset(x: dx, y: dy)
+                    .frame(width: size.width, height: size.height, alignment: .bottom)
+                    .clipped()
             }
         }
         .accessibilityHidden(true)
     }
 
-    private func tidePath(
-        size: CGSize,
-        baseline: CGFloat,
-        amplitude: CGFloat,
-        phase: Double
-    ) -> Path {
-        var path = Path()
-        let step = max(1, size.width / 240)
-
-        for x in stride(from: 0.0, through: size.width, by: step) {
-            let progress = x / max(size.width, 1)
-            let y = baseline
-                + sin(progress * .pi * 3.2 + phase) * amplitude
-                + sin(progress * .pi * 6.4 - phase * 0.7) * 2.4
-            if x == 0 {
-                path.move(to: CGPoint(x: x, y: y))
-            } else {
-                path.addLine(to: CGPoint(x: x, y: y))
-            }
+    private var sleepTideImage: Image {
+        guard
+            let url = Bundle.main.url(
+                forResource: "hush-sleep-tide",
+                withExtension: "png"
+            )
+        else {
+            return Image(systemName: "moon.stars")
         }
-        return path
+        #if os(macOS)
+        return NSImage(contentsOf: url).map(Image.init(nsImage:))
+            ?? Image(systemName: "moon.stars")
+        #else
+        return UIImage(contentsOfFile: url.path).map(Image.init(uiImage:))
+            ?? Image(systemName: "moon.stars")
+        #endif
     }
 }
 

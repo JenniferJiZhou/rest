@@ -53,7 +53,7 @@ GitHub commit
   -> GitHub Actions builds and smoke-tests the repository-root Dockerfile
   -> immutable OCI image in GitHub Container Registry (GHCR)
   -> Zeabur pulls the public immutable image
-  -> container port 3000
+  -> runtime port selected by `PORT`
   -> Zeabur-managed public HTTPS address
   -> Apple clients
 ```
@@ -127,8 +127,9 @@ Build context must remain the repository root. The image includes:
 - `content/rest-quests.json`;
 - `contracts/fixtures/mail-items-demo.json`.
 
-The runtime image uses Node 20.19.5, runs as the non-root `node` user, exposes
-port 3000, defines an image-level `/v1/health` check, and starts with:
+The runtime image uses Node 20.19.5, runs as the non-root `node` user, defines
+an image-level `/v1/health` check that follows runtime `PORT` (default `3000`),
+and starts with:
 
 ```text
 node dist/bootstrap.js
@@ -145,7 +146,7 @@ Create one Zeabur project and add a **Docker Image** service:
 | Project | `hush-staging` |
 | Service | `hush-server-staging` |
 | Image | `ghcr.io/simon-byte-png/hush-server-staging:<full-git-commit-sha>` |
-| Container port | `3000` |
+| Container port | Runtime `PORT` (platform-injected or operator-set; default `3000`) |
 | Replicas | `1` |
 | Domain | Platform-managed domain for the selected server/region |
 | Storage | None |
@@ -175,6 +176,8 @@ NODE_ENV=production
 HOST=0.0.0.0
 TRUST_PROXY=true
 PUBLIC_BASE_URL=https://hush-server-staging.preview.aliyun-zeabur.cn
+# HUSH_APP_TOKEN=<32-to-128-character-app-secret>
+# HUSH_CONNECTOR_TOKEN=<different-32-to-128-character-connector-secret>
 HUSH_REST_DECISION_PROVIDER=canned
 HUSH_DEMO_MODE=false
 LOG_LEVEL=info
@@ -183,8 +186,14 @@ LOG_LEVEL=info
 `PUBLIC_BASE_URL` must contain only the HTTPS origin. It must not contain an
 API path, query, fragment, username, password, or trailing application path.
 
-Do not set `PORT`. The image listens on port 3000 and declares `EXPOSE 3000`.
-The Zeabur domain must be bound to that port.
+`HUSH_APP_TOKEN` and `HUSH_CONNECTOR_TOKEN` are required in production. Set
+them in Zeabur's secret/config store, not in source or the image. They must be
+distinct, randomly generated secrets of at least 32 characters; replace the
+commented placeholders without committing the resulting values.
+
+Zeabur may inject `PORT`, or an operator may set it explicitly. The image and
+its health probe follow the same runtime value without rebuilding; uncomment
+`# PORT=3000` in the example only when an explicit default is needed.
 
 `TRUST_PROXY=true` is required because Zeabur terminates TLS before forwarding
 internal HTTP to Fastify. It lets Fastify recognize the forwarded HTTPS
@@ -235,14 +244,14 @@ container runtime for a new project.
 3. Make the GHCR package public and confirm an anonymous pull.
 4. In Zeabur, create project `hush-staging`.
 5. Add a Docker Image service using the immutable SHA image.
-6. Leave the image command unchanged and expose port 3000.
-7. Add the region-appropriate managed domain to port 3000.
+6. Leave the image command unchanged and configure the service for its runtime `PORT`.
+7. Add the region-appropriate managed domain using that service configuration.
 8. Copy the final HTTPS origin into `PUBLIC_BASE_URL`.
 9. Add the remaining Canned staging environment variables.
 10. Redeploy and wait for the single service instance to be healthy.
 11. Inspect logs before sending any request payload.
 
-Logs must show the server listening on `0.0.0.0:3000`. They must not contain
+Logs must show the server listening on `0.0.0.0:<PORT>`. They must not contain
 request bodies, user-provided context labels, tokens, credentials, or full
 URLs supplied by Apple.
 
@@ -299,10 +308,13 @@ Build from the repository root:
 
 ```bash
 docker build -t hush-server:zeabur-staging .
-docker run --rm -p 3000:3000 \
+docker run --rm -p 3100:3100 \
   -e NODE_ENV=production \
+  -e PORT=3100 \
   -e PUBLIC_BASE_URL=https://hush-staging.example.com \
   -e TRUST_PROXY=false \
+  -e HUSH_APP_TOKEN=local-app-token-000000000000000001 \
+  -e HUSH_CONNECTOR_TOKEN=local-connector-token-000000000001 \
   -e HUSH_REST_DECISION_PROVIDER=canned \
   -e HUSH_DEMO_MODE=false \
   hush-server:zeabur-staging
@@ -351,8 +363,9 @@ The service was verified on 2026-07-25 after the final
 - all three decisions returned the required boolean, message, and
   `default_quest_id`.
 
-The Rest Decision Provider is Canned/Mock. No Demo Token, model key, registry
-credential, or `PORT` environment variable is configured.
+The Rest Decision Provider is Canned/Mock. No Demo Token, model key, or registry
+credential is configured. The platform may provide `PORT`; otherwise the server
+uses its default of `3000`.
 
 After any restart or image update, verify health before using old Job IDs.
 Process-local Jobs and idempotency state do not survive restarts.

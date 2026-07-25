@@ -1,13 +1,22 @@
 import SwiftUI
 
 struct HushDemoRootView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var store: HushDemoStore
+    @StateObject private var inboxCoordinator: UnifiedInboxModeCoordinator
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
     @State private var isShowingSettings = false
+    @State private var isOfferingBreath = false
+    @State private var isBreathing = false
     @State private var isGeneratingRestTask = false
     @State private var companionMessage: String?
     @State private var openedSuggestionMessage: String?
+    @State private var isRevealingInbox = false
+    @State private var tideStartedAt: Date?
+    @State private var tideTask: Task<Void, Never>?
+    @State private var isCoveringForSleep = false
+    @State private var sleepCoverTask: Task<Void, Never>?
     private let onSettings: (() -> Void)?
     private let onCompanion: (() -> Void)?
     private let suggestedQuestID: String?
@@ -43,57 +52,96 @@ struct HushDemoRootView: View {
                 initialGeneratedRestTask: suggestedGeneratedTask
             )
         )
+        _inboxCoordinator = StateObject(
+            wrappedValue: UnifiedInboxModeCoordinator()
+        )
     }
 
     var body: some View {
-        ZStack {
-            HushWaveBackground()
+        TimelineView(
+            .animation(
+                minimumInterval: 1.0 / 60.0,
+                paused: !(isRevealingInbox || isCoveringForSleep)
+            )
+        ) { timeline in
+            let elapsed = tideStartedAt.map {
+                timeline.date.timeIntervalSince($0)
+            } ?? 0
+            let waterProgress = (isRevealingInbox || isCoveringForSleep)
+                ? HushTideTimeline.tideProgress(elapsed: elapsed)
+                : 0
 
-            if store.route == .door {
-                Group {
-                    if isGeneratingRestTask {
-                        HushRestTaskGeneratingView()
-                    } else {
-                        HushDoorView(
-                            taskText: agentTaskText,
-                            onOpenTask: openAgentTask,
-                            onSettings: {
-                                if let onSettings {
-                                    onSettings()
-                                } else {
-                                    isShowingSettings = true
-                                }
-                            },
-                            onOpenInbox: store.openInbox,
-                            onOpenCompanion: onCompanion
-                        )
+            ZStack {
+                HushWaveBackground(revealProgress: waterProgress)
+
+                if store.route == .door {
+                    Group {
+                        if isGeneratingRestTask {
+                            HushRestTaskGeneratingView()
+                        } else {
+                            HushDoorView(
+                                taskText: agentTaskText,
+                                onOpenTask: openAgentTask,
+                                onSettings: {
+                                    if let onSettings {
+                                        onSettings()
+                                    } else {
+                                        isShowingSettings = true
+                                    }
+                                },
+                                onInboxSwipeTriggered: startInboxTide,
+                                onOpenCompanion: onCompanion,
+                                onBreathLongPress: offerBreath
+                            )
+                        }
                     }
-                }
-                .transition(.opacity)
-            } else if store.route == .inbox {
-                UnifiedInboxView(onClose: store.closeInbox)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
-                VStack(spacing: 0) {
-                    topBar
-                        .padding(.horizontal, HushSpacing.lg)
-                        .padding(.top, HushSpacing.md)
-
-                    ScrollView {
-                        routeContent
-                            .frame(maxWidth: 460)
+                    .opacity(1 - min(waterProgress * 1.65, 1))
+                    .allowsHitTesting(
+                        !isRevealingInbox && !isCoveringForSleep
+                    )
+                    .transition(.opacity)
+                } else if store.route == .inbox {
+                    EmptyView()
+                } else if store.route == .sleepHandoff {
+                    SleepHandoffView(
+                        todaySummary: $store.sleepTodaySummary,
+                        highlight: $store.sleepHighlight,
+                        tomorrowFirstStep: $store.sleepTomorrowFirstStep,
+                        onFinish: store.finishSleepHandoff
+                    )
+                    .transition(.opacity)
+                } else {
+                    VStack(spacing: 0) {
+                        topBar
                             .padding(.horizontal, HushSpacing.lg)
-                            .padding(.top, HushSpacing.lg)
-                            .padding(.bottom, HushSpacing.xl)
-                    }
-                    .scrollIndicators(.hidden)
+                            .padding(.top, HushSpacing.md)
 
+                        ScrollView {
+                            routeContent
+                                .frame(maxWidth: 460)
+                                .padding(.horizontal, HushSpacing.lg)
+                                .padding(.top, HushSpacing.lg)
+                                .padding(.bottom, HushSpacing.xl)
+                        }
+                        .scrollIndicators(.hidden)
+                    }
+                    .transition(.opacity)
                 }
-                .transition(
-                    store.route == .sleepHandoff
-                        ? .move(edge: .top).combined(with: .opacity)
-                        : .opacity
-                )
+
+                if store.route == .inbox || isRevealingInbox {
+                    UnifiedInboxConnectionView(
+                        coordinator: inboxCoordinator,
+                        onClose: store.closeInbox,
+                        reveal: store.route == .inbox
+                            ? .settled
+                            : HushTideReveal(
+                                progress: waterProgress,
+                                elapsed: elapsed
+                            )
+                    )
+                    .allowsHitTesting(store.route == .inbox)
+                    .transition(.opacity)
+                }
             }
         }
         #if os(macOS)
@@ -106,10 +154,37 @@ struct HushDemoRootView: View {
         #else
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #endif
+        .overlay {
+            if isOfferingBreath {
+                ZStack {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture { isOfferingBreath = false }
+
+                    HushBreathInviteView(
+                        onAccept: {
+                            isOfferingBreath = false
+                            isBreathing = true
+                        },
+                        onDismiss: { isOfferingBreath = false }
+                    )
+                }
+                .transition(.opacity)
+            }
+        }
+        .overlay {
+            if isBreathing {
+                HushBreathTideView { isBreathing = false }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.28), value: isOfferingBreath)
+        .animation(.easeInOut(duration: 0.45), value: isBreathing)
         .preferredColorScheme(.dark)
         .task {
             if sleepSchedule.consumePendingRoute() {
-                store.startSleepHandoff()
+                startSleepEntry()
             }
         }
         .onReceive(
@@ -117,7 +192,7 @@ struct HushDemoRootView: View {
                 for: .hushSleepHandoffRequested
             )
         ) { _ in
-            store.startSleepHandoff()
+            startSleepEntry()
         }
         .onChange(of: suggestionEventID) { _, _ in
             companionMessage = nil
@@ -167,6 +242,10 @@ struct HushDemoRootView: View {
             openedSuggestionMessage = nil
             store.clearGeneratedRestSuggestion()
         }
+        .onDisappear {
+            tideTask?.cancel()
+            sleepCoverTask?.cancel()
+        }
         .sheet(isPresented: $isShowingSettings) {
             HushSettingsView(
                 degraded: store.content.status.isFallback,
@@ -183,6 +262,17 @@ struct HushDemoRootView: View {
                 }
             )
         }
+    }
+
+    private func offerBreath() {
+        guard
+            !isRevealingInbox,
+            !isCoveringForSleep,
+            !isBreathing
+        else {
+            return
+        }
+        isOfferingBreath = true
     }
 
     private var agentTaskText: String {
@@ -228,8 +318,88 @@ struct HushDemoRootView: View {
 
     private func taskText(for quest: HushQuestContent) -> String {
         let steps = quest.steps.prefix(2)
-        let task = steps.isEmpty ? quest.title : steps.joined(separator: "\n")
+        let task = (steps.isEmpty ? quest.title : steps.joined(separator: "\n"))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !task.isEmpty else {
+            return "先休息一下。"
+        }
         return task.hasSuffix("。") ? task : "\(task)。"
+    }
+
+    private func startInboxTide() {
+        guard store.route == .door, !isRevealingInbox else { return }
+
+        tideTask?.cancel()
+        isRevealingInbox = true
+        tideStartedAt = Date()
+
+        tideTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(
+                    HushTideTimeline.tideDuration * 1_000_000_000
+                )
+            )
+            guard !Task.isCancelled else { return }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                store.route = .inbox
+                isRevealingInbox = false
+                tideStartedAt = nil
+            }
+        }
+    }
+
+    private func startSleepEntry() {
+        guard
+            !isCoveringForSleep,
+            !isRevealingInbox,
+            store.route != .sleepHandoff
+        else {
+            return
+        }
+
+        if store.route != .door {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                store.route = .door
+            }
+        }
+
+        if reduceMotion {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                store.route = .sleepHandoff
+            }
+            return
+        }
+
+        sleepCoverTask?.cancel()
+        isCoveringForSleep = true
+        tideStartedAt = Date()
+
+        sleepCoverTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(
+                    HushTideTimeline.tideDuration * 1_000_000_000
+                )
+            )
+            guard !Task.isCancelled else { return }
+
+            withAnimation(.easeInOut(duration: 0.55)) {
+                store.route = .sleepHandoff
+            }
+            try? await Task.sleep(nanoseconds: 560_000_000)
+            guard !Task.isCancelled else { return }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isCoveringForSleep = false
+                tideStartedAt = nil
+            }
+        }
     }
 
     private var topBar: some View {
@@ -303,12 +473,7 @@ struct HushDemoRootView: View {
         case .completed:
             RestCompletionView(onDone: store.reset)
         case .sleepHandoff:
-            SleepHandoffView(
-                todaySummary: $store.sleepTodaySummary,
-                highlight: $store.sleepHighlight,
-                tomorrowFirstStep: $store.sleepTomorrowFirstStep,
-                onFinish: store.finishSleepHandoff
-            )
+            EmptyView()
         case .handoffRunning:
             HandoffRunningView(onShowResult: store.showPauseReceipt)
         case .pauseReceipt:
