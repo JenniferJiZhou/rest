@@ -29,10 +29,34 @@ export class FixtureInboxSource implements InboxSource {
     checkpoint: string;
     participantBindings: InboxParticipantBinding[];
   }> {
+    const participantRef = `participant_fixture_${this.provider}`;
+    const providerParticipantId =
+      `fixture-${this.provider}-participant-private`;
     return {
       checkpoint: input.checkpoint ?? `${this.provider}-fixture-1`,
-      participantBindings: [],
-      items: input.limit < 1 ? [] : [fixtureEvent(this.provider, input.accountId)]
+      participantBindings:
+        input.limit < 1
+          ? []
+          : [
+              {
+                provider: this.provider,
+                accountId: input.accountId,
+                conversationId: `${this.provider}-fixture-conversation`,
+                participantRef,
+                providerParticipantId,
+                displayName: `${this.provider} 演示发送者`
+              }
+            ],
+      items:
+        input.limit < 1
+          ? []
+          : [
+              fixtureEvent(
+                this.provider,
+                input.accountId,
+                participantRef
+              )
+            ]
     };
   }
 }
@@ -89,7 +113,8 @@ export class UnavailableInboxSender implements InboxSender {
 
 function fixtureEvent(
   provider: InboxProvider,
-  accountId: string
+  accountId: string,
+  participantRef: string
 ): InboxEvent {
   return {
     provider,
@@ -98,8 +123,8 @@ function fixtureEvent(
     conversation_type: "direct",
     conversation_name: `${provider} 演示会话`,
     provider_message_id: `${provider}-fixture-message`,
-    sender: `${provider}-sender@example.com`,
-    sender_ref: null,
+    sender: `${provider} 演示发送者`,
+    sender_ref: participantRef,
     recipients: [accountId],
     subject: `${provider} 演示消息`,
     content: "请确认演示安排并回复。",

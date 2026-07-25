@@ -1,4 +1,5 @@
 import type { InboxProvider } from "../../src/domain/contracts.js";
+import { describe, expect, it } from "vitest";
 import {
   FixtureInboxSender,
   FixtureInboxSource
@@ -21,6 +22,25 @@ for (const provider of [
     })
   );
 }
+
+describe("Fixture participant privacy", () => {
+  it("keeps provider participant IDs in private bindings only", async () => {
+    const source = new FixtureInboxSource("feishu");
+    const result = await source.pull({
+      accountId: "feishu-account",
+      checkpoint: null,
+      limit: 20
+    });
+
+    expect(result.participantBindings).toHaveLength(1);
+    expect(result.items[0]?.sender_ref).toBe(
+      result.participantBindings[0]?.participantRef
+    );
+    expect(JSON.stringify(result.items)).not.toContain(
+      result.participantBindings[0]?.providerParticipantId
+    );
+  });
+});
 
 function sendInput(provider: InboxProvider) {
   return {

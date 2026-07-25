@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { AppError } from "../../domain/errors.js";
 import type {
   InboxEvent,
@@ -22,6 +23,7 @@ interface LarkMessage {
   chat_id?: unknown;
   chat_type?: unknown;
   chat_name?: unknown;
+  chat_partner?: unknown;
   conversation_name?: unknown;
   sender_id?: unknown;
   sender?: unknown;
@@ -106,17 +108,20 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
       throw providerOutputError();
     }
     const messages = result.items as LarkMessage[];
-    const items = messages.flatMap((message) => {
-      const mapped = this.mapMessage(message, input.accountId);
-      return mapped ? [mapped] : [];
-    });
+    const mappedMessages = messages.map((message) =>
+      this.mapMessage(message, input.accountId)
+    );
+    const bindings = new Map<string, InboxParticipantBinding>();
+    for (const mapped of mappedMessages) {
+      bindings.set(mapped.binding.participantRef, mapped.binding);
+    }
     const pageToken = stringValue(result.page_token);
     if (result.has_more && !pageToken) {
       throw providerOutputError();
     }
     return {
-      items,
-      participantBindings: [],
+      items: mappedMessages.map(({ item }) => item),
+      participantBindings: [...bindings.values()],
       checkpoint:
         result.has_more === true && pageToken
           ? JSON.stringify({
@@ -133,6 +138,17 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
     if (!input.conversationId) {
       throw invalidTarget();
     }
+    const mentionPrefix = input.mentions
+      .map(
+        (mention) =>
+          `<at user_id="${escapeFeishuAttribute(
+            mention.providerParticipantId
+          )}">${escapeFeishuText(mention.displayName)}</at>`
+      )
+      .join(" ");
+    const text = mentionPrefix
+      ? `${mentionPrefix}\n${input.content}`
+      : input.content;
     const payload = parseObject(
       await this.runner.run({
         executable: this.config.executable,
@@ -145,7 +161,7 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
           "--chat-id",
           input.conversationId,
           "--text",
-          input.content,
+          text,
           "--idempotency-key",
           input.idempotencyKey.slice(0, 50),
           "--format",
@@ -169,34 +185,61 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
   private mapMessage(
     message: LarkMessage,
     accountId: string
-  ): InboxEvent | null {
+  ): {
+    item: InboxEvent;
+    binding: InboxParticipantBinding;
+  } {
     const messageId = stringValue(message.message_id);
     const chatId = stringValue(message.chat_id);
     const conversationType = conversationTypeValue(message.chat_type);
+    const conversationName = conversationNameValue(
+      message,
+      conversationType
+    );
+    const sender = senderIdentity(message.sender, message.sender_id);
     const receivedAt = timestampValue(message.create_time);
-    if (!messageId || !chatId || !conversationType || !receivedAt) {
-      return null;
+    if (
+      !messageId ||
+      !chatId ||
+      !conversationType ||
+      !conversationName ||
+      !sender ||
+      !receivedAt
+    ) {
+      throw providerOutputError();
     }
+    const participantRef = participantReference(
+      accountId,
+      chatId,
+      sender.id
+    );
     return {
-      provider: this.provider,
-      account_id: accountId,
-      conversation_id: chatId,
-      conversation_type: conversationType,
-      conversation_name:
-        stringValue(message.chat_name) ??
-        stringValue(message.conversation_name) ??
-        (conversationType === "group" ? "飞书群聊" : "飞书会话"),
-      provider_message_id: messageId,
-      sender: senderValue(message.sender, message.sender_id),
-      sender_ref: null,
-      recipients: [accountId],
-      subject: null,
-      content: contentValue(message.content),
-      received_at: receivedAt,
-      coverage: {
-        source: "official_api",
-        complete: false,
-        note: "可见范围受飞书应用权限、租户策略和会话成员资格限制"
+      item: {
+        provider: this.provider,
+        account_id: accountId,
+        conversation_id: chatId,
+        conversation_type: conversationType,
+        conversation_name: conversationName,
+        provider_message_id: messageId,
+        sender: sender.name,
+        sender_ref: participantRef,
+        recipients: [accountId],
+        subject: null,
+        content: contentValue(message.content),
+        received_at: receivedAt,
+        coverage: {
+          source: "official_api",
+          complete: false,
+          note: "可见范围受飞书应用权限、租户策略和会话成员资格限制"
+        }
+      },
+      binding: {
+        provider: this.provider,
+        accountId,
+        conversationId: chatId,
+        participantRef,
+        providerParticipantId: sender.id,
+        displayName: sender.name
       }
     };
   }
@@ -256,20 +299,67 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function senderValue(sender: unknown, _fallback: unknown): string {
-  if (typeof sender === "string" && sender.length > 0) {
-    return sender;
-  }
+function senderIdentity(
+  sender: unknown,
+  fallbackId: unknown
+): { id: string; name: string } | null {
+  const fallback = stringValue(fallbackId);
   if (typeof sender === "object" && sender !== null) {
     const record = sender as Record<string, unknown>;
+    const id =
+      stringValue(record.id) ??
+      stringValue(record.open_id) ??
+      stringValue(record.user_id) ??
+      fallback;
     for (const key of ["name", "display_name", "nickname"]) {
-      const value = stringValue(record[key]);
-      if (value) {
-        return value;
+      const name = stringValue(record[key]);
+      if (id && name) {
+        return { id, name };
       }
     }
   }
-  return "未知发送者";
+  const name = stringValue(sender);
+  return fallback && name ? { id: fallback, name } : null;
+}
+
+function conversationNameValue(
+  message: LarkMessage,
+  conversationType: "direct" | "group" | null
+): string | null {
+  if (conversationType === "group") {
+    return (
+      stringValue(message.chat_name) ??
+      stringValue(message.conversation_name)
+    );
+  }
+  if (conversationType === "direct") {
+    const partner =
+      typeof message.chat_partner === "object" &&
+      message.chat_partner !== null
+        ? (message.chat_partner as Record<string, unknown>)
+        : null;
+    return (
+      stringValue(partner?.name) ??
+      stringValue(partner?.display_name) ??
+      stringValue(message.chat_name) ??
+      stringValue(message.conversation_name)
+    );
+  }
+  return null;
+}
+
+function participantReference(
+  accountId: string,
+  chatId: string,
+  providerParticipantId: string
+): string {
+  const digest = createHash("sha256")
+    .update(
+      ["feishu", accountId, chatId, providerParticipantId].join("\u0000")
+    )
+    .digest("base64url")
+    .slice(0, 32);
+  return `participant_${digest}`;
 }
 
 function conversationTypeValue(value: unknown): "direct" | "group" | null {
@@ -307,6 +397,21 @@ function timestampValue(value: unknown): string | null {
     ? new Date(raw.length >= 13 ? numeric : numeric * 1000)
     : new Date(raw);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function escapeFeishuAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeFeishuText(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function parseObject(output: string): Record<string, unknown> {

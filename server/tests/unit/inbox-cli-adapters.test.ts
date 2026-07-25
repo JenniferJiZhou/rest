@@ -19,7 +19,9 @@ describe("Inbox CLI adapters", () => {
             message_id: "lark-message-1",
             chat_id: "lark-chat-1",
             chat_type: "p2p",
-            chat_name: "飞书私聊",
+            chat_partner: {
+              name: "飞书私聊"
+            },
             sender: {
               id: "lark-user-1",
               name: "飞书用户"
@@ -58,9 +60,21 @@ describe("Inbox CLI adapters", () => {
       conversation_type: "direct",
       conversation_name: "飞书私聊",
       sender: "飞书用户",
+      sender_ref: expect.stringMatching(/^participant_/),
       content: "飞书消息",
       received_at: "2026-07-24T01:00:00.000Z"
     });
+    expect(pulled.participantBindings).toEqual([
+      expect.objectContaining({
+        provider: "feishu",
+        accountId: "lark-account",
+        conversationId: "lark-chat-1",
+        participantRef: pulled.items[0]?.sender_ref,
+        providerParticipantId: "lark-user-1",
+        displayName: "飞书用户"
+      })
+    ]);
+    expect(JSON.stringify(pulled.items)).not.toContain("lark-user-1");
     expect(sent.status).toBe("sent");
     expect(runner.invocations[0]?.args).toEqual([
       "auth",
@@ -239,27 +253,32 @@ describe("Inbox CLI adapters", () => {
   });
 
   it("maps known group envelopes and supports public digest redaction", async () => {
+    const runner = new RecordingRunner([
+      JSON.stringify({
+        items: [
+          {
+            message_id: "lark-group-message-1",
+            chat_id: "lark-group-1",
+            chat_type: "group",
+            chat_name: "产品讨论组",
+            sender: {
+              id: "ou_private_feishu",
+              name: "王同学"
+            },
+            content: "请确认接口交付时间",
+            create_time: "1784854800000"
+          }
+        ],
+        has_more: false
+      }),
+      JSON.stringify({ message_id: "lark-group-sent-1" })
+    ]);
     const adapter = new LarkCliAdapter(
       {
         executable: "/opt/lark-cli",
         accountId: "lark-account"
       },
-      new RecordingRunner([
-        JSON.stringify({
-          items: [
-            {
-              message_id: "lark-group-message-1",
-              chat_id: "lark-group-1",
-              chat_type: "group",
-              chat_name: "产品讨论组",
-              sender: { name: "王同学" },
-              content: "请确认接口交付时间",
-              create_time: "1784854800000"
-            }
-          ],
-          has_more: false
-        })
-      ])
+      runner
     );
 
     const pulled = await adapter.pull({
@@ -299,8 +318,36 @@ describe("Inbox CLI adapters", () => {
     expect(sourceEvent).toMatchObject({
       conversation_type: "group",
       conversation_name: "产品讨论组",
-      sender: "王同学"
+      sender: "王同学",
+      sender_ref: expect.stringMatching(/^participant_/)
     });
+    expect(sourceEvent.sender_ref).not.toBe("ou_private_feishu");
+    expect(JSON.stringify(pulled.items)).not.toContain("ou_private_feishu");
+    expect(pulled.participantBindings).toEqual([
+      {
+        provider: "feishu",
+        accountId: "lark-account",
+        conversationId: "lark-group-1",
+        participantRef: sourceEvent.sender_ref,
+        providerParticipantId: "ou_private_feishu",
+        displayName: "王同学"
+      }
+    ]);
+
+    await adapter.send({
+      ...sendInput("lark-account", "lark-group-1"),
+      mentions: [
+        {
+          participantRef: sourceEvent.sender_ref!,
+          providerParticipantId: "ou_private_feishu",
+          displayName: "王同学"
+        }
+      ]
+    });
+    const sendArgs = runner.invocations[1]!.args;
+    expect(sendArgs[sendArgs.indexOf("--text") + 1]).toBe(
+      '<at user_id="ou_private_feishu">王同学</at>\n用户确认后的回复'
+    );
     expect(dingtalkPulled.items[0]).toMatchObject({
       conversation_type: "group",
       conversation_name: "产品讨论组",
@@ -332,7 +379,7 @@ describe("Inbox CLI adapters", () => {
     ).toMatchObject({ sender: null, content: null });
   });
 
-  it("withholds envelopes with missing or unknown conversation types", async () => {
+  it("rejects incomplete Feishu envelopes without leaking private IDs", async () => {
     const lark = new LarkCliAdapter(
       { executable: "/opt/lark-cli", accountId: "lark-account" },
       new RecordingRunner([
@@ -341,7 +388,10 @@ describe("Inbox CLI adapters", () => {
             {
               message_id: "lark-missing-type",
               chat_id: "lark-chat-1",
-              sender: "飞书用户",
+              sender: {
+                id: "ou_private_incomplete",
+                name: "飞书用户"
+              },
               content: "消息",
               create_time: "1784854800000"
             },
@@ -386,9 +436,23 @@ describe("Inbox CLI adapters", () => {
       ])
     );
 
-    await expect(
-      lark.pull({ accountId: "lark-account", checkpoint: null, limit: 20 })
-    ).resolves.toMatchObject({ items: [] });
+    let larkError: unknown;
+    try {
+      await lark.pull({
+        accountId: "lark-account",
+        checkpoint: null,
+        limit: 20
+      });
+    } catch (error) {
+      larkError = error;
+    }
+    expect(larkError).toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE",
+      details: { provider: "feishu", reason: "invalid_output" }
+    });
+    expect(JSON.stringify(larkError)).not.toContain(
+      "ou_private_incomplete"
+    );
     await expect(
       dingtalk.pull({ accountId: "ding-account", checkpoint: null, limit: 20 })
     ).resolves.toMatchObject({ items: [] });
