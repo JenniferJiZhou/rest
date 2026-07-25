@@ -1,33 +1,33 @@
 import Foundation
 
-enum InboxProviderResponse: String, Codable {
+enum InboxProviderResponse: String, Codable, Sendable {
     case feishu
     case dingtalk
     case outlook
     case qqMail = "qq_mail"
 }
 
-enum InboxPriorityResponse: String, Codable {
+enum InboxPriorityResponse: String, Codable, Sendable {
     case urgent
     case normal
     case low
     case uncertain
 }
 
-enum InboxItemSyncStatusResponse: String, Codable {
+enum InboxItemSyncStatusResponse: String, Codable, Sendable {
     case pending
     case ready
     case failed
 }
 
-enum InboxSyncStateResponse: String, Codable {
+enum InboxSyncStateResponse: String, Codable, Sendable {
     case ready
     case degraded
     case unavailable
     case unknown
 }
 
-enum InboxDraftStatusResponse: String, Codable {
+enum InboxDraftStatusResponse: String, Codable, Sendable {
     case generating
     case ready
     case edited
@@ -37,45 +37,45 @@ enum InboxDraftStatusResponse: String, Codable {
     case unknown
 }
 
-enum InboxDraftOriginResponse: String, Codable {
+enum InboxDraftOriginResponse: String, Codable, Sendable {
     case ai
     case user
 }
 
-enum InboxSendStatusResponse: String, Codable {
+enum InboxSendStatusResponse: String, Codable, Sendable {
     case sent
     case failed
     case unknown
 }
 
-enum InboxContentTypeResponse: String, Codable {
+enum InboxContentTypeResponse: String, Codable, Sendable {
     case text
     case html
 }
 
-enum InboxCoverageSourceResponse: String, Codable {
+enum InboxCoverageSourceResponse: String, Codable, Sendable {
     case officialAPI = "official_api"
     case imap
     case browserFallback = "browser_fallback"
 }
 
-enum InboxConversationTypeResponse: String, Codable {
+enum InboxConversationTypeResponse: String, Codable, Sendable {
     case direct
     case group
 }
 
-enum InboxItemKindResponse: String, Codable {
+enum InboxItemKindResponse: String, Codable, Sendable {
     case message
     case conversationDigest = "conversation_digest"
 }
 
-struct InboxCoverageResponse: Codable {
+struct InboxCoverageResponse: Codable, Sendable {
     let source: InboxCoverageSourceResponse
     let complete: Bool
     let note: String?
 }
 
-struct InboxReplyTargetResponse: Codable {
+struct InboxReplyTargetResponse: Codable, Sendable {
     let targetID: String
     let displayName: String
     let reason: String
@@ -87,7 +87,7 @@ struct InboxReplyTargetResponse: Codable {
     }
 }
 
-struct InboxItemResponse: Codable {
+struct InboxItemResponse: Codable, Sendable {
     let id: String
     let provider: InboxProviderResponse
     let accountID: String
@@ -151,7 +151,7 @@ struct InboxItemResponse: Codable {
     }
 }
 
-struct InboxDraftResponse: Codable {
+struct InboxDraftResponse: Codable, Sendable {
     let id: String
     let inboxItemID: String
     let content: String
@@ -177,7 +177,7 @@ struct InboxDraftResponse: Codable {
     }
 }
 
-struct InboxSyncStatusResponse: Codable {
+struct InboxSyncStatusResponse: Codable, Sendable {
     let provider: InboxProviderResponse
     let accountID: String
     let status: InboxSyncStateResponse
@@ -197,7 +197,7 @@ struct InboxSyncStatusResponse: Codable {
     }
 }
 
-struct InboxConfirmationResponse: Codable {
+struct InboxConfirmationResponse: Codable, Sendable {
     let confirmationToken: String
     let expiresAt: String
 
@@ -207,7 +207,7 @@ struct InboxConfirmationResponse: Codable {
     }
 }
 
-struct InboxSendResultResponse: Codable {
+struct InboxSendResultResponse: Codable, Sendable {
     let draftID: String
     let provider: InboxProviderResponse
     let status: InboxSendStatusResponse
@@ -223,7 +223,7 @@ struct InboxSendResultResponse: Codable {
     }
 }
 
-struct InboxPageResponse: Codable {
+struct InboxPageResponse: Codable, Sendable {
     let items: [InboxItemResponse]
     let nextCursor: String?
 
@@ -233,7 +233,7 @@ struct InboxPageResponse: Codable {
     }
 }
 
-struct InboxErrorResponse: Codable {
+struct InboxErrorResponse: Codable, Sendable {
     let schemaVersion: String
     let requestID: String
     let error: InboxErrorDetailsResponse
@@ -245,7 +245,7 @@ struct InboxErrorResponse: Codable {
     }
 }
 
-struct InboxErrorDetailsResponse: Codable {
+struct InboxErrorDetailsResponse: Codable, Sendable {
     let code: String
     let message: String
     let retryable: Bool
@@ -253,7 +253,7 @@ struct InboxErrorDetailsResponse: Codable {
     let details: [String: InboxJSONValue]?
 }
 
-indirect enum InboxJSONValue: Codable {
+indirect enum InboxJSONValue: Codable, Sendable {
     case array([InboxJSONValue])
     case bool(Bool)
     case number(Double)
