@@ -75,7 +75,25 @@ struct HushWaveBackground: View, Animatable {
         GeometryReader { geometry in
             let size = geometry.size
             let progress = min(1, max(0, revealProgress))
-            let isIdle = progress <= 0.0005
+
+            // The line keeps its own lull for as long as any of it is still
+            // above water — right through the start of the swipe — so it never
+            // freezes the instant the finger moves and then jump-cuts to a
+            // still. It is only allowed to pause once the flood has fully
+            // consumed it (progress ≥ the second stop).
+            let lineVisible = progress < Self.stops[1]
+            let animateLine = !reduceMotion && lineVisible
+
+            // The very waterline that reveals the first ocean plate (index 1).
+            // Feeding it to the line's mask means the line is consumed from the
+            // bottom up by exactly the rising colour block, so the line turns
+            // into that block's leading edge — a continuous wipe from line to
+            // fill, never a cross-fade.
+            let flood = min(1, max(0, linearRamp(
+                progress,
+                from: Self.stops[0],
+                to: Self.stops[1]
+            )))
 
             ZStack {
                 Color.black
@@ -83,15 +101,18 @@ struct HushWaveBackground: View, Animatable {
                 TimelineView(
                     .animation(
                         minimumInterval: 1.0 / 60.0,
-                        paused: reduceMotion || !isIdle
+                        paused: !animateLine
                     )
                 ) { timeline in
-                    let elapsed = reduceMotion || !isIdle
-                        ? 0
-                        : timeline.date.timeIntervalSince(idleStartedAt)
+                    let elapsed = animateLine
+                        ? timeline.date.timeIntervalSince(idleStartedAt)
+                        : 0
 
-                    linePlate(size: size, elapsed: elapsed)
-                        .opacity(linePlateOpacity(progress: progress))
+                    floodedLinePlate(
+                        size: size,
+                        elapsed: elapsed,
+                        flood: flood
+                    )
                 }
 
                 oceanPlate(
@@ -144,20 +165,68 @@ struct HushWaveBackground: View, Animatable {
             // frame that has to be the untouched original.
             keyframePlate(named: "hush-wave-keyframe-01", size: size)
         } else {
+            // The shader works in the PLATE's coordinate space, not the view's.
+            // The measured profile is indexed by the artwork's own x, so it
+            // would land on the wrong humps if the view size were passed here.
+            let source = HushWaveMotion.linePlateSourceSize
+            let scale = HushWaveMotion.fillScale(for: size, source: source)
+            let plate = CGSize(
+                width: source.width * scale,
+                height: source.height * scale
+            )
+
             keyframePlate(named: "hush-wave-keyframe-01", size: size)
                 .distortionEffect(
                     ShaderLibrary.hushThreadDrift(
                         .float(Float(elapsed)),
-                        .float2(Float(size.width), Float(size.height)),
+                        .float2(Float(plate.width), Float(plate.height)),
                         .float(Float(amplitude))
                     ),
-                    maxSampleOffset: CGSize(width: 4, height: 14)
+                    // Peak-to-trough inversion needs a large sampling reach:
+                    // 0.173 of plate height for the morph plus 0.082 for the
+                    // tension term.
+                    maxSampleOffset: CGSize(
+                        width: 2,
+                        height: plate.height * 0.28
+                    )
                 )
         }
     }
 
-    private func linePlateOpacity(progress: CGFloat) -> CGFloat {
-        1 - smoothstep(progress, from: Self.stops[0], to: Self.stops[1])
+    /// The line plate, being flooded away from the bottom up by the rising
+    /// colour block. Above the waterline the line is untouched (still lulling);
+    /// across a short feathered band it dissolves into the wave's leading edge;
+    /// below it the ocean plate has taken over. At `flood == 0` the mask is
+    /// bypassed entirely so the idle frame stays pixel-exact.
+    @ViewBuilder
+    private func floodedLinePlate(
+        size: CGSize,
+        elapsed: TimeInterval,
+        flood: CGFloat
+    ) -> some View {
+        if flood <= 0.0001 {
+            linePlate(size: size, elapsed: elapsed)
+        } else {
+            // The line plate aspect-fills and overflows the screen; constraining
+            // its frame here makes the mask align to the screen box (and hence
+            // to the ocean plate's waterline) rather than to the overflow.
+            let band = max(1, size.height * 0.07)
+            let advance = flood * (size.height + band)
+            let front = (size.height - advance) / size.height
+
+            linePlate(size: size, elapsed: elapsed)
+                .frame(width: size.width, height: size.height)
+                .mask(
+                    LinearGradient(
+                        stops: HushTideTimeline.frontGradientStops(
+                            front: front,
+                            feather: band / size.height
+                        ),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        }
     }
 
     // MARK: - Ocean plates (keyframes 02 – 04)
@@ -341,5 +410,210 @@ struct HushWaveBackground: View, Animatable {
         }
         return Image(uiImage: bitmap)
         #endif
+    }
+}
+
+/// The single tide-transition timeline.
+///
+/// Every visible piece of the "swipe up → tide → inbox" transition is a pure
+/// function of ONE driver — `HushWaveBackground.revealProgress` ∈ [0, 1]. The
+/// rising water, the reading surface emerging from behind it and the messages it
+/// leaves behind are therefore incapable of drifting out of sync or reading as
+/// three separate transitions bolted together: they are three views of the same
+/// clock.
+///
+/// The sub-progresses below deliberately OVERLAP. The water is still climbing
+/// while the page is already surfacing behind it, and the first messages arrive
+/// before the water has finished sweeping past. Because every window is derived
+/// here and nowhere else, retuning the choreography is editing these constants —
+/// there are no independent timers, booleans or completion callbacks to keep in
+/// agreement.
+enum HushTideTimeline {
+    /// Progress at which the drawn lines have fully become water. Mirrors
+    /// `HushWaveBackground`'s second locked stop, so the page and message reveal
+    /// are phrased on the very same timeline as the wave motion.
+    static let lineToFillEnd: CGFloat = 0.36
+
+    /// The dark reading surface begins to rise out from behind the water here —
+    /// just AHEAD of the first message, so the page is already present to catch
+    /// the content the tide deposits on it.
+    static let pageRevealStart: CGFloat = 0.42
+    static let pageRevealEnd: CGFloat = 0.99
+
+    /// The tide front that carries the messages sweeps the reading area across
+    /// this window. It overlaps both the wave rise (0.36 → 1) and the page
+    /// reveal, so the content is visibly *brought out by* the water rather than
+    /// appearing after it has gone.
+    static let messageFrontStart: CGFloat = 0.46
+    static let messageFrontEnd: CGFloat = 0.98
+
+    /// How much of the reading area a single row's own reveal is spread across,
+    /// in normalised height. Larger = softer, with more overlap between
+    /// neighbouring rows. Tuned so an adjacent row begins while its predecessor
+    /// is only ~20–30% in — a tight, heavily-overlapped flow, not a roll-call.
+    static let rowRevealBand: CGFloat = 0.42
+
+    // MARK: - Derived sub-progresses
+
+    /// 0 → 1 as the lines thicken into water. Informational: the wave view owns
+    /// the actual line→fill wipe, but exposing it here keeps the phase boundary
+    /// in one place.
+    static func lineToFill(_ p: CGFloat) -> CGFloat {
+        smoothstep(p, 0, lineToFillEnd)
+    }
+
+    /// Normalised position of the tide front, 0 at the top of the screen, 1 at
+    /// the bottom. The front sweeps DOWNWARD as the water settles: the region it
+    /// has passed (above it) has become reading surface, the region ahead (below
+    /// it) is still open water.
+    static func messageFront(_ p: CGFloat) -> CGFloat {
+        smoothstep(p, messageFrontStart, messageFrontEnd)
+    }
+
+    static func pageFront(_ p: CGFloat) -> CGFloat {
+        smoothstep(p, pageRevealStart, pageRevealEnd)
+    }
+
+    /// Opacity of the settled reading surface. Kept partly translucent through
+    /// the middle of the transition — so the water still reads behind the
+    /// freshly-deposited messages — and only fully opaque at the very end, where
+    /// it has to hide the wave view resetting behind it.
+    static func pageOpacity(_ p: CGFloat) -> CGFloat {
+        smoothstep(p, 0.5, 1.0)
+    }
+
+    /// Local reveal (0…1) for the row at `index` of `count`, driven purely by
+    /// how far the tide front has swept past that row's vertical slot. Row 0
+    /// (top) is reached first and the last row last, but with heavy overlap so
+    /// the group reads as one continuous stream rather than items taking turns.
+    static func messageReveal(progress p: CGFloat, index: Int, count: Int) -> CGFloat {
+        let front = messageFront(p)
+        let q = count > 1 ? CGFloat(index) / CGFloat(count - 1) : 0
+        let start = q * (1 - rowRevealBand)
+        return smoothstep(front, start, start + rowRevealBand)
+    }
+
+    /// Feathered "the water has passed here" gradient: opaque (black) above the
+    /// `front`, clear below, with a soft band across it so the edge reads as a
+    /// wave front, not a ruled line. Shared by the wave line-flood mask and the
+    /// page-surface mask so both fronts feather identically. `front` may exceed
+    /// 1 to drive the feather cleanly off the bottom edge (fully opaque).
+    static func frontGradientStops(front: CGFloat, feather: CGFloat) -> [Gradient.Stop] {
+        let t0 = clamp(front - feather, lower: 0, upper: 1)
+        let t1 = clamp(front, lower: 0, upper: 1)
+        return [
+            Gradient.Stop(color: .black, location: 0),
+            Gradient.Stop(color: .black, location: t0),
+            Gradient.Stop(color: .clear, location: t1),
+            Gradient.Stop(color: .clear, location: 1)
+        ]
+    }
+
+    // MARK: - Helpers
+
+    /// Smoothstep — C1 continuous, zero derivative at both ends.
+    static func smoothstep(_ v: CGFloat, _ a: CGFloat, _ b: CGFloat) -> CGFloat {
+        guard b > a else { return v >= b ? 1 : 0 }
+        let t = clamp((v - a) / (b - a), lower: 0, upper: 1)
+        return t * t * (3 - 2 * t)
+    }
+
+    static func clamp(_ v: CGFloat, lower: CGFloat, upper: CGFloat) -> CGFloat {
+        min(upper, max(lower, v))
+    }
+}
+
+/// The reading surface, rising out from behind the tide.
+///
+/// `Animatable` on the shared progress so that a released, decelerating gesture
+/// re-derives the mask every frame — rather than SwiftUI cross-fading a start
+/// snapshot to an end snapshot, which would collapse the sweep into a plain
+/// opacity fade (exactly the effect the transition is meant to avoid).
+struct HushTidePageSurface: View, Animatable {
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        // A little overshoot so that at progress == 1 the feather has travelled
+        // clear off the bottom edge and the surface is genuinely opaque, ready
+        // to hide the wave view as it resets behind the finished inbox.
+        let feather: CGFloat = 0.14
+        let front = HushTideTimeline.pageFront(progress) * (1 + feather + 0.03)
+
+        Rectangle()
+            .fill(HushColor.ink)
+            .opacity(Double(HushTideTimeline.pageOpacity(progress)))
+            .mask(
+                LinearGradient(
+                    stops: HushTideTimeline.frontGradientStops(
+                        front: front,
+                        feather: feather
+                    ),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+    }
+}
+
+/// Brings a single row out of the water as the tide front passes its slot.
+///
+/// Position (a short upward drift), opacity and a soft blur resolve together —
+/// no spring, no scale, nothing flying in from off-screen. `Animatable` on the
+/// shared progress for the same reason as `HushTidePageSurface`: the per-row
+/// timing has to be re-evaluated at every interpolated progress value, not
+/// linearly tweened between endpoints.
+struct HushTideMessageReveal: ViewModifier, Animatable {
+    var progress: CGFloat
+    let index: Int
+    let count: Int
+    var reduceMotion: Bool
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let reveal = HushTideTimeline.messageReveal(
+            progress: progress,
+            index: index,
+            count: count
+        )
+        let hidden = 1 - reveal
+
+        return content
+            .opacity(Double(reveal))
+            .blur(radius: reduceMotion ? 0 : Double(hidden * 6))
+            .offset(y: reduceMotion ? 0 : hidden * 10)
+            .allowsHitTesting(reveal >= 0.999)
+            .accessibilityHidden(reveal < 0.5)
+    }
+}
+
+extension View {
+    /// Reveal this row as the tide front sweeps past its vertical slot. At
+    /// `progress == 1` (the default reveal state) this is a no-op, so a fully
+    /// settled inbox behaves exactly as an un-instrumented one.
+    func hushTideReveal(
+        index: Int,
+        count: Int,
+        progress: CGFloat,
+        reduceMotion: Bool
+    ) -> some View {
+        modifier(
+            HushTideMessageReveal(
+                progress: progress,
+                index: index,
+                count: count,
+                reduceMotion: reduceMotion
+            )
+        )
     }
 }
