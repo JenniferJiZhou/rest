@@ -57,6 +57,24 @@ describe("Unified Inbox external smoke harness", () => {
     );
   }, timeout);
 
+  it.each([
+    "openDingTalkId",
+    "senderOpenDingTalkId",
+    "sender_provider_id"
+  ])("rejects nested provider-native key %s", async (key) => {
+    const baseUrl = await readServer({
+      ...publicCard("dingtalk"),
+      nested: { [key]: "private-id" }
+    });
+
+    const result = await runSmoke(baseUrl, ["--provider", "dingtalk", "--mode", "read"]);
+
+    expect(result.code).not.toBe(0);
+    expect(result.output).toBe(
+      "FAIL provider=dingtalk stage=items status=0 error_code=HUSH_SMOKE_PRIVATE_ID_FIELD\n"
+    );
+  }, timeout);
+
   it("rejects malformed public cards before reporting a read pass", async () => {
     const malformed = publicCard("feishu");
     delete malformed.reply_targets;

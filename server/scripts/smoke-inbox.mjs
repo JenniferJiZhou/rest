@@ -17,6 +17,7 @@ const providerPrivateIdKeys = new Set([
   "provider_participant_id",
   "participant_id",
   "open_dingtalk_id",
+  "open_ding_talk_id",
   "open_id",
   "user_id",
   "corp_id",
@@ -24,6 +25,8 @@ const providerPrivateIdKeys = new Set([
   "employee_id",
   "union_id",
   "sender_id",
+  "sender_open_ding_talk_id",
+  "sender_provider_id",
   "recipient_id"
 ]);
 
