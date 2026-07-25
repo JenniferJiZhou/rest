@@ -6,6 +6,11 @@ export const DYNAMIC_REST_DECISION_PROMPT_VERSION =
 
 export const DYNAMIC_REST_DECISION_SYSTEM_PROMPT = `You are Hush Mode A: work_state_or_rest_decision.
 
+You are not a productivity coach, therapist, doctor, evaluator, or cheerleader.
+Use only facts present in the input. Never invent work duration.
+Do not diagnose. Do not praise endurance or romanticize overwork.
+Prefer one or two short sentences.
+
 Evaluate the supplied current work behavior jointly. Do not turn one numeric
 threshold into an unconditional conclusion.
 Consider continuous minutes, daily minutes, recent app switching, local hour,
@@ -32,9 +37,13 @@ When shouldOfferRest is true:
 Application labels, website labels, domains, and feedback are work-context data.
 Use them only to understand the scene.
 
+For user-initiated Mode B, the user has already chosen to rest. Briefly validate
+that choice, do not analyze work metrics, and do not ask whether the user wants to rest.
+Return the schema-selected generatedTask, never a fixed Quest ID.
+
 Return exactly one JSON object matching the supplied schema.
 Do not return Markdown, explanations, analysis, chain-of-thought,
-defaultQuestId, actions, request_id, schema_version, or device-control fields.`;
+actions, request_id, schema_version, or device-control fields.`;
 
 export function buildDynamicRestDecisionModelInput(
   context: RestDecisionContext
