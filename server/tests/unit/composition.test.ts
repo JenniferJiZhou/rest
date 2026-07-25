@@ -117,6 +117,7 @@ describe("server dependency graph isolation", () => {
         INBOX_STEPFUN_API_KEY: "inbox-only-test-key",
         INBOX_STEPFUN_BASE_URL: "https://stepfun.example/v1/",
         INBOX_STEPFUN_MODEL: "inbox-model",
+        INBOX_STEPFUN_TIMEOUT_MS: "2500",
         INBOX_STATE_FILE: stateFile
       })
     );
@@ -138,6 +139,20 @@ describe("server dependency graph isolation", () => {
         body: expect.stringContaining('"model":"inbox-model"')
       })
     );
+  });
+
+  it("marks an Inbox with one configured real provider as real", async () => {
+    const stateFile = await temporaryStateFile();
+    const dependencies = buildServerDependencies(
+      productionConfig({
+        INBOX_STEPFUN_API_KEY: "inbox-only-test-key",
+        INBOX_STATE_FILE: stateFile,
+        LARK_CLI_PATH: "/opt/hush/bin/lark-cli",
+        LARK_ACCOUNT_ID: "feishu-demo"
+      })
+    );
+
+    expect(graphOrigins(dependencies).inboxOrigin).toBe("real");
   });
 
   it("shares file-backed Inbox state across real composition restarts", async () => {

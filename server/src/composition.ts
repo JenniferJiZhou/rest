@@ -141,7 +141,8 @@ export function buildServerDependencies(
           apiKey: config.INBOX_STEPFUN_API_KEY,
           model: config.INBOX_STEPFUN_MODEL,
           maxMessagesPerChunk: 100,
-          maxPromptCharacters: 60_000
+          maxPromptCharacters: 60_000,
+          timeoutMs: config.INBOX_STEPFUN_TIMEOUT_MS
         })
       : ["demo", "test"].includes(config.NODE_ENV)
         ? new FixtureInboxIntelligenceProvider()
@@ -241,6 +242,10 @@ export function buildServerDependencies(
     overrides.inboxSenders ?? defaultSenders;
   const inboxSources =
     overrides.inboxSources ?? configuredAccounts;
+  const activeInboxProviders = inboxSources.flatMap(({ source }) => [
+    source,
+    inboxSenders.get(source.provider) ?? {}
+  ]);
   const demoInboxSenders = new Map<InboxProvider, InboxSender>(
     ([
       "feishu",
@@ -310,10 +315,10 @@ export function buildServerDependencies(
     config,
     restOrigin: graphOrigin(realAgent, normalRestDecisionProvider),
     handoffOrigin: graphOrigin(realAgent, realMail, completionSink),
-    inboxOrigin: graphOrigin(
-      realInboxIntelligence,
-      ...inboxSenders.values()
-    ),
+    inboxOrigin:
+      inboxSources.length === 0
+        ? "mock"
+        : graphOrigin(realInboxIntelligence, ...activeInboxProviders),
     demoRestOrigin: "mock",
     demoHandoffOrigin: "mock",
     demoInboxOrigin: "mock",

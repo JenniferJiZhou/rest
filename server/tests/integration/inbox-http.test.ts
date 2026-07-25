@@ -68,6 +68,7 @@ describe("Unified Inbox HTTP API", () => {
       headers: baseHeaders("req_inbox_get")
     });
     expect(item.statusCode).toBe(200);
+    expect(item.headers["x-hush-data-origin"]).toBe("mock");
     expect(item.json()).toMatchObject({
       item_kind: "message",
       sender: "sender@example.com",

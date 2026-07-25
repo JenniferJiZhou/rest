@@ -54,7 +54,7 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
     try {
       await this.runner.run({
         executable: this.config.executable,
-        args: ["auth", "status", "--format", "json"]
+        args: ["auth", "status", "--json"]
       });
       return "ready";
     } catch {
@@ -103,13 +103,16 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
       })
     );
     const result = unwrap(payload);
+    const resultMessages = Array.isArray(result.messages)
+      ? result.messages
+      : result.items;
     if (
-      !Array.isArray(result.items) ||
+      !Array.isArray(resultMessages) ||
       typeof result.has_more !== "boolean"
     ) {
       throw providerOutputError();
     }
-    const messages = result.items as LarkMessage[];
+    const messages = resultMessages as LarkMessage[];
     const mappedMessages = messages.map((message) =>
       this.mapMessage(message, input.accountId)
     );

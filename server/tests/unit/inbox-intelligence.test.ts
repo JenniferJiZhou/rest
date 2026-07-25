@@ -17,7 +17,8 @@ const config: StepFunInboxConfig = {
   apiKey: "stepfun-test-secret",
   model: "step-3.7-flash",
   maxMessagesPerChunk: 100,
-  maxPromptCharacters: 60_000
+  maxPromptCharacters: 60_000,
+  timeoutMs: 15_000
 };
 
 describe("Inbox intelligence providers", () => {
@@ -70,7 +71,7 @@ describe("Inbox intelligence providers", () => {
     );
   });
 
-  it("sanitizes native fetch response.json failures and preserves the signal", async () => {
+  it("sanitizes native fetch response.json failures through a live child signal", async () => {
     const responseBody = "response-json-private-body";
     const promptCanary = "prompt-private-canary";
     const caughtMessage = "caught-response-json-message";
@@ -109,9 +110,10 @@ describe("Inbox intelligence providers", () => {
       retryable: false,
       details: { reason: "invalid_output" }
     });
-    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(
-      controller.signal
-    );
+    const fetchSignal = fetchMock.mock.calls[0]?.[1]?.signal;
+    expect(fetchSignal).toBeInstanceOf(AbortSignal);
+    expect(fetchSignal).not.toBe(controller.signal);
+    expect(fetchSignal?.aborted).toBe(false);
     expect(JSON.stringify(error)).not.toMatch(
       new RegExp(
         [
@@ -159,7 +161,7 @@ describe("Inbox intelligence providers", () => {
     );
   });
 
-  it("sanitizes AbortError without replacing the original aborted signal", async () => {
+  it("sanitizes AbortError while propagating caller cancellation", async () => {
     const caughtMessage = "abort-caught-private-message";
     const promptCanary = "abort-prompt-private-canary";
     const controller = new AbortController();
@@ -194,10 +196,10 @@ describe("Inbox intelligence providers", () => {
       retryable: true,
       details: { reason: "provider_error" }
     });
-    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(
-      controller.signal
-    );
-    expect(fetchMock.mock.calls[0]?.[1]?.signal.aborted).toBe(true);
+    const fetchSignal = fetchMock.mock.calls[0]?.[1]?.signal;
+    expect(fetchSignal).toBeInstanceOf(AbortSignal);
+    expect(fetchSignal).not.toBe(controller.signal);
+    expect(fetchSignal?.aborted).toBe(true);
     expect(JSON.stringify(error)).not.toMatch(
       new RegExp(
         [caughtMessage, promptCanary, config.apiKey].join("|")
@@ -721,6 +723,30 @@ describe("Inbox intelligence providers", () => {
     );
   });
 
+  it("aborts a hanging transport within its operational timeout without a caller signal", async () => {
+    const transport = new AbortOnlyTransport();
+    const provider = new StepFunInboxIntelligenceProvider(
+      { ...config, timeoutMs: 10 },
+      transport
+    );
+    const startedAt = Date.now();
+
+    const error = await provider
+      .summarize(summaryInput())
+      .catch((caught: unknown) => caught);
+
+    expect(Date.now() - startedAt).toBeLessThan(200);
+    expect(transport.aborted).toBe(true);
+    expect(error).toMatchObject({
+      code: "INBOX_AI_UNAVAILABLE",
+      retryable: true,
+      details: { reason: "timeout" }
+    });
+    expect(JSON.stringify(error)).not.toContain(
+      "private hanging transport deadline"
+    );
+  });
+
   it("drafts from validated summaries and target display names only", async () => {
     const transport = new RecordingTransport([
       { content: "我会按时确认。", content_type: "text" }
@@ -836,6 +862,27 @@ class RecordingTransport implements StepFunTransport {
       messageCount: input.prompt.match(/"received_at":/gu)?.length ?? 0
     });
     return this.responses.shift() ?? summaryResult();
+  }
+}
+
+class AbortOnlyTransport implements StepFunTransport {
+  aborted = false;
+
+  completeJson(input: { signal?: AbortSignal }): Promise<unknown> {
+    return new Promise((_, reject) => {
+      const safetyTimer = setTimeout(() => {
+        reject(new Error("private hanging transport deadline"));
+      }, 250);
+      input.signal?.addEventListener(
+        "abort",
+        () => {
+          this.aborted = true;
+          clearTimeout(safetyTimer);
+          reject(new Error("transport aborted"));
+        },
+        { once: true }
+      );
+    });
   }
 }
 

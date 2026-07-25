@@ -6,6 +6,7 @@ import {
 } from "../domain/contracts.js";
 import { AppError } from "../domain/errors.js";
 import type { ProviderCallOptions } from "../domain/ports.js";
+import { withProviderTimeout } from "../infra/provider-call.js";
 import type {
   InboxAllowedParticipant,
   InboxIntelligenceMessage,
@@ -26,6 +27,7 @@ export interface StepFunInboxConfig {
   model: string;
   maxMessagesPerChunk: number;
   maxPromptCharacters: number;
+  timeoutMs: number;
 }
 
 export interface StepFunTransport {
@@ -268,13 +270,7 @@ export class StepFunInboxIntelligenceProvider
     try {
       const prompt = draftPrompt(input);
       assertPromptWithinLimit(prompt, this.maxPromptCharacters);
-      const raw = await this.transport.completeJson({
-        endpoint: this.endpoint,
-        apiKey: this.config.apiKey,
-        model: this.config.model,
-        prompt,
-        ...(options?.signal ? { signal: options.signal } : {})
-      });
+      const raw = await this.completeJson(prompt, options);
       const result = replyDraftResultSchema.parse(raw);
       return {
         content: result.content,
@@ -291,14 +287,35 @@ export class StepFunInboxIntelligenceProvider
     options?: ProviderCallOptions
   ): Promise<InboxSummaryResult> {
     assertPromptWithinLimit(prompt, this.maxPromptCharacters);
-    const raw = await this.transport.completeJson({
-      endpoint: this.endpoint,
-      apiKey: this.config.apiKey,
-      model: this.config.model,
-      prompt,
-      ...(options?.signal ? { signal: options.signal } : {})
-    });
+    const raw = await this.completeJson(prompt, options);
     return validateSummary(raw, allowedParticipants);
+  }
+
+  private completeJson(
+    prompt: string,
+    options?: ProviderCallOptions
+  ): Promise<unknown> {
+    return withProviderTimeout({
+      ...(options?.signal ? { signal: options.signal } : {}),
+      timeoutMs: this.config.timeoutMs,
+      timeoutError: stepFunTimeoutError,
+      operation: async (signal) => {
+        try {
+          return await this.transport.completeJson({
+            endpoint: this.endpoint,
+            apiKey: this.config.apiKey,
+            model: this.config.model,
+            prompt,
+            signal
+          });
+        } catch (error) {
+          if (signal.aborted && signal.reason instanceof AppError) {
+            throw signal.reason;
+          }
+          throw error;
+        }
+      }
+    });
   }
 }
 
@@ -707,6 +724,16 @@ function invalidStepFunOutput(): AppError {
     statusCode: 503,
     retryable: false,
     details: { reason: "invalid_output" }
+  });
+}
+
+function stepFunTimeoutError(): AppError {
+  return new AppError({
+    code: "INBOX_AI_UNAVAILABLE",
+    message: "摘要与草稿服务响应超时。",
+    statusCode: 503,
+    retryable: true,
+    details: { reason: "timeout" }
   });
 }
 

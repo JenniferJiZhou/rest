@@ -1,84 +1,84 @@
 # Unified Inbox External Validation
 
-Run this validation only with a Hush server and app already open on the
-designated provider computer. Keep credentials in that computer's local
-`.env`; do not place tokens, identifiers, or message contents in this runbook,
-shell history shared with others, or source control.
+This is the short engineering acceptance checklist for the competition Demo.
+Use these detailed documents for execution:
 
-The read command prints only validation counts and booleans. It does not print
-message text, summaries, drafts, names, account identifiers, conversation
-identifiers, or item identifiers. The send command is intentionally blocked
-unless `HUSH_SMOKE_ALLOW_SEND=true` is set only for the guarded send command
-and removed immediately afterward.
+- macOS/iOS real-account Runbook:
+  `docs/feishu-dingtalk-real-validation/README.md`
+- Apple frontend Agent API handoff:
+  `docs/unified-inbox-apple-frontend-handoff.md`
 
-## Designated Feishu computer
+The Demo host is a Mac. It runs the official Feishu/DingTalk CLI, Hush Server,
+Connector, and StepFun integration. The macOS App connects over loopback; the
+iOS App connects to that Mac over a trusted LAN. Windows is not required.
 
-1. Authenticate the official Feishu CLI to the personal current-user account.
-2. Set only that computer's local `.env` values, including `LARK_CLI_PATH`,
-   `LARK_ACCOUNT_ID`, Hush runtime settings, and the StepFun configuration.
-3. Start Hush in the foreground and leave both the app and server running.
-4. From another participant, send a new direct message and a new group message.
-5. In a second terminal, set `HUSH_BASE_URL` and `HUSH_APP_TOKEN` only for the
-   local session, then run:
+Outlook and QQ Mail are not prerequisites for the Feishu/DingTalk Demo.
 
-   ```powershell
-   cd server
-   corepack pnpm smoke:inbox -- --provider feishu --mode read
-   ```
+## Safety gate
 
-   Verify in Hush that each group has one evolving digest card.
-6. Open and acknowledge the exact displayed revision in Hush.
-7. Send another group message, then rerun the read command and verify Hush
-   creates a new card for the next digest window.
-8. Inspect and edit the AI draft in Hush.
-9. Check the provider, displayed conversation, final draft, and @ targets in
-   Hush. Only then run the explicit send command:
+- [ ] Use the pinned CLI versions and exact executable paths from the detailed
+      Runbook.
+- [ ] Keep provider login in the official CLI credential store.
+- [ ] Keep Hush and StepFun secrets only in the local permission-restricted
+      `.env`; never record them in evidence or shell history.
+- [ ] Use a fresh permission-restricted validation state file.
+- [ ] Use loopback for macOS, or a private trusted LAN for iOS. Do not use
+      public Wi-Fi, public exposure, or a public tunnel.
+- [ ] Use a second participant and non-sensitive direct/group test messages.
+- [ ] Record no message text, raw JSON, IDs, tokens, logs, or private
+      screenshots.
 
-   ```powershell
-   $env:HUSH_SMOKE_ALLOW_SEND = "true"
-   try {
-     corepack pnpm smoke:inbox -- --provider feishu --mode send --item-id <item-id>
-   } finally {
-     Remove-Item Env:HUSH_SMOKE_ALLOW_SEND -ErrorAction SilentlyContinue
-   }
-   ```
+## Backend PASS
 
-10. Confirm delivery in the real Feishu session.
-11. Restart Hush, rerun the read command, and verify the checkpoint continues
-    without losing the digest or creating a duplicate card.
+Run the provider-specific preflight and read smoke exactly as documented.
+Backend PASS requires all of:
 
-## Designated DingTalk computer
+```text
+official CLI preflight PASS
+sync_ready=true
+stepfun_summary=true
+private_id_fields=false
+```
 
-1. Authenticate the official DingTalk CLI to the personal current-user account.
-2. Set only local `.env` values, including `DWS_CLI_PATH`,
-   `DINGTALK_ACCOUNT_ID`, Hush runtime settings, and the StepFun configuration.
-3. Start Hush in the foreground and leave both the app and server running.
-4. From another participant, send a new direct message and a new group message.
-5. In a second terminal, set `HUSH_BASE_URL` and `HUSH_APP_TOKEN` only for the
-   local session, then run:
+The read smoke does not send a provider message. Token verification is a
+one-time provider preflight; normal Connector polling reads messages without
+repeating network token verification.
 
-   ```powershell
-   cd server
-   corepack pnpm smoke:inbox -- --provider dingtalk --mode read
-   ```
+After a passing read, restart the backend and confirm that the fresh validation
+checkpoint resumes without creating a duplicate digest.
 
-   Verify in Hush that each group has one evolving digest card.
-6. Open and acknowledge the exact displayed revision in Hush.
-7. Send another group message, then rerun the read command and verify Hush
-   creates a new card for the next digest window.
-8. Inspect and edit the AI draft in Hush.
-9. Check the provider, displayed conversation, final draft, and @ targets in
-   Hush. Only then run the explicit send command:
+## Full Demo PASS
 
-   ```powershell
-   $env:HUSH_SMOKE_ALLOW_SEND = "true"
-   try {
-     corepack pnpm smoke:inbox -- --provider dingtalk --mode send --item-id <item-id>
-   } finally {
-     Remove-Item Env:HUSH_SMOKE_ALLOW_SEND -ErrorAction SilentlyContinue
-   }
-   ```
+The current SwiftUI Unified Inbox uses:
 
-10. Confirm delivery in the real DingTalk session.
-11. Restart Hush, rerun the read command, and verify the checkpoint continues
-    without losing the digest or creating a duplicate card.
+```text
+UnifiedInboxDemoStore.items = .fixture
+```
+
+It can prove only Sample Mode. It cannot prove real list/detail rendering,
+exact-revision acknowledgement, draft editing, or real send.
+
+Full Demo PASS additionally requires an API-connected Apple build to verify:
+
+- [ ] `X-Hush-Data-Origin: real` for the complete real flow.
+- [ ] macOS loopback or iOS trusted-LAN real list/detail rendering.
+- [ ] Exact displayed digest revision acknowledgement.
+- [ ] Draft edit using the exact displayed `expected_version`.
+- [ ] Visible provider, conversation, final draft, and reply-target review.
+- [ ] App-session-bound confirmation and guarded send of that reviewed version.
+- [ ] Explicit failed and ambiguous send states; ambiguous send is never
+      automatically retried.
+- [ ] No provider IDs, participant IDs, or credentials in Apple UI/logs.
+
+Until that Apple build exists, record these UI/send checks as `BLOCKED` or
+`SKIPPED`, never `PASS`. There is no CLI send fallback.
+
+## Evidence
+
+Use only `PASS`, `FAIL`, `BLOCKED`, or `SKIPPED`. Record provider, date/time,
+CLI preflight result, backend read-smoke result, Apple integration result,
+summary/draft UI result, guarded-send result, and operator initials.
+
+Stop after the first failure or ambiguous send. Follow the detailed Runbook's
+failure triage and cleanup sections; do not repeatedly reauthorize, bypass the
+App with internal IDs, or directly retry an ambiguous send.

@@ -36,3 +36,14 @@ HTTPS staging、Render、Docker 与 Apple 真机交接步骤见
 `docs/18_HTTPS_STAGING_AND_CLOUD_DEPLOYMENT.md` 和
 `docs/17_APPLE_REST_DECISION_HANDOFF.md`。仓库只提供可重复配置，不包含已创建的
 云资源、证书或 Secret。
+
+## Unified Inbox 真实账号 Demo
+
+- macOS/iOS 飞书、钉钉真实账号安装、授权、preflight、read smoke、证据和清理步骤：
+  `docs/feishu-dingtalk-real-validation/README.md`
+- Apple 前端 Agent 对接真实 Unified Inbox API 的接口、安全边界和验收清单：
+  `docs/unified-inbox-apple-frontend-handoff.md`
+
+当前 SwiftUI Unified Inbox 仍使用 Fixture Sample Mode。后端真实读取可以独立
+验证；真实 UI 确认、草稿编辑和发送必须等待 API-connected Apple build，不能用
+Fixture 结果代替。

@@ -105,6 +105,23 @@ export class InboxService {
     };
   }
 
+  async recover(): Promise<void> {
+    const now = this.clock.now().toISOString();
+    await this.drafts.recoverSending(now);
+    const candidates = await this.items.recoveryCandidates();
+    for (const item of candidates) {
+      if (item.sync_status === "pending") {
+        await this.enrichIngestedItem(item.id, item.revision);
+        continue;
+      }
+      try {
+        await this.createDraft(item.id);
+      } catch {
+        await this.markEnrichmentFailed(item.id, item.revision);
+      }
+    }
+  }
+
   private async enrichIngestedItem(
     itemId: string,
     expectedRevision: number
@@ -291,6 +308,7 @@ export class InboxService {
     principalId: string
   ): Promise<{ token: string; expiresAt: string }> {
     const draft = await this.getDraft(draftId);
+    await this.requireCurrentDraft(draft);
     if (!["ready", "edited", "failed"].includes(draft.status)) {
       throw new AppError({
         code: "INBOX_VERSION_CONFLICT",
@@ -319,14 +337,12 @@ export class InboxService {
         details: { current_version: draft.version }
       });
     }
-    const item = await this.getItem(draft.inbox_item_id);
+    const item = await this.requireCurrentDraft(draft);
     const replyTo = item.sender;
     if (item.conversation_type === "direct" && replyTo === null) {
       throw rawMessageUnavailable();
     }
-    const replyTargetIds = item.reply_targets.map(
-      (target) => target.target_id
-    );
+    const participantRefs = sendParticipantRefs(item);
     const requestHash = canonicalRequestHash({
       draftId: draft.id,
       version: draft.version,
@@ -339,17 +355,19 @@ export class InboxService {
       subject: item.subject,
       content: draft.content,
       contentType: draft.content_type,
-      replyTargetIds
+      participantRefs
     });
     const claim = await this.sendIdempotency.claimOrGet({
       key: input.idempotencyKey,
       requestHash,
       ttlSeconds: SEND_IDEMPOTENCY_TTL_SECONDS,
       create: async () => {
+        const currentItem = await this.requireCurrentDraft(draft);
         const mentions = await this.resolveReplyTargets(
-          item,
-          replyTargetIds
+          currentItem,
+          participantRefs
         );
+        await this.requireCurrentDraft(draft);
         const confirmed = await this.confirmations.consume(
           input.confirmationToken,
           draft.id,
@@ -371,21 +389,21 @@ export class InboxService {
         );
 
         try {
-          const sender = this.senders.get(item.provider);
+          const sender = this.senders.get(currentItem.provider);
           if (!sender) {
-            throw providerUnavailable(item.provider);
+            throw providerUnavailable(currentItem.provider);
           }
           const result = inboxSendResultSchema.parse(
             await sender.send({
               draftId: draft.id,
-              inboxItemId: item.id,
-              accountId: item.account_id,
-              conversationId: item.conversation_id,
-              conversationType: item.conversation_type,
-              providerMessageId: item.provider_message_id,
+              inboxItemId: currentItem.id,
+              accountId: currentItem.account_id,
+              conversationId: currentItem.conversation_id,
+              conversationType: currentItem.conversation_type,
+              providerMessageId: currentItem.provider_message_id,
               replyTo,
-              recipients: item.recipients,
-              subject: item.subject,
+              recipients: currentItem.recipients,
+              subject: currentItem.subject,
               content: sendingDraft.content,
               contentType: sendingDraft.content_type,
               idempotencyKey: input.idempotencyKey,
@@ -394,7 +412,7 @@ export class InboxService {
           );
           if (
             result.draft_id !== draft.id ||
-            result.provider !== item.provider
+            result.provider !== currentItem.provider
           ) {
             throw new AppError({
               code: "INBOX_PROVIDER_UNAVAILABLE",
@@ -402,7 +420,7 @@ export class InboxService {
               statusCode: 503,
               retryable: false,
               details: {
-                provider: item.provider,
+                provider: currentItem.provider,
                 reason: "send_result_mismatch"
               }
             });
@@ -415,13 +433,28 @@ export class InboxService {
           });
           return result;
         } catch (error) {
+          if (
+            error instanceof AppError &&
+            error.code === "INBOX_SEND_UNKNOWN"
+          ) {
+            const unknown = inboxSendResultSchema.parse({
+              draft_id: draft.id,
+              provider: currentItem.provider,
+              status: "unknown",
+              provider_message_id: null,
+              sent_at: null
+            });
+            await this.drafts.transition(draft.id, {
+              expectedStatuses: ["sending"],
+              status: "unknown",
+              providerDraftId: null,
+              now: this.clock.now().toISOString()
+            });
+            return unknown;
+          }
           await this.drafts.transition(draft.id, {
             expectedStatuses: ["sending"],
-            status:
-              error instanceof AppError &&
-              error.code === "INBOX_SEND_UNKNOWN"
-                ? "unknown"
-                : "failed",
+            status: "failed",
             now: this.clock.now().toISOString()
           });
           throw error;
@@ -438,6 +471,16 @@ export class InboxService {
       });
     }
     return claim.value;
+  }
+
+  private async requireCurrentDraft(
+    draft: InboxDraft
+  ): Promise<UnifiedInboxItem> {
+    const item = await this.getItem(draft.inbox_item_id);
+    if (item.draft_id !== draft.id) {
+      throw draftBindingChanged();
+    }
+    return item;
   }
 
   private async resolveReplyTargets(
@@ -495,6 +538,29 @@ function replyTargetsChanged(): AppError {
     message: "回复目标已发生变化，请刷新后重试。",
     statusCode: 409
   });
+}
+
+function draftBindingChanged(): AppError {
+  return new AppError({
+    code: "INBOX_VERSION_CONFLICT",
+    message: "会话摘要已更新，请刷新草稿后重新确认。",
+    statusCode: 409
+  });
+}
+
+function sendParticipantRefs(item: UnifiedInboxItem): string[] {
+  if (
+    item.provider === "dingtalk" &&
+    item.conversation_type === "direct"
+  ) {
+    if (item.sender_ref === null) {
+      throw replyTargetsChanged();
+    }
+    return [item.sender_ref];
+  }
+  return item.conversation_type === "group"
+    ? item.reply_targets.map((target) => target.target_id)
+    : [];
 }
 
 function conversationInput(

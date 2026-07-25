@@ -14,6 +14,7 @@ export interface ConnectorAccount {
 export class ConnectorHost {
   private timer: NodeJS.Timeout | null = null;
   private started = false;
+  private recovered = false;
   private generation = 0;
   private inFlight: Promise<void> | null = null;
   private readonly batchLimit: number;
@@ -24,7 +25,8 @@ export class ConnectorHost {
 
   constructor(
     private readonly accounts: ConnectorAccount[],
-    private readonly inbox: Pick<InboxService, "ingest">,
+    private readonly inbox: Pick<InboxService, "ingest"> &
+      Partial<Pick<InboxService, "recover">>,
     private readonly checkpoints: CheckpointStore,
     private readonly ids: IdGenerator,
     private readonly pollIntervalMs: number,
@@ -74,6 +76,15 @@ export class ConnectorHost {
   }
 
   private async runLoop(generation: number): Promise<void> {
+    if (!this.recovered) {
+      try {
+        await this.inbox.recover?.();
+        this.recovered = true;
+      } catch {
+        this.started = false;
+        return;
+      }
+    }
     await this.runOnce();
     if (!this.started || generation !== this.generation) {
       return;

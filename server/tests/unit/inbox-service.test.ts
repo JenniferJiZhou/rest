@@ -12,9 +12,11 @@ import type {
   IdGenerator,
   ProviderCallOptions
 } from "../../src/domain/ports.js";
+import { AppError } from "../../src/domain/errors.js";
 import { InMemoryIdempotencyStore } from "../../src/infra/in-memory.js";
 import { InMemoryConfirmationTokenStore } from "../../src/inbox/confirmation.js";
 import {
+  InboxSendIdempotencyStore,
   InMemoryCheckpointStore,
   InMemoryInboxDraftRepository,
   InMemoryInboxParticipantDirectory,
@@ -22,6 +24,7 @@ import {
 } from "../../src/inbox/in-memory.js";
 import { FixtureInboxIntelligenceProvider } from "../../src/inbox/intelligence.js";
 import type {
+  ConfirmationTokenStore,
   InboxDraftRepository,
   InboxIntelligenceProvider,
   InboxParticipantDirectory,
@@ -32,6 +35,12 @@ import type {
   ReplyDraftInput,
   ReplyDraftResult
 } from "../../src/inbox/ports.js";
+import { DingTalkDwsAdapter } from "../../src/inbox/providers/dingtalk-dws-adapter.js";
+import type {
+  CommandInvocation,
+  CommandRunner
+} from "../../src/inbox/providers/command-runner.js";
+import { InMemoryInboxStateBackend } from "../../src/inbox/state-backend.js";
 
 const PRINCIPAL_ID = "app-session-1";
 
@@ -412,6 +421,134 @@ describe("InboxService", () => {
     ).resolves.toMatchObject({ status: "sent" });
   });
 
+  it("rejects a stale group draft after targets change without consuming confirmation", async () => {
+    const targetA = {
+      target_id: "participant_12345678",
+      display_name: "王同学",
+      reason: "需要确认接口时间"
+    };
+    const targetB = {
+      target_id: "participant_87654321",
+      display_name: "李同学",
+      reason: "需要确认测试时间"
+    };
+    const intelligence = new RecordingIntelligence();
+    intelligence.summaryResponses.push(
+      Promise.resolve({ ...DEFAULT_SUMMARY, reply_targets: [targetA] }),
+      Promise.resolve({ ...DEFAULT_SUMMARY, reply_targets: [targetB] })
+    );
+    const confirmations = new RecordingConfirmationTokenStore();
+    const sender = new FixtureSender("sent", "dingtalk");
+    const { service } = fixtureService("sent", {
+      intelligence,
+      sender,
+      confirmations
+    });
+    const first = await service.ingest(
+      groupBatch(["provider-group-stale-draft-1"]),
+      [
+        participantBinding(
+          targetA.target_id,
+          "ou_private_a",
+          targetA.display_name
+        )
+      ]
+    );
+    const firstItem = await service.getItem(first.itemIds[0]!);
+    const staleDraft = await service.getDraft(firstItem.draft_id!);
+    const confirmation = await service.issueConfirmation(
+      staleDraft.id,
+      PRINCIPAL_ID
+    );
+
+    await service.ingest(
+      groupBatch(["provider-group-stale-draft-2"]),
+      [
+        participantBinding(
+          targetB.target_id,
+          "ou_private_b",
+          targetB.display_name
+        )
+      ]
+    );
+
+    await expect(
+      service.issueConfirmation(staleDraft.id, PRINCIPAL_ID)
+    ).rejects.toMatchObject({
+      code: "INBOX_VERSION_CONFLICT",
+      statusCode: 409
+    });
+    await expect(
+      service.sendDraft(staleDraft.id, {
+        expectedVersion: staleDraft.version,
+        confirmationToken: confirmation.token,
+        idempotencyKey: "send-key-stale-group-draft",
+        principalId: PRINCIPAL_ID
+      })
+    ).rejects.toMatchObject({
+      code: "INBOX_VERSION_CONFLICT",
+      statusCode: 409
+    });
+    expect(confirmations.consumeCount).toBe(0);
+    expect(sender.sendCount).toBe(0);
+    expect(await service.getDraft(staleDraft.id)).toMatchObject({
+      status: "ready"
+    });
+  });
+
+  it("routes a direct DingTalk reply through the private sender binding", async () => {
+    const runner = new RecordingCommandRunner([
+      JSON.stringify({ result: { messageId: "ding-sent-direct-1" } })
+    ]);
+    const adapter = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      runner
+    );
+    const senderRef = "participant_direct_12345678";
+    const { service } = fixtureService("sent", { sender: adapter });
+    const result = await service.ingest(
+      directDingTalkBatch(senderRef),
+      [
+        {
+          provider: "dingtalk",
+          accountId: "ding-account",
+          conversationId: "ding-direct-conversation",
+          participantRef: senderRef,
+          providerParticipantId: "private_dingtalk_direct_user",
+          displayName: "王同学"
+        }
+      ]
+    );
+    const item = await service.getItem(result.itemIds[0]!);
+    const draft = await service.getDraft(item.draft_id!);
+    const confirmation = await service.issueConfirmation(
+      draft.id,
+      PRINCIPAL_ID
+    );
+
+    await service.sendDraft(draft.id, {
+      expectedVersion: draft.version,
+      confirmationToken: confirmation.token,
+      idempotencyKey: "send-key-dingtalk-direct",
+      principalId: PRINCIPAL_ID
+    });
+
+    expect(runner.invocations).toHaveLength(1);
+    expect(runner.invocations[0]?.args).toEqual([
+      "chat",
+      "message",
+      "send",
+      "--open-dingtalk-id",
+      "private_dingtalk_direct_user",
+      "--text",
+      "收到，我会查看并尽快回复。",
+      "--uuid",
+      "send-key-dingtalk-direct",
+      "--format",
+      "json"
+    ]);
+  });
+
   it("requires confirmation before sending", async () => {
     const { service } = fixtureService();
     const draft = await seededDraft(service);
@@ -452,7 +589,7 @@ describe("InboxService", () => {
     expect((await service.getDraft(draft.id)).status).toBe("sent");
   });
 
-  it("includes reply target IDs in the send idempotency hash", async () => {
+  it("rejects a previously sent group draft after reply targets change", async () => {
     const targetA = {
       target_id: "participant_12345678",
       display_name: "王同学",
@@ -515,9 +652,8 @@ describe("InboxService", () => {
     await expect(
       service.sendDraft(draft.id, request)
     ).rejects.toMatchObject({
-      code: "INVALID_REQUEST",
-      statusCode: 409,
-      details: { reason: "IDEMPOTENCY_KEY_REUSED" }
+      code: "INBOX_VERSION_CONFLICT",
+      statusCode: 409
     });
     expect(sender.sendCount).toBe(1);
   });
@@ -578,6 +714,60 @@ describe("InboxService", () => {
     ).resolves.toMatchObject({ status: "unknown" });
     expect(sender.sendCount).toBe(1);
     expect((await service.getDraft(draft.id)).status).toBe("unknown");
+  });
+
+  it("persists an ambiguous send as unknown and replays it after restart", async () => {
+    const backend = new InMemoryInboxStateBackend();
+    const firstSender = new ThrowingUnknownSender();
+    const first = fixtureService("sent", {
+      items: new InMemoryInboxRepository(backend),
+      drafts: new InMemoryInboxDraftRepository(backend),
+      participants: new InMemoryInboxParticipantDirectory(backend),
+      sender: firstSender,
+      sendIdempotency: new InboxSendIdempotencyStore(backend)
+    });
+    const draft = await seededDraft(
+      first.service,
+      "provider-message-ambiguous-restart"
+    );
+    const confirmation = await first.service.issueConfirmation(
+      draft.id,
+      PRINCIPAL_ID
+    );
+    const request = {
+      expectedVersion: draft.version,
+      confirmationToken: confirmation.token,
+      idempotencyKey: "send-key-ambiguous-restart",
+      principalId: PRINCIPAL_ID
+    };
+
+    const unknown = await first.service.sendDraft(draft.id, request);
+
+    expect(unknown).toMatchObject({
+      draft_id: draft.id,
+      provider: "outlook",
+      status: "unknown",
+      provider_message_id: null,
+      sent_at: null
+    });
+    expect(firstSender.sendCount).toBe(1);
+    expect(await first.service.getDraft(draft.id)).toMatchObject({
+      status: "unknown"
+    });
+
+    const replaySender = new ThrowingUnknownSender();
+    const restarted = fixtureService("sent", {
+      items: new InMemoryInboxRepository(backend),
+      drafts: new InMemoryInboxDraftRepository(backend),
+      participants: new InMemoryInboxParticipantDirectory(backend),
+      sender: replaySender,
+      sendIdempotency: new InboxSendIdempotencyStore(backend)
+    });
+
+    await expect(
+      restarted.service.sendDraft(draft.id, request)
+    ).resolves.toEqual(unknown);
+    expect(replaySender.sendCount).toBe(0);
   });
 
   it("binds confirmation to the authenticated app session", async () => {
@@ -688,6 +878,66 @@ describe("InboxService", () => {
       })
     ]);
   });
+
+  it("recovers persisted pending enrichment and ready items missing required drafts", async () => {
+    const backend = new InMemoryInboxStateBackend();
+    const items = new InMemoryInboxRepository(backend);
+    const drafts = new InMemoryInboxDraftRepository(backend);
+    const pending = await items.upsert(
+      batch("provider-message-recovery-pending").events[0]!
+    );
+    const missingDraft = await items.upsert(
+      batch("provider-message-recovery-missing-draft").events[0]!
+    );
+    await items.saveEnrichment(
+      missingDraft.item.id,
+      missingDraft.item.revision,
+      DEFAULT_SUMMARY
+    );
+    const { service } = fixtureService("sent", { items, drafts });
+
+    await service.recover();
+
+    await expect(service.getItem(pending.item.id)).resolves.toMatchObject({
+      sync_status: "ready",
+      draft_id: expect.any(String)
+    });
+    await expect(
+      service.getItem(missingDraft.item.id)
+    ).resolves.toMatchObject({
+      sync_status: "ready",
+      draft_id: expect.any(String)
+    });
+  });
+
+  it("recovers a persisted sending draft as unknown without resending", async () => {
+    const backend = new InMemoryInboxStateBackend();
+    const items = new InMemoryInboxRepository(backend);
+    const drafts = new InMemoryInboxDraftRepository(backend);
+    const first = fixtureService("sent", { items, drafts });
+    const draft = await seededDraft(
+      first.service,
+      "provider-message-recovery-sending"
+    );
+    await drafts.claimForSend(
+      draft.id,
+      draft.version,
+      "2026-07-24T00:59:00.000Z"
+    );
+    const sender = new FixtureSender("sent");
+    const restarted = fixtureService("sent", {
+      items: new InMemoryInboxRepository(backend),
+      drafts: new InMemoryInboxDraftRepository(backend),
+      sender
+    });
+
+    await restarted.service.recover();
+
+    await expect(
+      restarted.service.getDraft(draft.id)
+    ).resolves.toMatchObject({ status: "unknown" });
+    expect(sender.sendCount).toBe(0);
+  });
 });
 
 class FixtureSender implements InboxSender {
@@ -748,14 +998,78 @@ class FixtureSender implements InboxSender {
   }
 }
 
-function fixtureService(
+class ThrowingUnknownSender implements InboxSender {
+  readonly provider = "outlook" as const;
+  readonly dataOrigin = "real" as const;
+  sendCount = 0;
+
+  async health(): Promise<"ready"> {
+    return "ready";
+  }
+
+  async send(): Promise<InboxSendResult> {
+    this.sendCount += 1;
+    throw new AppError({
+      code: "INBOX_SEND_UNKNOWN",
+      message: "渠道发送结果未知，请先核对原渠道。",
+      statusCode: 503,
+      retryable: false,
+      details: { reason: "command_timeout" }
+    });
+  }
+}
+
+class RecordingConfirmationTokenStore implements ConfirmationTokenStore {
+  consumeCount = 0;
+  private readonly delegate = new InMemoryConfirmationTokenStore(
+    () => new Date("2026-07-24T01:00:00.000Z")
+  );
+
+  issue(
+    draftId: string,
+    version: number,
+    principalId: string
+  ): Promise<{ token: string; expiresAt: string }> {
+    return this.delegate.issue(draftId, version, principalId);
+  }
+
+  consume(
+    token: string,
+    draftId: string,
+    version: number,
+    principalId: string
+  ): Promise<boolean> {
+    this.consumeCount += 1;
+    return this.delegate.consume(
+      token,
+      draftId,
+      version,
+      principalId
+    );
+  }
+}
+
+class RecordingCommandRunner implements CommandRunner {
+  readonly invocations: CommandInvocation[] = [];
+
+  constructor(private readonly outputs: string[]) {}
+
+  async run(invocation: CommandInvocation): Promise<string> {
+    this.invocations.push(structuredClone(invocation));
+    return this.outputs.shift() ?? "{}";
+  }
+}
+
+function fixtureService<TSender extends InboxSender = FixtureSender>(
   resultStatus: InboxSendResult["status"] = "sent",
   overrides: {
     items?: InboxRepository;
     drafts?: InboxDraftRepository;
     intelligence?: InboxIntelligenceProvider;
     participants?: InboxParticipantDirectory;
-    sender?: FixtureSender;
+    sender?: TSender;
+    confirmations?: ConfirmationTokenStore;
+    sendIdempotency?: InMemoryIdempotencyStore<InboxSendResult> | InboxSendIdempotencyStore;
   } = {}
 ) {
   const clock: Clock = {
@@ -765,7 +1079,8 @@ function fixtureService(
   const ids: IdGenerator = {
     next: (prefix) => `${prefix}-${++id}`
   };
-  const sender = overrides.sender ?? new FixtureSender(resultStatus);
+  const sender = (overrides.sender ??
+    new FixtureSender(resultStatus)) as TSender;
   const checkpoints = new InMemoryCheckpointStore(clock.now);
   const participants =
     overrides.participants ?? new InMemoryInboxParticipantDirectory();
@@ -774,8 +1089,10 @@ function fixtureService(
     overrides.drafts ?? new InMemoryInboxDraftRepository(),
     overrides.intelligence ?? new FixtureInboxIntelligenceProvider(),
     new Map([[sender.provider, sender]]),
-    new InMemoryConfirmationTokenStore(clock.now),
-    new InMemoryIdempotencyStore<InboxSendResult>(),
+    overrides.confirmations ??
+      new InMemoryConfirmationTokenStore(clock.now),
+    overrides.sendIdempotency ??
+      new InMemoryIdempotencyStore<InboxSendResult>(),
     checkpoints,
     clock,
     ids,
@@ -848,6 +1165,35 @@ function groupBatch(
           note: null
         }
       }))
+  };
+}
+
+function directDingTalkBatch(senderRef: string): InboxEventBatch {
+  return {
+    schema_version: "1.0",
+    request_id: "request-dingtalk-direct",
+    checkpoint: "checkpoint-dingtalk-direct",
+    events: [
+      {
+        provider: "dingtalk",
+        account_id: "ding-account",
+        conversation_id: "ding-direct-conversation",
+        conversation_type: "direct",
+        conversation_name: "王同学",
+        provider_message_id: "ding-direct-message-1",
+        sender: "王同学",
+        sender_ref: senderRef,
+        recipients: ["ding-account"],
+        subject: null,
+        content: "请确认接口交付时间。",
+        received_at: "2026-07-24T09:00:00+08:00",
+        coverage: {
+          source: "official_api",
+          complete: false,
+          note: "可见范围受钉钉企业授权和当前用户会话权限限制"
+        }
+      }
+    ]
   };
 }
 

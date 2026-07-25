@@ -79,6 +79,12 @@ const environmentSchema = z
       .min(1)
       .default("step-3.7-flash"),
     INBOX_STEPFUN_API_KEY: optionalString,
+    INBOX_STEPFUN_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(120_000)
+      .default(15_000),
     INBOX_INITIAL_LOOKBACK_MINUTES: z.coerce
       .number()
       .int()

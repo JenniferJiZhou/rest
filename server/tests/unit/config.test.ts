@@ -49,6 +49,7 @@ describe("server listener configuration", () => {
       DRAFT_CREATE_TIMEOUT_MS: 10_000,
       COMPLETION_SEND_TIMEOUT_MS: 5_000,
       INBOX_POLL_INTERVAL_MS: 30_000,
+      INBOX_STEPFUN_TIMEOUT_MS: 15_000,
       INBOX_INITIAL_LOOKBACK_MINUTES: 60,
       INBOX_SYNC_BATCH_LIMIT: 100
     });
@@ -76,6 +77,7 @@ describe("server listener configuration", () => {
     ["DRAFT_CREATE_TIMEOUT_MS", "NaN"],
     ["COMPLETION_SEND_TIMEOUT_MS", "120001"],
     ["INBOX_POLL_INTERVAL_MS", "99"],
+    ["INBOX_STEPFUN_TIMEOUT_MS", "99"],
     ["INBOX_INITIAL_LOOKBACK_MINUTES", "0"],
     ["INBOX_SYNC_BATCH_LIMIT", "0"]
   ])("rejects invalid %s=%s", (name, value) => {

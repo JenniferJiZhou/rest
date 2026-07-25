@@ -196,6 +196,13 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
       throw providerOutputError();
     }
     const sender = senderIdentity(message);
+    const content = contentValue(
+      message.text ?? message.content,
+      sender
+    );
+    if (!content) {
+      throw providerOutputError();
+    }
     const participantRef = sender.id
       ? participantReference(accountId, conversationId, sender.id)
       : null;
@@ -213,7 +220,7 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
         sender_ref: participantRef,
         recipients: [accountId],
         subject: null,
-        content: contentValue(message.text ?? message.content),
+        content,
         received_at: receivedAt,
         coverage: {
           source: "official_api",
@@ -465,17 +472,82 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function contentValue(content: unknown): string {
+function contentValue(
+  content: unknown,
+  sender: { id: string | null; name: string }
+): string | null {
   if (typeof content === "string") {
-    return content;
+    return sanitizeDingTalkText(content, [], sender);
   }
-  if (typeof content === "object" && content !== null) {
-    const text = stringValue(
-      (content as Record<string, unknown>).text
-    );
-    return text ?? JSON.stringify(content);
+  if (!isRecord(content)) {
+    return null;
   }
-  return "";
+  const text = stringValue(content.text);
+  if (!text) {
+    return null;
+  }
+  const mentions = mentionValues(content.mentions);
+  if (mentions === null) {
+    return null;
+  }
+  return sanitizeDingTalkText(text, mentions, sender);
+}
+
+interface DingTalkContentMention {
+  id: string;
+  displayName: string;
+}
+
+function mentionValues(value: unknown): DingTalkContentMention[] | null {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const mentions: DingTalkContentMention[] = [];
+  for (const mention of value) {
+    if (!isRecord(mention)) {
+      return null;
+    }
+    const id =
+      stringValue(mention.openDingTalkId) ??
+      stringValue(mention.open_dingtalk_id) ??
+      stringValue(mention.userId) ??
+      stringValue(mention.user_id);
+    const displayName =
+      stringValue(mention.displayName) ??
+      stringValue(mention.name) ??
+      stringValue(mention.nick);
+    if (!id || !displayName) {
+      return null;
+    }
+    mentions.push({ id, displayName });
+  }
+  return mentions;
+}
+
+function sanitizeDingTalkText(
+  value: string,
+  mentions: DingTalkContentMention[],
+  sender: { id: string | null; name: string }
+): string | null {
+  let sanitized = value;
+  const replacements = [
+    ...mentions,
+    ...(sender.id
+      ? [{ id: sender.id, displayName: sender.name }]
+      : [])
+  ].sort((left, right) => right.id.length - left.id.length);
+  for (const replacement of replacements) {
+    sanitized = sanitized
+      .split(`<@${replacement.id}>`)
+      .join(`@${replacement.displayName}`)
+      .split(replacement.id)
+      .join(`@${replacement.displayName}`);
+  }
+  sanitized = sanitized.replace(/<@[^>\r\n]+>/gu, "@成员").trim();
+  return sanitized.length > 0 ? sanitized : null;
 }
 
 function timestampValue(value: unknown): string | null {

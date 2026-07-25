@@ -4,34 +4,44 @@ import {
   DingTalkDwsAdapter,
   LarkCliAdapter
 } from "../../src/inbox/providers/index.js";
+import { InMemoryInboxRepository } from "../../src/inbox/in-memory.js";
+import {
+  StepFunInboxIntelligenceProvider,
+  type StepFunTransport
+} from "../../src/inbox/intelligence.js";
 import type {
   CommandInvocation,
   CommandRunner
 } from "../../src/inbox/providers/command-runner.js";
+import { InMemoryInboxStateBackend } from "../../src/inbox/state-backend.js";
 
 describe("Inbox CLI adapters", () => {
   it("uses lark-cli JSON commands without a shell", async () => {
     const runner = new RecordingRunner([
       JSON.stringify({ authenticated: true }),
       JSON.stringify({
-        items: [
-          {
-            message_id: "lark-message-1",
-            chat_id: "lark-chat-1",
-            chat_type: "p2p",
-            chat_partner: {
-              name: "飞书私聊"
+        ok: true,
+        identity: "user",
+        data: {
+          messages: [
+            {
+              message_id: "lark-message-1",
+              chat_id: "lark-chat-1",
+              chat_type: "p2p",
+              chat_partner: {
+                name: "飞书私聊"
+              },
+              sender: {
+                id: "lark-user-1",
+                name: "飞书用户"
+              },
+              content: "飞书消息",
+              create_time: "1784854800000"
             },
-            sender: {
-              id: "lark-user-1",
-              name: "飞书用户"
-            },
-            content: "飞书消息",
-            create_time: "1784854800000"
-          }
-        ],
-        has_more: true,
-        page_token: "lark-page-2"
+          ],
+          has_more: true,
+          page_token: "lark-page-2"
+        }
       }),
       JSON.stringify({ message_id: "lark-sent-1" })
     ]);
@@ -80,8 +90,7 @@ describe("Inbox CLI adapters", () => {
     expect(runner.invocations[0]?.args).toEqual([
       "auth",
       "status",
-      "--format",
-      "json"
+      "--json"
     ]);
     expect(runner.invocations[1]).toEqual({
       executable: "/opt/lark-cli",
@@ -742,6 +751,139 @@ describe("Inbox CLI adapters", () => {
     expect(JSON.stringify(pulled.items)).not.toContain("ou_private_metadata");
   });
 
+  it("sanitizes known DingTalk text content before public, state, and StepFun boundaries", async () => {
+    const nativeMentionId = "private_native_mention_123";
+    const adapter = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          result: {
+            conversationMessagesList: [
+              {
+                title: "产品讨论组",
+                openConversationId: "ding-chat-structured",
+                conversationType: "group",
+                messages: [
+                  {
+                    messageId: "ding-structured-text",
+                    senderOpenDingTalkId: "private_sender_456",
+                    senderName: "王同学",
+                    content: {
+                      text: `<@${nativeMentionId}> 请确认接口交付时间`,
+                      mentions: [
+                        {
+                          openDingTalkId: nativeMentionId,
+                          displayName: "李同学"
+                        }
+                      ]
+                    },
+                    createTime: "2026-07-24T09:00:00+08:00"
+                  }
+                ]
+              }
+            ],
+            hasMore: false
+          }
+        })
+      ])
+    );
+
+    const pulled = await adapter.pull({
+      accountId: "ding-account",
+      checkpoint: null,
+      limit: 20
+    });
+
+    expect(pulled.items[0]?.content).toBe("@李同学 请确认接口交付时间");
+    expect(JSON.stringify(pulled.items)).not.toContain(nativeMentionId);
+
+    const backend = new InMemoryInboxStateBackend();
+    const repository = new InMemoryInboxRepository(backend);
+    const stored = await repository.upsert(pulled.items[0]!);
+    const serializedState = await backend.read((state) =>
+      JSON.stringify(state)
+    );
+    expect(serializedState).not.toContain(nativeMentionId);
+
+    const transport = new PromptRecordingTransport();
+    const intelligence = new StepFunInboxIntelligenceProvider(
+      {
+        baseUrl: "https://stepfun.example/v1",
+        apiKey: "safe-test-key",
+        model: "step-3.7-flash",
+        maxMessagesPerChunk: 100,
+        maxPromptCharacters: 60_000,
+        timeoutMs: 15_000
+      },
+      transport
+    );
+    const sourceMessages = await repository.sourceMessages(stored.item.id);
+    await intelligence.summarize({
+      conversationName: stored.item.conversation_name,
+      allowedParticipants: [
+        {
+          participantRef: pulled.items[0]!.sender_ref!,
+          displayName: pulled.items[0]!.sender
+        }
+      ],
+      messages: sourceMessages.map((message) => ({
+        participantRef: message.senderRef,
+        displayName: message.senderDisplayName,
+        content: message.content,
+        receivedAt: message.receivedAt
+      }))
+    });
+    expect(transport.prompts.join("\n")).not.toContain(nativeMentionId);
+  });
+
+  it("rejects an unsupported DingTalk content page without exposing IDs or yielding a checkpoint", async () => {
+    const unsupportedNativeId = "private_unsupported_native_789";
+    const adapter = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          result: {
+            messages: [
+              {
+                messageId: "ding-unsupported-content",
+                conversationId: "ding-chat-unsupported",
+                conversationType: "group",
+                conversationName: "产品讨论组",
+                senderOpenDingTalkId: "private_sender_unsupported",
+                senderName: "王同学",
+                content: {
+                  card: { title: "不支持的富文本卡片" },
+                  openDingTalkId: unsupportedNativeId
+                },
+                createdAt: "2026-07-24T09:00:00+08:00"
+              }
+            ],
+            hasMore: true,
+            nextCursor: "private-next-checkpoint"
+          }
+        })
+      ])
+    );
+
+    let error: unknown;
+    try {
+      await adapter.pull({
+        accountId: "ding-account",
+        checkpoint: "old-checkpoint",
+        limit: 20
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE",
+      details: { provider: "dingtalk", reason: "invalid_output" }
+    });
+    expect(JSON.stringify(error)).not.toContain(unsupportedNativeId);
+    expect(JSON.stringify(error)).not.toContain("private-next-checkpoint");
+  });
+
   it("rejects unsafe Feishu structured content without leaking mention IDs", async () => {
     const adapter = new LarkCliAdapter(
       { executable: "/opt/lark-cli", accountId: "lark-account" },
@@ -910,6 +1052,24 @@ class RecordingRunner implements CommandRunner {
   async run(invocation: CommandInvocation): Promise<string> {
     this.invocations.push(structuredClone(invocation));
     return this.outputs.shift() ?? "{}";
+  }
+}
+
+class PromptRecordingTransport implements StepFunTransport {
+  readonly prompts: string[] = [];
+
+  async completeJson(input: {
+    prompt: string;
+  }): Promise<unknown> {
+    this.prompts.push(input.prompt);
+    return {
+      summary: "需要确认接口交付时间。",
+      important_points: ["接口交付时间待确认"],
+      todos: ["确认接口交付时间"],
+      priority: "normal",
+      needs_reply: true,
+      reply_targets: []
+    };
   }
 }
 

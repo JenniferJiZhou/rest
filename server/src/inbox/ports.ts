@@ -29,6 +29,7 @@ export interface InboxRepository {
     items: UnifiedInboxItem[];
     nextCursor: string | null;
   }>;
+  recoveryCandidates(): Promise<UnifiedInboxItem[]>;
   sourceMessages(id: string): Promise<InboxSourceMessage[]>;
   saveEnrichment(
     id: string,
@@ -119,6 +120,7 @@ export interface InboxDraftRepository {
     id: string,
     input: TransitionInboxDraft
   ): Promise<InboxDraft>;
+  recoverSending(now: string): Promise<number>;
 }
 
 export interface InboxSummaryInput {

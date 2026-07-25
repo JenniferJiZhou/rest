@@ -215,6 +215,18 @@ export class InMemoryInboxRepository implements InboxRepository {
     });
   }
 
+  async recoveryCandidates(): Promise<UnifiedInboxItem[]> {
+    return this.backend.read((state) =>
+      Object.values(state.items).filter(
+        (item) =>
+          item.sync_status === "pending" ||
+          (item.sync_status === "ready" &&
+            item.needs_reply === true &&
+            item.draft_id === null)
+      )
+    );
+  }
+
   async saveEnrichment(
     id: string,
     expectedRevision: number,
@@ -571,6 +583,25 @@ export class InMemoryInboxDraftRepository
       };
       state.drafts[id] = updated;
       return { state, value: updated };
+    });
+  }
+
+  async recoverSending(now: string): Promise<number> {
+    return this.backend.mutate((state) => {
+      let recovered = 0;
+      for (const [id, draft] of Object.entries(state.drafts)) {
+        if (draft.status !== "sending") {
+          continue;
+        }
+        state.drafts[id] = {
+          ...draft,
+          status: "unknown",
+          provider_draft_id: null,
+          updated_at: now
+        };
+        recovered += 1;
+      }
+      return { state, value: recovered };
     });
   }
 
