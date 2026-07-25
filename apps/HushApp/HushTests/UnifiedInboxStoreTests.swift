@@ -244,7 +244,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
             .init(
                 value: .init(
                     confirmationToken: "stale-confirmation",
-                    expiresAt: "2099-07-25T01:00:00Z"
+                    expiresAt: "2099-07-25T01:00:00.000Z"
                 ),
                 origin: .real
             )
@@ -276,7 +276,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
             .init(
                 value: .init(
                     confirmationToken: "expired-confirmation",
-                    expiresAt: "2000-01-01T00:00:00Z"
+                    expiresAt: "2000-01-01T00:00:00.000Z"
                 ),
                 origin: .real
             )
@@ -304,7 +304,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         client.ackResult = .success(.init(value: value, origin: .real))
         client.draftResult = .success(.init(value: Self.draft(version: 4), origin: .real))
         client.updateResult = .success(.init(value: Self.draft(version: 5), origin: .real))
-        client.confirmationResult = .success(.init(value: .init(confirmationToken: "confirmation-token", expiresAt: "2099-07-25T01:00:00Z"), origin: .real))
+        client.confirmationResult = .success(.init(value: .init(confirmationToken: "confirmation-token", expiresAt: "2099-07-25T01:00:00.000Z"), origin: .real))
         client.sendResult = .success(.init(value: .init(draftID: "private-draft", provider: .feishu, status: .sent, providerMessageID: nil, sentAt: "2026-07-25T00:00:00Z"), origin: .real))
         return client
     }

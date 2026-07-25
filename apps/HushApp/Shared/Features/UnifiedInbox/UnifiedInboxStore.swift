@@ -276,8 +276,8 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
                 sendState == .reviewing
             else { return }
             guard
-                let expiresAt = ISO8601DateFormatter().date(
-                    from: response.value.expiresAt
+                let expiresAt = Self.parseTimestamp(
+                    response.value.expiresAt
                 ),
                 expiresAt > Date()
             else {
@@ -481,6 +481,18 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
             return "服务器未返回真实数据，已停止展示。"
         }
         return "无法连接消息服务，请检查连接后重试。"
+    }
+
+    private static func parseTimestamp(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [
+            .withInternetDateTime,
+            .withFractionalSeconds
+        ]
+        if let date = fractional.date(from: value) {
+            return date
+        }
+        return ISO8601DateFormatter().date(from: value)
     }
 
     private enum StoreError: Error {
