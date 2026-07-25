@@ -20,17 +20,27 @@ constant float HUSH_TAU = 6.28318530718;
 // profile is what lets a crest become a trough: a field that does not change
 // sign across the width could only raise or lower the line as a whole, which
 // is precisely the rigid translation to avoid.
-constant float HUSH_PA[10] = {
-    -0.10940, +0.06590, +0.01073, -0.20969, +0.19923,
-    +0.40161, +0.12943, -0.15172, +0.29027, +0.08905
+// Six terms, renormalised so the series spans [-1, 1]. Ten terms tracked the
+// measured profile more closely but carried enough high-order content that the
+// warp put visible corners into the strokes: driving the field from the K=10
+// fit peaked at 1.04x the artwork's own curvature, K=6 at 0.66x. Six keeps the
+// humps where they belong (troughs 0.16 / 0.51 / 0.87, crests 0.33 / 0.70)
+// while staying visibly rounder in motion.
+constant float HUSH_PA[6] = {
+    -0.15694, +0.09453, +0.01539,
+    -0.30081, +0.28580, +0.57612
 };
 
-constant float HUSH_HALF_AMP = 0.0988;   // of plate height
+// The true half-amplitude of the measured profile. The six-term series only
+// reaches ~66% of it, so it is renormalised above and scaled by the real figure
+// here — otherwise the morph would undershoot and the shallower crests would
+// never make it across the mean line.
+constant float HUSH_HALF_AMP = 0.1037;   // of plate height
 
 static float hushProfile(float x) {
     float u = clamp(x, 0.0, 1.0) * M_PI_F;
     float s = 0.0;
-    for (int n = 1; n <= 10; n++) {
+    for (int n = 1; n <= 6; n++) {
         s += HUSH_PA[n - 1] * cos(float(n) * u);
     }
     return s;
@@ -94,14 +104,18 @@ static float hushTension(float x, float t, float lane) {
     // change, which the design forbids.
     float lane = clamp(position.y / h, 0.0, 1.0) * 1.6;
 
-    float s = 0.25 + 0.75 * cos(time * (HUSH_TAU / 17.0) + x * 5.5 + lane * 0.5);
+    float s = 0.25 + 0.75 * cos(time * (HUSH_TAU / 17.0) + x * 6.5 + lane * 0.5);
 
     // `dy` is expressed in artwork terms: positive means "this part of the
     // curve should sit higher on screen". distortionEffect moves content the
     // opposite way for a positive y offset (verified by measuring rendered
     // frames, not by reading the docs), hence the negation.
+    //
+    // Tension is held at 0.35. It is the one term that introduces curvature the
+    // artwork does not already have, so it is the first thing to trim when the
+    // strokes start reading as angular rather than flexing.
     float dy = HUSH_HALF_AMP * hushProfile(x) * (s - 1.0)
-             + HUSH_HALF_AMP * hushTension(x, time, lane) * 0.55;
+             + HUSH_HALF_AMP * hushTension(x, time, lane) * 0.35;
 
     return float2(position.x, position.y - dy * h * amplitude);
 }
