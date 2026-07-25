@@ -179,6 +179,20 @@ function New-ManualPayload([string]$RequestId) {
     }
 }
 
+function Test-JsonInteger($Value) {
+    return (
+        $Value -is [System.SByte] -or
+        $Value -is [System.Byte] -or
+        $Value -is [System.Int16] -or
+        $Value -is [System.UInt16] -or
+        $Value -is [System.Int32] -or
+        $Value -is [System.UInt32] -or
+        $Value -is [System.Int64] -or
+        $Value -is [System.UInt64] -or
+        $Value -is [System.Numerics.BigInteger]
+    )
+}
+
 function AssertSuccessfulDecision(
     [string]$Name,
     $Body
@@ -201,8 +215,11 @@ function AssertSuccessfulDecision(
         if ($null -eq $Body.generated_task) {
             Fail "Offer generated_task must be an object."
         }
+        $durationIsInteger = Test-JsonInteger (
+            $Body.generated_task.duration_seconds
+        )
         if ([string]::IsNullOrWhiteSpace($Body.generated_task.title) -or
-            $Body.generated_task.duration_seconds -isnot [int] -or
+            -not $durationIsInteger -or
             @($Body.generated_task.steps).Count -eq 0) {
             Fail "Offer generated_task is incomplete."
         }
@@ -231,6 +248,9 @@ function AssertSuccessfulDecision(
 }
 
 function AssertSuccessfulManualRest($Body) {
+    $durationIsInteger = Test-JsonInteger (
+        $Body.generated_task.duration_seconds
+    )
     if ($Body.PSObject.Properties.Name -contains "should_offer_rest") {
         Fail "Manual response must not contain should_offer_rest."
     }
@@ -239,7 +259,7 @@ function AssertSuccessfulManualRest($Body) {
     }
     if ($null -eq $Body.generated_task -or
         [string]::IsNullOrWhiteSpace($Body.generated_task.title) -or
-        $Body.generated_task.duration_seconds -isnot [int] -or
+        -not $durationIsInteger -or
         @($Body.generated_task.steps).Count -eq 0) {
         Fail "Manual generated_task is incomplete."
     }
