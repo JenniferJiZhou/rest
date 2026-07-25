@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  CannedDynamicRestDecisionProvider,
   CannedRestDecisionProvider,
+  UnavailableDynamicRestDecisionProvider,
   UnavailableRestDecisionProvider
 } from "../../src/agent/rest-decision-providers.js";
 import { FileRestContentRepository } from "../../src/content/file-rest-content-repository.js";
@@ -75,6 +77,51 @@ describe("RestDecisionProvider contract", () => {
     await expect(provider.health()).resolves.toBe("unavailable");
     await expect(provider.decide(context())).rejects.toThrow(
       "Rest Decision Provider is unavailable."
+    );
+  });
+
+  it("returns a Canned Contract 1.1 generated task as mock data", async () => {
+    const provider = new CannedDynamicRestDecisionProvider();
+    const candidate = await provider.decide(context());
+
+    expect(provider.dataOrigin).toBe("mock");
+    expect(candidate).toMatchObject({
+      shouldOfferRest: true,
+      generatedTask: {
+        title: expect.any(String),
+        durationSeconds: expect.any(Number),
+        steps: expect.any(Array)
+      }
+    });
+    expect(candidate).not.toHaveProperty("defaultQuestId");
+  });
+
+  it("returns a Canned Contract 1.1 companion state", async () => {
+    const provider = new CannedDynamicRestDecisionProvider();
+    const candidate = await provider.decide(
+      context({
+        usage: {
+          dailyMinutes: 5,
+          continuousMinutes: 5,
+          continuousIsEstimated: true
+        }
+      })
+    );
+
+    expect(candidate).toEqual({
+      shouldOfferRest: false,
+      reasonCode: "insufficient_signal",
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generatedTask: null
+    });
+  });
+
+  it("keeps dynamic Unavailable separate from a RestSuggestion", async () => {
+    const provider = new UnavailableDynamicRestDecisionProvider();
+
+    await expect(provider.health()).resolves.toBe("unavailable");
+    await expect(provider.decide(context())).rejects.toThrow(
+      "Dynamic Rest Decision Provider is unavailable."
     );
   });
 });

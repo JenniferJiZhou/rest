@@ -27,8 +27,8 @@ describe("server dependency graph isolation", () => {
     const dependencies = buildServerDependencies(
       config({
         HUSH_REST_DECISION_PROVIDER: "real",
-        CLAUDE_API_KEY: "not-used-unless-called",
-        REST_DECISION_MODEL: "claude-test-model"
+        STEPFUN_API_KEY: "not-used-unless-called",
+        STEPFUN_MODEL: "step-3.7-flash"
       })
     );
 

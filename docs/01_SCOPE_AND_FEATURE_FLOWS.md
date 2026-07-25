@@ -14,6 +14,19 @@ Hush Door / 自动触发
 → 双问反馈
 ```
 
+自动行为检查点另有一个受控分支：
+
+```text
+Usage checkpoint
+→ Contract 1.1 Mode A
+→ false：仅更新常亮陪伴文案
+→ true：返回一次性的 generated_task
+→ Apple 决定是否通知并展示 Rest Session
+```
+
+主动进入的 manual rest 按版本协商：Contract 1.0 仍从固定 Quest 库选择；
+Contract 1.1 由 Mode B 返回一次性的 `generated_task`。
+
 ### B. Sleep Handoff
 
 ```text
@@ -43,7 +56,8 @@ Photon 入站消息
 |---|---:|---|
 | Hush Door | 否 | `RestEntryRouting` |
 | Name the Tiredness | 是；失败可本地标签降级 | `POST /v1/rest/check-in` |
-| Rest Quest | 本地内容为准；后端只选 ID | `POST /v1/rest/recommend` |
+| Manual Rest Quest | 1.0 选固定 ID；1.1 返回动态任务 | `POST /v1/rest/recommend` |
+| 自动 Rest Decision 1.1 | 后端返回一次性 `generated_task`；Apple 决定呈现 | `POST /v1/rest/evaluate` |
 | Day Reset | Session 本地运行 | `RestSessionControlling` |
 | Guided Drift | 否，纯本地 | `RestContentProvider` |
 | AI Wait Reset | 使用 Handoff Job 预计等待 | `POST/GET /v1/handoff/...` |
@@ -59,7 +73,8 @@ Photon 入站消息
 - iOS 主动入口。
 - macOS 菜单栏主动入口。
 - Name the Tiredness 最多两轮。
-- Rest Quest 固定库。
+- Contract 1.0 Manual Rest Quest 固定库。
+- Contract 1.1 Mode A / Mode B 的受控结构化动态任务。
 - Day Reset 会话与反馈。
 - Guided Drift 本地题库。
 - Photon 可收发的 Hush 消息身份。
@@ -97,7 +112,7 @@ Photon 入站消息
 - 系统级悬浮球。
 - 永久后台录音。
 - 复杂长期个性化模型。
-- 让 LLM 自由生成任意现实动作。
+- 除 Contract 1.1 Mode A / Mode B 的受控办公休息任务外，让 LLM 自由生成任意现实动作。
 
 ## 4. 安全与产品语言
 

@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CannedAgentLLM } from "../../src/agent/canned-llm.js";
+import { CannedRestDecisionProvider } from "../../src/agent/rest-decision-providers.js";
 import { RestService } from "../../src/application/rest/rest-service.js";
 import { FileRestContentRepository } from "../../src/content/file-rest-content-repository.js";
 import type {
   ProviderCallOptions,
+  DynamicRestDecisionCandidate,
   ProviderHealth,
   RestDecisionCandidate,
   RestDecisionContext,
@@ -64,6 +66,36 @@ describe("Rest Decision timeout", () => {
     expect(provider.completed).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("does not apply the legacy 3500ms deadline to Contract 1.1", async () => {
+    vi.useFakeTimers();
+    const provider = new SlightlyLateDynamicProvider();
+    const content = new FileRestContentRepository();
+    const service = new RestService(
+      new CannedAgentLLM(),
+      content,
+      new InMemoryFeedbackRepository(),
+      new InMemoryIdempotencyStore<unknown>(),
+      new CannedRestDecisionProvider(content),
+      { dynamicDecisionProvider: provider }
+    );
+    const result = service.evaluate(
+      usagePayload(),
+      "req_decision_timeout",
+      { contractVersion: "1.1" }
+    );
+    await provider.waitUntilStarted();
+
+    await vi.advanceTimersByTimeAsync(3_501);
+
+    await expect(result).resolves.toMatchObject({
+      schema_version: "1.1",
+      should_offer_rest: false,
+      generated_task: null
+    });
+    expect(provider.signal?.aborted).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 function createService(
@@ -116,6 +148,50 @@ class SlightlyLateProvider implements RestDecisionProvider {
         { once: true }
       );
     });
+  }
+
+  waitUntilStarted(): Promise<void> {
+    return this.started.promise;
+  }
+}
+
+class SlightlyLateDynamicProvider
+  implements RestDecisionProvider<DynamicRestDecisionCandidate>
+{
+  readonly dataOrigin = "real" as const;
+  private readonly started = deferred<void>();
+  signal: AbortSignal | undefined;
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async decide(
+    _context: RestDecisionContext,
+    options?: ProviderCallOptions
+  ): Promise<DynamicRestDecisionCandidate> {
+    this.signal = options?.signal;
+    this.started.resolve();
+    return new Promise<DynamicRestDecisionCandidate>(
+      (resolve, reject) => {
+        const timer = setTimeout(() => {
+          resolve({
+            shouldOfferRest: false,
+            reasonCode: "insufficient_signal",
+            message: "先照着现在的节奏继续，我在这里陪你。",
+            generatedTask: null
+          });
+        }, 3_501);
+        options?.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(options.signal?.reason);
+          },
+          { once: true }
+        );
+      }
+    );
   }
 
   waitUntilStarted(): Promise<void> {

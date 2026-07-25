@@ -1,28 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RestSuggestion",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "request_id",
-    "should_offer_rest",
-    "reason_code",
-    "message",
-    "actions"
+  "oneOf": [
+    {
+      "$ref": "#/$defs/restSuggestionV1"
+    },
+    {
+      "$ref": "#/$defs/restSuggestionV1_1"
+    }
   ],
-  "properties": {
-    "schema_version": {
-      "type": "string",
-      "const": "1.0"
-    },
-    "request_id": {
-      "type": "string"
-    },
-    "should_offer_rest": {
-      "type": "boolean"
-    },
-    "reason_code": {
+  "$defs": {
+    "reasonCode": {
       "type": "string",
       "enum": [
         "long_continuous_use",
@@ -34,27 +22,163 @@
         "insufficient_signal"
       ]
     },
-    "message": {
-      "type": "string",
-      "maxLength": 240
-    },
-    "default_quest_id": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "actions": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "enum": [
-          "start_rest_session",
-          "open_check_in",
-          "remind_later",
-          "dismiss"
-        ]
+    "generatedRestTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "duration_seconds",
+        "steps"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "duration_seconds": {
+          "type": "integer"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
+    },
+    "restSuggestionV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "should_offer_rest",
+        "reason_code",
+        "message",
+        "actions"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1.0"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "should_offer_rest": {
+          "type": "boolean"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/reasonCode"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "default_quest_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "start_rest_session",
+              "open_check_in",
+              "remind_later",
+              "dismiss"
+            ]
+          }
+        }
+      }
+    },
+    "restSuggestionV1_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "should_offer_rest",
+        "reason_code",
+        "message",
+        "generated_task",
+        "default_quest_id",
+        "actions"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1.1"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "should_offer_rest": {
+          "type": "boolean"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/reasonCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "generated_task": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/generatedRestTask"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default_quest_id": {
+          "type": "null",
+          "deprecated": true,
+          "description": "Deprecated compatibility field. Contract 1.1 always returns null."
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "start_rest_session",
+              "remind_later",
+              "dismiss"
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "should_offer_rest": {
+                "const": true
+              }
+            },
+            "required": [
+              "should_offer_rest"
+            ]
+          },
+          "then": {
+            "properties": {
+              "generated_task": {
+                "$ref": "#/$defs/generatedRestTask"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "generated_task": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

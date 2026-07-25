@@ -2,13 +2,19 @@ import { CannedAgentLLM } from "./agent/canned-llm.js";
 import { ClaudeAgentLLM } from "./agent/claude-llm.js";
 import { ResilientAgentLLM } from "./agent/resilient-llm.js";
 import {
+  CannedDynamicRestDecisionProvider,
   CannedRestDecisionProvider,
+  UnavailableDynamicRestDecisionProvider,
   UnavailableRestDecisionProvider
 } from "./agent/rest-decision-providers.js";
+import {
+  DynamicRestDecisionProvider
+} from "./agent/rest-decision/dynamic-rest-decision-provider.js";
 import {
   AnthropicRestDecisionModelClient,
   RealRestDecisionProvider
 } from "./agent/rest-decision/real-rest-decision-provider.js";
+import { StepFunRestDecisionClient } from "./agent/rest-decision/stepfun-rest-decision-client.js";
 import type { ServerDependencies } from "./api/create-server.js";
 import { HandoffService } from "./application/handoff/handoff-service.js";
 import { UnifiedInboxService } from "./application/inbox/unified-inbox-service.js";
@@ -24,6 +30,8 @@ import {
 import {
   type AgentLLM,
   type DataOrigin,
+  type DynamicManualRestProvider,
+  type DynamicRestDecisionCandidate,
   type HandoffCompletionSink,
   type MailProvider,
   type MessagingChannel,
@@ -48,6 +56,10 @@ export interface ServerCompositionOverrides {
   demoAgent?: AgentLLM;
   normalRestDecisionProvider?: RestDecisionProvider;
   demoRestDecisionProvider?: RestDecisionProvider;
+  normalDynamicRestDecisionProvider?: RestDecisionProvider<DynamicRestDecisionCandidate>;
+  demoDynamicRestDecisionProvider?: RestDecisionProvider<DynamicRestDecisionCandidate>;
+  normalDynamicManualRestProvider?: DynamicManualRestProvider;
+  demoDynamicManualRestProvider?: DynamicManualRestProvider;
   normalInboxProvider?: UnifiedInboxProvider;
   demoInboxProvider?: UnifiedInboxProvider;
   realMail?: MailProvider;
@@ -82,6 +94,20 @@ export function buildServerDependencies(
   const demoRestDecisionProvider =
     overrides.demoRestDecisionProvider ??
     new CannedRestDecisionProvider(content);
+  const normalDynamicRestDecisionProvider =
+    overrides.normalDynamicRestDecisionProvider ??
+    createDynamicRestDecisionProvider(config);
+  const demoDynamicRestDecisionProvider =
+    overrides.demoDynamicRestDecisionProvider ??
+    new CannedDynamicRestDecisionProvider();
+  const normalDynamicManualRestProvider =
+    overrides.normalDynamicManualRestProvider ??
+    asDynamicManualRestProvider(normalDynamicRestDecisionProvider) ??
+    new UnavailableDynamicRestDecisionProvider();
+  const demoDynamicManualRestProvider =
+    overrides.demoDynamicManualRestProvider ??
+    asDynamicManualRestProvider(demoDynamicRestDecisionProvider) ??
+    new CannedDynamicRestDecisionProvider();
   const normalInboxProvider =
     overrides.normalInboxProvider ??
     (config.HUSH_UNIFIED_INBOX_PROVIDER === "canned"
@@ -113,7 +139,12 @@ export function buildServerDependencies(
 
   return {
     config,
-    restDecisionOrigin: graphOrigin(normalRestDecisionProvider),
+    restDecisionOrigin: graphOrigin(normalDynamicRestDecisionProvider),
+    manualRestOrigin: graphOrigin(normalDynamicManualRestProvider),
+    legacyRestDecisionOrigin: graphOrigin(normalRestDecisionProvider),
+    restDecisionHealth:
+      normalDynamicRestDecisionProvider.configurationHealth ??
+      "unknown",
     restOrigin: graphOrigin(realAgent),
     handoffOrigin: graphOrigin(realAgent, realMail, completionSink),
     demoRestOrigin: "mock",
@@ -142,7 +173,10 @@ export function buildServerDependencies(
       normalRestDecisionProvider,
       {
         llmTimeoutMs: config.LLM_TIMEOUT_MS,
-        restDecisionTimeoutMs: config.REST_DECISION_TIMEOUT_MS
+        restDecisionTimeoutMs: config.REST_DECISION_TIMEOUT_MS,
+        dynamicDecisionProvider: normalDynamicRestDecisionProvider,
+        dynamicManualRestProvider: normalDynamicManualRestProvider,
+        dynamicRestDecisionTimeoutMs: config.STEPFUN_TIMEOUT_MS
       }
     ),
     demoRest: new RestService(
@@ -153,7 +187,10 @@ export function buildServerDependencies(
       demoRestDecisionProvider,
       {
         llmTimeoutMs: config.LLM_TIMEOUT_MS,
-        restDecisionTimeoutMs: config.REST_DECISION_TIMEOUT_MS
+        restDecisionTimeoutMs: config.REST_DECISION_TIMEOUT_MS,
+        dynamicDecisionProvider: demoDynamicRestDecisionProvider,
+        dynamicManualRestProvider: demoDynamicManualRestProvider,
+        dynamicRestDecisionTimeoutMs: config.STEPFUN_TIMEOUT_MS
       }
     ),
     handoff: new HandoffService(
@@ -192,7 +229,7 @@ export function buildServerDependencies(
     ),
     providerHealth: async () => ({
       agent: await realAgent.health(),
-      rest_decision: await normalRestDecisionProvider.health(),
+      rest_decision: await normalDynamicRestDecisionProvider.health(),
       gmail: await realMail.health(),
       messaging_fallback: await messaging.health(),
       unified_inbox: await normalInboxProvider.health(),
@@ -200,6 +237,45 @@ export function buildServerDependencies(
       handoff_jobs: "ready"
     })
   };
+}
+
+function createDynamicRestDecisionProvider(
+  config: AppConfig
+): DynamicRestProvider {
+  if (config.HUSH_REST_DECISION_PROVIDER === "canned") {
+    return new CannedDynamicRestDecisionProvider();
+  }
+  if (config.HUSH_REST_DECISION_PROVIDER === "unavailable") {
+    return new UnavailableDynamicRestDecisionProvider();
+  }
+  if (
+    !config.STEPFUN_API_KEY ||
+    !config.STEPFUN_MODEL ||
+    !config.STEPFUN_BASE_URL
+  ) {
+    return new UnavailableDynamicRestDecisionProvider();
+  }
+  return new DynamicRestDecisionProvider(
+    new StepFunRestDecisionClient(
+      config.STEPFUN_API_KEY,
+      config.STEPFUN_BASE_URL
+    ),
+    config.STEPFUN_MODEL
+  );
+}
+
+type DynamicRestProvider =
+  RestDecisionProvider<DynamicRestDecisionCandidate> &
+  DynamicManualRestProvider;
+
+function asDynamicManualRestProvider(
+  provider: RestDecisionProvider<DynamicRestDecisionCandidate>
+): DynamicManualRestProvider | null {
+  return "generate" in provider &&
+    typeof provider.generate === "function"
+    ? (provider as RestDecisionProvider<DynamicRestDecisionCandidate> &
+        DynamicManualRestProvider)
+    : null;
 }
 
 function createRestDecisionProvider(

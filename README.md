@@ -26,7 +26,11 @@
 - `main` 永远能够在 Sample Mode 下完成主流程。
 - 公共契约、Xcode 工程文件、根依赖文件均有唯一 Owner。
 - 业务代码只依赖协议，不直接依赖 Gmail、Photon、Claude 或 DeviceActivity。
-- Rest Quest 与 Blue Box 内容来自固定 JSON；LLM 只能选择和组织，不能自由生成危险动作。
+- Contract 1.0、Guided Drift、Blue Box 与未迁移的本地流程继续使用固定 JSON。
+- Contract 1.1 Mode A 可由 StepFun 动态判断并生成一次性办公休息任务；
+  Contract 1.1 Mode B 在用户已选择休息后动态生成任务。Mode C 不生成休息
+  任务。两个动态模式都不能控制设备、通知、Shield、Lockdown、checkpoint、
+  邮件或消息；Sleep Handoff 不属于该动态任务例外。
 
 ## 当前包的性质
 
@@ -42,3 +46,7 @@ Real Rest Decision Provider 已实现，并通过独立的 Normal/Demo 组合图
 Prompt、严格结构化输出、失败行为和凭据化 HTTPS staging 交接见
 `docs/19_REAL_REST_DECISION_AGENT.md`。模型不能控制 Shield、通知、actions
 或下一 checkpoint。
+
+Contract 1.1 的 StepFun 动态任务、双版本协商、Apple 映射和 staging 配置见
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`。Contract 1.0 的固定 Quest
+链路继续兼容。

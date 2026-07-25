@@ -1,5 +1,21 @@
 # Apple Client Integration Kit
 
+## Contract 1.1 Rest Decision addendum
+
+`POST /v1/rest/evaluate` and `POST /v1/rest/recommend` support 1.1. The
+upgraded DeviceActivity, Mac App, and Mac website clients use Mode A for
+dynamic true/false evaluation; shared manual rest uses Mode B after the user
+has already chosen to rest. Both wait up to 35 seconds, decode
+`generated_task`, and never resolve `default_quest_id`. Mode A `false` may
+carry a non-empty companion message but creates no notification, task,
+Shield, or Lockdown. Mode A `true` and every successful Mode B response
+require a generated task. Apple retains all presentation and device-control
+authority.
+
+The remaining examples in this kit are Contract 1.0 unless explicitly
+labelled otherwise. The complete 1.1 mapping and M1 checklist are in
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`.
+
 Status: Contract v1 (`1.0`) frozen.  
 Audience: M1/M2 Apple client developers and W1 integration owner.
 
@@ -379,6 +395,9 @@ the live runtime rules described in this document.
 | `/v1/rest/feedback` | 5 s |
 | `/v1/handoff/start` | 5 s |
 | `/v1/handoff/{jobId}` | 5 s |
+
+The `/v1/rest/recommend` value above is the Contract 1.0 legacy timeout.
+Contract 1.1 Mode B uses the shared 35-second dynamic-task timeout.
 
 Retry:
 

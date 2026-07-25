@@ -199,9 +199,20 @@ This staging configuration selects the normal Canned graph:
 - no Claude or OpenAI key is required;
 - no email or external message is sent.
 
-Real Provider deployment is outside this staging path. If approved later,
-follow `docs/19_REAL_REST_DECISION_AGENT.md` and enter credentials only in
-the provider's secret store.
+Contract 1.1 StepFun Real deployment uses the same service and requires the
+following values in Zeabur's secret/config store:
+
+```text
+HUSH_REST_DECISION_PROVIDER=real
+STEPFUN_API_KEY=<secret>
+STEPFUN_BASE_URL=https://api.stepfun.com/v1
+STEPFUN_MODEL=<explicit account-enabled model>
+STEPFUN_TIMEOUT_MS=30000
+```
+
+Do not infer model availability from the example in `.env.example`. Contract
+1.0 Real still follows `docs/19_REAL_REST_DECISION_AGENT.md`; Contract 1.1
+follows `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`.
 
 Never place `HUSH_DEMO_TOKEN`, model keys, OAuth tokens, Gmail/Photon
 credentials, SMTP credentials, webhook secrets, or registry credentials in:
@@ -253,7 +264,8 @@ Expected:
 - valid public TLS certificate;
 - no certificate warning or redirect loop;
 - HTTP 200;
-- JSON `{"status":"ok","contract_version":"1.0"}`;
+- JSON with `status=ok`, `contract_version=1.0`, and provider-neutral
+  `providers.rest_decision=ready|unavailable`;
 - `X-Request-ID`;
 - `X-Contract-Version: 1.0`;
 - `X-Hush-Data-Origin`;

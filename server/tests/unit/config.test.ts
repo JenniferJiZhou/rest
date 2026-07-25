@@ -23,21 +23,20 @@ describe("server listener configuration", () => {
     expect(config.HUSH_REST_DECISION_PROVIDER).toBe("unavailable");
   });
 
-  it("accepts real Rest Decision configuration with a bounded default timeout", () => {
+  it("accepts real dynamic Rest Decision configuration with StepFun defaults", () => {
     const config = loadConfig({
       NODE_ENV: "test",
       HUSH_REST_DECISION_PROVIDER: "real",
-      CLAUDE_API_KEY: "not-used-in-test",
-      REST_DECISION_MODEL: "claude-test-model",
-      CLAUDE_BASE_URL: "https://model.example.test",
+      STEPFUN_API_KEY: "not-used-in-test",
+      STEPFUN_MODEL: "step-3.7-flash",
       LOG_LEVEL: "silent"
     });
 
     expect(config).toMatchObject({
       HUSH_REST_DECISION_PROVIDER: "real",
-      REST_DECISION_MODEL: "claude-test-model",
-      CLAUDE_BASE_URL: "https://model.example.test",
-      REST_DECISION_TIMEOUT_MS: 3500
+      STEPFUN_BASE_URL: "https://api.stepfun.com/v1",
+      STEPFUN_MODEL: "step-3.7-flash",
+      STEPFUN_TIMEOUT_MS: 30_000
     });
   });
 
@@ -73,6 +72,8 @@ describe("server listener configuration", () => {
     ["LLM_TIMEOUT_MS", "0"],
     ["REST_DECISION_TIMEOUT_MS", "499"],
     ["REST_DECISION_TIMEOUT_MS", "4501"],
+    ["STEPFUN_TIMEOUT_MS", "499"],
+    ["STEPFUN_TIMEOUT_MS", "120001"],
     ["MAIL_FETCH_TIMEOUT_MS", "-1"],
     ["DRAFT_CREATE_TIMEOUT_MS", "NaN"],
     ["COMPLETION_SEND_TIMEOUT_MS", "120001"]

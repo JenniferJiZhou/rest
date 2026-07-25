@@ -200,6 +200,86 @@ describe("HTTP Contract v1 reconciliation", () => {
       }
     }
   );
+
+  it("negotiates Contract 1.1 manual rest without Quest fields", async () => {
+    const requestId = "req_manual_dynamic_http";
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/rest/recommend",
+      headers: {
+        ...baseHeaders(requestId),
+        "x-contract-version": "1.1"
+      },
+      payload: dynamicRecommendPayload(requestId)
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["x-request-id"]).toBe(requestId);
+    expect(response.headers["x-contract-version"]).toBe("1.1");
+    expect(response.headers["x-hush-data-origin"]).toBe("mock");
+    expect(response.json()).toMatchObject({
+      schema_version: "1.1",
+      request_id: requestId,
+      generated_task: {
+        title: expect.any(String),
+        duration_seconds: expect.any(Number),
+        steps: expect.any(Array)
+      },
+      default_quest_id: null,
+      actions: ["start_rest_session", "remind_later", "dismiss"]
+    });
+    expect(response.json()).not.toHaveProperty("quest_id");
+  });
+
+  it("rejects mismatched Header and body versions for manual rest", async () => {
+    const requestId = "req_manual_version_mismatch";
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/rest/recommend",
+      headers: {
+        ...baseHeaders(requestId),
+        "x-contract-version": "1.1"
+      },
+      payload: recommendPayload(requestId)
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers["x-contract-version"]).toBe("1.1");
+    expect(response.json()).toMatchObject({
+      schema_version: "1.1",
+      request_id: requestId,
+      error: { code: "INVALID_REQUEST" }
+    });
+  });
+
+  it("uses request_id idempotency for Contract 1.1 manual rest", async () => {
+    const requestId = "req_manual_idempotency";
+    const headers = {
+      ...baseHeaders(requestId),
+      "x-contract-version": "1.1"
+    };
+    const first = await server.inject({
+      method: "POST",
+      url: "/v1/rest/recommend",
+      headers,
+      payload: dynamicRecommendPayload(requestId)
+    });
+    const changed = await server.inject({
+      method: "POST",
+      url: "/v1/rest/recommend",
+      headers,
+      payload: {
+        ...dynamicRecommendPayload(requestId),
+        available_minutes: 4
+      }
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(changed.statusCode).toBe(409);
+    expect(changed.json().error.details.reason).toBe(
+      "REQUEST_ID_REUSED"
+    );
+  });
 });
 
 function feedbackPayload(requestId: string) {
@@ -245,6 +325,19 @@ function recommendPayload(requestId: string) {
     location_tags: ["any"],
     excluded_quest_ids: [],
     allowed_quest_ids: ["look_far_01"]
+  };
+}
+
+function dynamicRecommendPayload(requestId: string) {
+  return {
+    schema_version: "1.1",
+    request_id: requestId,
+    session_id: `session_${requestId}`,
+    fatigue_type: "cognitive_overload",
+    user_preference: "quiet",
+    available_minutes: 2,
+    source: "manual_ios",
+    location_tags: ["desk"]
   };
 }
 

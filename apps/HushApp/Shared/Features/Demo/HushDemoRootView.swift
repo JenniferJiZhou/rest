@@ -5,9 +5,13 @@ struct HushDemoRootView: View {
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
     @State private var isShowingSettings = false
+    @State private var isGeneratingRestTask = false
+    @State private var companionMessage: String?
+    @State private var openedSuggestionMessage: String?
     private let onSettings: (() -> Void)?
     private let onCompanion: (() -> Void)?
     private let suggestedQuestID: String?
+    private let suggestedGeneratedTask: GeneratedRestTask?
     private let suggestionMessage: String?
     private let suggestionEventID: String?
 
@@ -18,18 +22,25 @@ struct HushDemoRootView: View {
         onSettings: (() -> Void)? = nil,
         onCompanion: (() -> Void)? = nil,
         suggestedQuestID: String? = nil,
+        suggestedGeneratedTask: GeneratedRestTask? = nil,
+        initialCompanionMessage: String? = nil,
         suggestionMessage: String? = nil,
         suggestionEventID: String? = nil
     ) {
         self.onSettings = onSettings
         self.onCompanion = onCompanion
         self.suggestedQuestID = suggestedQuestID
+        self.suggestedGeneratedTask = suggestedGeneratedTask
         self.suggestionMessage = suggestionMessage
         self.suggestionEventID = suggestionEventID
+        _companionMessage = State(
+            initialValue: initialCompanionMessage
+        )
         _store = StateObject(
             wrappedValue: HushDemoStore(
                 provider: provider,
-                initialQuestID: initialQuestID ?? suggestedQuestID
+                initialQuestID: initialQuestID ?? suggestedQuestID,
+                initialGeneratedRestTask: suggestedGeneratedTask
             )
         )
     }
@@ -39,19 +50,25 @@ struct HushDemoRootView: View {
             HushWaveBackground()
 
             if store.route == .door {
-                HushDoorView(
-                    taskText: agentTaskText,
-                    onOpenTask: store.openCurrentQuest,
-                    onSettings: {
-                        if let onSettings {
-                            onSettings()
-                        } else {
-                            isShowingSettings = true
-                        }
-                    },
-                    onOpenInbox: store.openInbox,
-                    onOpenCompanion: onCompanion
-                )
+                Group {
+                    if isGeneratingRestTask {
+                        HushRestTaskGeneratingView()
+                    } else {
+                        HushDoorView(
+                            taskText: agentTaskText,
+                            onOpenTask: openAgentTask,
+                            onSettings: {
+                                if let onSettings {
+                                    onSettings()
+                                } else {
+                                    isShowingSettings = true
+                                }
+                            },
+                            onOpenInbox: store.openInbox,
+                            onOpenCompanion: onCompanion
+                        )
+                    }
+                }
                 .transition(.opacity)
             } else if store.route == .inbox {
                 UnifiedInboxView(onClose: store.closeInbox)
@@ -103,7 +120,52 @@ struct HushDemoRootView: View {
             store.startSleepHandoff()
         }
         .onChange(of: suggestionEventID) { _, _ in
-            store.presentRestSuggestion(questID: suggestedQuestID)
+            companionMessage = nil
+            if let suggestedGeneratedTask {
+                store.presentRestSuggestion(task: suggestedGeneratedTask)
+            } else {
+                store.presentRestSuggestion(questID: suggestedQuestID)
+            }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .hushDynamicRestSuggestionOpened
+            )
+        ) { notification in
+            guard
+                let suggestion =
+                    notification.object as? HushDynamicRestSuggestion
+            else {
+                return
+            }
+            companionMessage = nil
+            openedSuggestionMessage = suggestion.message
+            store.presentRestSuggestion(task: suggestion.generatedTask)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .hushRestTaskGenerationStarted
+            )
+        ) { _ in
+            isGeneratingRestTask = true
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .hushRestTaskGenerationFinished
+            )
+        ) { _ in
+            isGeneratingRestTask = false
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .hushCompanionMessageUpdated
+            )
+        ) { notification in
+            let message = (notification.object as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            companionMessage = message?.isEmpty == false ? message : nil
+            openedSuggestionMessage = nil
+            store.clearGeneratedRestSuggestion()
         }
         .sheet(isPresented: $isShowingSettings) {
             HushSettingsView(
@@ -124,6 +186,13 @@ struct HushDemoRootView: View {
     }
 
     private var agentTaskText: String {
+        let openedMessage = openedSuggestionMessage?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if let openedMessage, !openedMessage.isEmpty {
+            return openedMessage
+        }
+
         if let suggestedQuestID,
            let quest = store.content.quests.first(
                where: { $0.id == suggestedQuestID }
@@ -139,7 +208,22 @@ struct HushDemoRootView: View {
             return trimmedMessage
         }
 
+        if let generatedRestTask = store.generatedRestTask {
+            return taskText(for: generatedRestTask.questContent)
+        }
+
+        if let companionMessage {
+            return companionMessage
+        }
+
         return taskText(for: store.currentQuest)
+    }
+
+    private func openAgentTask() {
+        guard companionMessage == nil || store.generatedRestTask != nil else {
+            return
+        }
+        store.openCurrentQuest()
     }
 
     private func taskText(for quest: HushQuestContent) -> String {
@@ -201,9 +285,12 @@ struct HushDemoRootView: View {
         case .quest:
             RestQuestView(
                 quest: store.currentQuest,
-                canSwap: store.content.quests.count > 1,
+                canSwap: store.generatedRestTask == nil
+                    && store.content.quests.count > 1,
                 onSwap: store.swapQuest,
-                onStart: store.startSession
+                onStart: store.startSession,
+                onRemindLater: generatedTaskRemindLaterAction,
+                onDismiss: generatedTaskDismissAction
             )
         case .session:
             DayResetView(
@@ -231,6 +318,35 @@ struct HushDemoRootView: View {
         case .inbox:
             EmptyView()
         }
+    }
+
+    private var generatedTaskRemindLaterAction: (() -> Void)? {
+        guard store.generatedRestTask != nil else {
+            return nil
+        }
+        return { store.remindAboutGeneratedRestSuggestionLater() }
+    }
+
+    private var generatedTaskDismissAction: (() -> Void)? {
+        guard store.generatedRestTask != nil else {
+            return nil
+        }
+        return { store.dismissGeneratedRestSuggestion() }
+    }
+}
+
+private struct HushRestTaskGeneratingView: View {
+    var body: some View {
+        VStack(spacing: HushSpacing.md) {
+            ProgressView()
+                .tint(Color.white.opacity(0.72))
+            Text("Hush 正在为此刻留出一点空间……")
+                .font(HushType.body)
+                .foregroundStyle(Color.white.opacity(0.74))
+                .multilineTextAlignment(.center)
+        }
+        .padding(HushSpacing.xl)
+        .accessibilityElement(children: .combine)
     }
 }
 
