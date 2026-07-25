@@ -297,7 +297,11 @@ private struct UnifiedInboxRealView: View {
                             Button("保存修改") {
                                 Task { await model.updateDraft(content: draftText) }
                             }
-                            .disabled(draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(
+                                draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    || model.sendState == .unknown
+                                    || model.sendState == .sent
+                            )
                             Spacer()
                             sendControls
                         }

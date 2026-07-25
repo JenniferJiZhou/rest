@@ -91,6 +91,7 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
     private var selectedPresentationID: UUID?
     private var confirmationToken: String?
     private var reviewGeneration = 0
+    private var terminalSendStates: [String: UnifiedInboxSendState] = [:]
 
     init(client: any UnifiedInboxClient) {
         self.client = client
@@ -198,7 +199,8 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
         guard
             let presentationID = selectedPresentationID,
             let draftID = draftIDs[presentationID],
-            let version = draft?.version
+            let version = draft?.version,
+            terminalSendStates[draftID] == nil
         else { return }
         invalidateConfirmation()
         do {
@@ -271,9 +273,13 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
             )
             try accept(response.origin)
             switch response.value.status {
-            case .sent: sendState = .sent
+            case .sent:
+                terminalSendStates[draftID] = .sent
+                sendState = .sent
             case .failed: sendState = .failed("发送失败，请检查渠道状态后重试。")
-            case .unknown: sendState = .unknown
+            case .unknown:
+                terminalSendStates[draftID] = .unknown
+                sendState = .unknown
             }
         } catch UnifiedInboxAPIError.versionConflict {
             await refreshDraft(draftID)
@@ -281,6 +287,7 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
             _ = response
             sendState = .failed("服务器拒绝了发送请求。")
         } catch {
+            terminalSendStates[draftID] = .unknown
             sendState = .unknown
         }
     }
@@ -351,7 +358,15 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
     private func invalidateConfirmation() {
         reviewGeneration += 1
         confirmationToken = nil
-        sendState = .idle
+        if
+            let presentationID = selectedPresentationID,
+            let draftID = draftIDs[presentationID],
+            let terminalState = terminalSendStates[draftID]
+        {
+            sendState = terminalState
+        } else {
+            sendState = .idle
+        }
     }
 
     private static func mapItem(

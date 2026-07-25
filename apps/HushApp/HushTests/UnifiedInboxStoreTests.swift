@@ -87,9 +87,11 @@ final class UnifiedInboxStoreTests: XCTestCase {
         XCTAssertEqual(model.sendState, .unknown)
         XCTAssertEqual(client.sendCalls.count, 1)
         XCTAssertFalse(client.sendCalls[0].idempotencyKey.isEmpty)
+        await model.updateDraft(content: "must not unlock")
         model.beginReview()
         XCTAssertEqual(model.sendState, .unknown)
         XCTAssertEqual(client.sendCalls.count, 1)
+        XCTAssertTrue(client.draftUpdates.isEmpty)
     }
 
     func testDraftConflictRefreshesAndRequiresFreshReview() async {
@@ -184,6 +186,30 @@ final class UnifiedInboxStoreTests: XCTestCase {
         await model.sendConfirmedDraft()
 
         XCTAssertEqual(model.sendState, .failed("发送失败，请检查渠道状态后重试。"))
+    }
+
+    func testSentDraftCannotBeUnlockedByEditReloadOrReopen() async {
+        let client = configuredClient()
+        let model = UnifiedInboxViewModel(client: client)
+        await model.load()
+        let row = try! XCTUnwrap(model.items.first)
+        await model.open(row.id)
+        await model.loadDraft()
+        model.beginReview()
+        await model.requestConfirmation()
+        await model.sendConfirmedDraft()
+        XCTAssertEqual(model.sendState, .sent)
+
+        await model.updateDraft(content: "must not unlock")
+        await model.loadDraft()
+        model.closeItem()
+        await model.open(row.id)
+        await model.loadDraft()
+        model.beginReview()
+
+        XCTAssertEqual(model.sendState, .sent)
+        XCTAssertEqual(client.sendCalls.count, 1)
+        XCTAssertTrue(client.draftUpdates.isEmpty)
     }
 
     func testOpenRefreshesDetailFromServer() async {
