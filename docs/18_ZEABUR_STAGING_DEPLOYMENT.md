@@ -1,8 +1,19 @@
 # Zeabur HTTPS Staging Deployment
 
-Status: deployment-ready immutable container pipeline.
+Status: deployed and HTTPS smoke-tested.
 
-HTTPS staging URL: pending
+HTTPS staging URL:
+`https://hush-server-staging.preview.aliyun-zeabur.cn`
+
+Current immutable image:
+`ghcr.io/simon-byte-png/hush-server-staging:1938cc88d062ef3ece2547b384ec6085dbf7a20b`
+
+The current instance uses an existing ZeaburOS server in Alibaba Cloud
+Hangzhou. Creating this service did not add a payment method, but the existing
+server is separate from Zeabur's hosted Free Plan and can have its own renewal
+cost. The generated mainland-China preview domain required the account owner
+to complete identity verification; no identity data is stored in this
+repository.
 
 ## Why Zeabur
 
@@ -12,9 +23,12 @@ appropriate for controlled staging and Demo use, not an availability-critical
 production service.
 
 Zeabur can deploy a prebuilt public Docker/OCI image, inject environment
-variables, expose the image port, issue a free `*.zeabur.app` address, and
-manage HTTPS automatically. Hush already ships a repository-root multi-stage
-`Dockerfile`, so the Apple API and Contract do not need to change.
+variables, expose the image port, issue a managed address, and manage HTTPS
+automatically. Hosted regions commonly use `*.zeabur.app`. The current
+mainland-China ZeaburOS server issued
+`*.preview.aliyun-zeabur.cn` after identity verification. Hush already ships a
+repository-root multi-stage `Dockerfile`, so the Apple API and Contract do not
+need to change.
 
 Authoritative platform references:
 
@@ -127,27 +141,33 @@ Create one Zeabur project and add a **Docker Image** service:
 | Image | `ghcr.io/simon-byte-png/hush-server-staging:<full-git-commit-sha>` |
 | Container port | `3000` |
 | Replicas | `1` |
-| Domain | Free generated `*.zeabur.app` domain |
+| Domain | Platform-managed domain for the selected server/region |
 | Storage | None |
 | Start command | Leave blank; use image `CMD` |
 
 Keep one replica. Jobs, idempotency claims, draft state, and the Canned
 decision cache are process-local; multiple replicas would partition them.
 
-The Free Plan auto-sleeps and has no SLA. Before a Demo, call `/v1/health`
-until it returns HTTP 200, then run the full smoke test. Do not treat the first
-cold request as an Agent timeout measurement.
+Hosted Free Plan services auto-sleep and have no SLA. The current deployment
+uses an existing ZeaburOS server instead. In either case, call `/v1/health`
+until it returns HTTP 200 before a Demo, then run the full smoke test. Do not
+treat an initial image pull or cold request as an Agent timeout measurement.
+
+For a mainland-China ZeaburOS server, Zeabur shows a compliance notice before
+public-domain binding. The account owner must complete the required identity
+verification. Never put identity details in source, logs, or a support
+message.
 
 ## Environment variables
 
-Generate the Zeabur domain first. Copy `deploy/zeabur.env.example`, replace
-the placeholder with the exact root HTTPS origin, and enter:
+Generate the Zeabur domain first. Copy `deploy/zeabur.env.example`, use the
+exact root HTTPS origin, and enter:
 
 ```text
 NODE_ENV=production
 HOST=0.0.0.0
 TRUST_PROXY=true
-PUBLIC_BASE_URL=https://<zeabur-public-address>
+PUBLIC_BASE_URL=https://hush-server-staging.preview.aliyun-zeabur.cn
 HUSH_REST_DECISION_PROVIDER=canned
 HUSH_DEMO_MODE=false
 LOG_LEVEL=info
@@ -194,7 +214,7 @@ credentials, SMTP credentials, webhook secrets, or registry credentials in:
 4. In Zeabur, create project `hush-staging`.
 5. Add a Docker Image service using the immutable SHA image.
 6. Leave the image command unchanged and expose port 3000.
-7. Add a free generated domain to port 3000.
+7. Add the region-appropriate managed domain to port 3000.
 8. Copy the final HTTPS origin into `PUBLIC_BASE_URL`.
 9. Add the remaining Canned staging environment variables.
 10. Redeploy and wait for the single service instance to be healthy.
@@ -212,7 +232,7 @@ the immutable image published from the merge commit on `main`.
 Set only the root origin:
 
 ```bash
-BASE_URL="https://<zeabur-public-address>"
+BASE_URL="https://hush-server-staging.preview.aliyun-zeabur.cn"
 curl -i "$BASE_URL/v1/health"
 ```
 
@@ -232,7 +252,7 @@ Run the checked-in staging smoke tool:
 
 ```powershell
 .\scripts\smoke-https-staging.ps1 `
-  -BaseUrl "https://<zeabur-public-address>" `
+  -BaseUrl "https://hush-server-staging.preview.aliyun-zeabur.cn" `
   -Mode Https `
   -ExpectedStatus 200 `
   -ExpectedDataOrigin mock
@@ -245,7 +265,7 @@ origin. It never contacts a URL unless `BaseUrl` is explicitly supplied.
 Give the Apple Owner only the root HTTPS Base URL:
 
 ```text
-https://<zeabur-public-address>
+https://hush-server-staging.preview.aliyun-zeabur.cn
 ```
 
 Do not append `/v1/rest/evaluate`; the Apple client appends the path.
@@ -289,6 +309,27 @@ Rollback:
 
 Do not disable certificate validation, add an Apple ATS exception, or replace
 the HTTPS origin with HTTP.
+
+## Current staging verification
+
+The service was verified on 2026-07-25 after the final
+`PUBLIC_BASE_URL` update and restart:
+
+- `GET /v1/health`: HTTP 200 with `status=ok` and Contract `1.0`;
+- TLS: public ZeroSSL certificate, hostname match, verification result `0`;
+- HTTP redirects once to HTTPS; HTTPS does not redirect;
+- HSTS: `max-age=31536000`;
+- `X-Request-ID` present;
+- `X-Contract-Version: 1.0`;
+- `X-Hush-Data-Origin: mock`;
+- iOS App checkpoint: HTTP 200 and matching request ID;
+- Mac App checkpoint: HTTP 200 and matching request ID;
+- Mac Website checkpoint: HTTP 200 and matching request ID;
+- all three decisions returned the required boolean, message, and
+  `default_quest_id`.
+
+The Rest Decision Provider is Canned/Mock. No Demo Token, model key, registry
+credential, or `PORT` environment variable is configured.
 
 After any restart or image update, verify health before using old Job IDs.
 Process-local Jobs and idempotency state do not survive restarts.

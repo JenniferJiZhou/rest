@@ -1,8 +1,7 @@
 # Apple Rest Decision HTTPS Handoff
 
-Status: phase 1 protocol and HTTPS deployment readiness are complete. The
-actual HTTPS staging URL has not been created, and Apple iPhone/Mac device
-verification remains manual.
+Status: Canned/Mock HTTPS staging is deployed and the three checkpoint shapes
+pass remote smoke tests. Apple iPhone/Mac device verification remains manual.
 Owner: W1 / P2 -> Apple Owner
 
 ## Runtime matrix
@@ -66,7 +65,7 @@ checkpoint.
 Apple configures the platform-provided root HTTPS Base URL:
 
 ```text
-https://<deployed-origin>
+https://hush-server-staging.preview.aliyun-zeabur.cn
 ```
 
 The Base URL does not include `/v1/rest/evaluate`; current Swift clients append
@@ -90,7 +89,11 @@ reminder. The backend does not control Shield and does not modify the next
 checkpoint.
 
 Canned staging returns `X-Hush-Data-Origin: mock`; it is not a Real Agent.
-The HTTPS staging URL remains pending.
+The current HTTPS staging root is:
+
+```text
+https://hush-server-staging.preview.aliyun-zeabur.cn
+```
 
 ## Configuration
 
@@ -111,9 +114,8 @@ Cloud staging:
 
 ```text
 HOST=0.0.0.0
-PORT=<platform-supplied>
 NODE_ENV=production
-PUBLIC_BASE_URL=https://<deployed-origin>
+PUBLIC_BASE_URL=https://hush-server-staging.preview.aliyun-zeabur.cn
 TRUST_PROXY=true
 HUSH_DEMO_MODE=false
 HUSH_REST_DECISION_PROVIDER=canned
@@ -123,6 +125,9 @@ Production requires an explicit public HTTPS `PUBLIC_BASE_URL`. Normal does
 not need a Demo Token. Set `HUSH_REST_DECISION_PROVIDER=unavailable` only for
 the immediate 503 failure-injection path; it does not call a network service.
 Normal Canned and Demo Canned both report origin `mock`.
+
+The current OCI image listens on port 3000. Zeabur maps its service port to
+that container port; no `PORT` environment variable is configured.
 
 Credentialed Real staging keeps the same HTTPS settings and uses:
 
@@ -170,14 +175,13 @@ curl.exe -i http://127.0.0.1:3000/v1/health
 HTTPS staging health:
 
 ```bash
-BASE_URL="https://<deployed-origin>"
+BASE_URL="https://hush-server-staging.preview.aliyun-zeabur.cn"
 curl -i "$BASE_URL/v1/health"
 ```
 
 Apple receives only the root Base URL and does not add an API path during
-configuration. Swift appends the endpoint path. The actual staging URL is
-pending. A trusted-LAN HTTP address such as
-`http://<windows-lan-ipv4>:3000` is only for manual smoke.
+configuration. Swift appends the endpoint path. A trusted-LAN HTTP address
+such as `http://<windows-lan-ipv4>:3000` is only for manual smoke.
 
 ## curl examples
 
@@ -292,16 +296,22 @@ The Apple Owner must:
 
 ## Manual remaining checks
 
-1. Publish the immutable GHCR image and create the Zeabur Docker Image
-   service.
-2. Obtain the real HTTPS staging URL.
-3. Run `/v1/health` against staging.
-4. Run all three checkpoint types against staging.
-5. Verify true, false, 503, timeout, and malformed JSON on iPhone and Mac.
-6. Confirm notifications and Shield remain entirely Apple-controlled.
-7. Run standard CI with Node 20.19.5 and pnpm 9.15.9.
-8. When Docker daemon is available, verify build, health, and SIGTERM.
-9. Configure credentials and run the implemented Real Provider staging
+Completed:
+
+1. Published immutable GHCR image
+   `1938cc88d062ef3ece2547b384ec6085dbf7a20b`.
+2. Created the Zeabur Docker Image service and managed HTTPS domain.
+3. Verified `/v1/health`, TLS, HSTS, request headers, and HTTP-to-HTTPS
+   redirect behavior.
+4. Verified iOS App, Mac App, and Mac Website checkpoint payloads remotely.
+
+Remaining manual/device checks:
+
+1. Verify true, false, 503, timeout, and malformed JSON on iPhone and Mac.
+2. Confirm notifications and Shield remain entirely Apple-controlled.
+3. Run standard CI with Node 20.19.5 and pnpm 9.15.9.
+4. When Docker daemon is available, verify build, health, and SIGTERM.
+5. Configure credentials and run the implemented Real Provider staging
    evaluation without logging model payloads or Secrets.
-10. Add production client authentication, abuse protection, and rate limiting
-    only through a later Contract Change.
+6. Add production client authentication, abuse protection, and rate limiting
+   only through a later Contract Change.
