@@ -822,6 +822,35 @@ private struct HushMacDashboardView: View {
             }
             .buttonStyle(.bordered)
 
+            #if DEBUG
+            Button {
+                model.sendImmediateCloudTest()
+            } label: {
+                if model.isSendingAgentRequest {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("正在请求云端…")
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    Label(
+                        "立即测试云端休息流程",
+                        systemImage: "bolt.horizontal.circle"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!model.canRunImmediateCloudTest)
+
+            Text(
+                "Debug：使用 manual_macos 立即请求云端；成功后发送可点击的测试通知。"
+            )
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.52))
+            #endif
+
             Button {
                 model.sendCurrentCheckpoint()
             } label: {

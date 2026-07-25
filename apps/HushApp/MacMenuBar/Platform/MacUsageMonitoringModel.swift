@@ -81,6 +81,63 @@ final class MacUsageMonitoringModel: ObservableObject {
             case recentFeedback = "recent_feedback"
             case rawAppNamesIncluded = "raw_app_names_included"
         }
+
+    }
+
+    private struct ImmediateCloudTestRequest: Encodable {
+        let schemaVersion = "1.0"
+        let requestID: String
+        let measuredAt: String
+        let platform = "macos"
+        let triggerSource = "manual_macos"
+        let continuousScreenMinutes: Int? = nil
+        let appSwitchesLast10Minutes: Int? = nil
+        let localHour: Int
+        let minutesSinceLastRest = 96
+        let selfReportedEnergy = 3
+        let recentFeedback: [String] = []
+        let rawAppNamesIncluded = false
+
+        enum CodingKeys: String, CodingKey {
+            case schemaVersion = "schema_version"
+            case requestID = "request_id"
+            case measuredAt = "measured_at"
+            case platform
+            case triggerSource = "trigger_source"
+            case continuousScreenMinutes = "continuous_screen_minutes"
+            case appSwitchesLast10Minutes =
+                "app_switches_last_10_minutes"
+            case localHour = "local_hour"
+            case minutesSinceLastRest = "minutes_since_last_rest"
+            case selfReportedEnergy = "self_reported_energy"
+            case recentFeedback = "recent_feedback"
+            case rawAppNamesIncluded = "raw_app_names_included"
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(schemaVersion, forKey: .schemaVersion)
+            try container.encode(requestID, forKey: .requestID)
+            try container.encode(measuredAt, forKey: .measuredAt)
+            try container.encode(platform, forKey: .platform)
+            try container.encode(triggerSource, forKey: .triggerSource)
+            try container.encodeNil(forKey: .continuousScreenMinutes)
+            try container.encodeNil(forKey: .appSwitchesLast10Minutes)
+            try container.encode(localHour, forKey: .localHour)
+            try container.encode(
+                minutesSinceLastRest,
+                forKey: .minutesSinceLastRest
+            )
+            try container.encode(
+                selfReportedEnergy,
+                forKey: .selfReportedEnergy
+            )
+            try container.encode(recentFeedback, forKey: .recentFeedback)
+            try container.encode(
+                rawAppNamesIncluded,
+                forKey: .rawAppNamesIncluded
+            )
+        }
     }
 
     private struct RestSuggestionResponse: Decodable {
@@ -240,6 +297,10 @@ final class MacUsageMonitoringModel: ObservableObject {
         return true
     }
 
+    var canRunImmediateCloudTest: Bool {
+        validAgentBaseURL != nil && !isSendingAgentRequest
+    }
+
     var currentApplicationIsWebsiteMonitoredBrowser: Bool {
         guard let bundleIdentifier = activeBundleIdentifier else {
             return false
@@ -394,6 +455,39 @@ final class MacUsageMonitoringModel: ObservableObject {
 
     func sendCurrentCheckpoint() {
         sendAgentCheckpoint(now: Date(), automatic: false)
+    }
+
+    func sendImmediateCloudTest() {
+        guard !isSendingAgentRequest else {
+            return
+        }
+        guard let baseURL = validAgentBaseURL else {
+            agentStatusMessage = "请填写有效的 HTTPS Agent 地址。"
+            return
+        }
+
+        let now = Date()
+        let requestID =
+            "req_mac_manual_\(UUID().uuidString.lowercased())"
+        let payload = ImmediateCloudTestRequest(
+            requestID: requestID,
+            measuredAt: ISO8601DateFormatter().string(from: now),
+            localHour: Calendar.current.component(.hour, from: now)
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let body = try? encoder.encode(payload) else {
+            agentStatusMessage = "无法生成快速测试请求。"
+            return
+        }
+
+        lastRequestJSON = String(data: body, encoding: .utf8)
+        submitAgentRequest(
+            body: body,
+            requestID: requestID,
+            baseURL: baseURL,
+            statusMessage: "正在请求云端快速测试…"
+        )
     }
 
     func icon(for application: ApplicationIdentity) -> NSImage {
@@ -761,9 +855,23 @@ final class MacUsageMonitoringModel: ObservableObject {
         }
 
         lastRequestJSON = String(data: body, encoding: .utf8)
-        agentStatusMessage = automatic
-            ? "已到 5 分钟检查点，正在请求 Agent…"
-            : "正在发送测试检查点…"
+        submitAgentRequest(
+            body: body,
+            requestID: requestID,
+            baseURL: baseURL,
+            statusMessage: automatic
+                ? "已到 5 分钟检查点，正在请求 Agent…"
+                : "正在发送测试检查点…"
+        )
+    }
+
+    private func submitAgentRequest(
+        body: Data,
+        requestID: String,
+        baseURL: URL,
+        statusMessage: String
+    ) {
+        agentStatusMessage = statusMessage
         isSendingAgentRequest = true
 
         let endpoint = baseURL
@@ -772,7 +880,7 @@ final class MacUsageMonitoringModel: ObservableObject {
             .appendingPathComponent("evaluate")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 5
+        request.timeoutInterval = 30
         request.httpBody = body
         request.setValue(
             "application/json",

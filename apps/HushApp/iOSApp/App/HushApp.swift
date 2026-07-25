@@ -17,6 +17,8 @@ struct HushApp: App {
 private struct HushPhoneRootView: View {
     @State private var isShowingCompanion = false
     @State private var isShowingSettings = false
+    @State private var restSuggestion =
+        HushIOSRestSuggestionRouting.lastOpenedSuggestion()
 
     var body: some View {
         HushDemoRootView(
@@ -25,7 +27,10 @@ private struct HushPhoneRootView: View {
             },
             onCompanion: {
                 isShowingCompanion = true
-            }
+            },
+            suggestedQuestID: restSuggestion?.questID,
+            suggestionMessage: restSuggestion?.message,
+            suggestionEventID: restSuggestion?.requestID
         )
         .sheet(isPresented: $isShowingSettings) {
             HushSettingsView()
@@ -34,6 +39,15 @@ private struct HushPhoneRootView: View {
             HushAlwaysOnCompanionExperienceView {
                 isShowingCompanion = false
             }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .hushIOSRestSuggestionOpened
+            )
+        ) { notification in
+            restSuggestion =
+                notification.object as? HushIOSRestSuggestion
+                ?? HushIOSRestSuggestionRouting.lastOpenedSuggestion()
         }
     }
 }
@@ -1350,6 +1364,37 @@ private struct HushSettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+
+                    #if DEBUG
+                    Button {
+                        Task {
+                            await agentSettings.runImmediateCloudTest()
+                        }
+                    } label: {
+                        if agentSettings.isRunningImmediateCloudTest {
+                            HStack {
+                                ProgressView()
+                                Text("正在请求云端…")
+                            }
+                        } else {
+                            Label(
+                                "立即测试云端休息流程",
+                                systemImage: "bolt.horizontal.circle"
+                            )
+                        }
+                    }
+                    .disabled(
+                        !agentSettings.isConfigured
+                            || !notifications.isAuthorized
+                            || agentSettings.isRunningImmediateCloudTest
+                    )
+
+                    Text(
+                        "Debug：使用 manual_ios 立即请求云端；成功后发送可点击的测试通知。"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    #endif
 
                     Text(monitoring.monitoringStatusMessage)
                         .foregroundStyle(.secondary)
