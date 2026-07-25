@@ -18,7 +18,52 @@
 
 ---
 
-### Task 1: Contract 1.1 Companion Prompt Rules
+### Task 1: PowerShell Smoke Transport Portability
+
+**Files:**
+- Modify: `scripts/smoke-dynamic-rest-decision.ps1`
+- Modify: `scripts/smoke-https-staging.ps1`
+- Test: `server/tests/integration/dynamic-rest-decision-smoke.test.ts`
+- Test: `server/tests/integration/smoke-script.test.ts`
+
+**Interfaces:**
+- Consumes: loopback HTTP servers created by the existing Vitest suites.
+- Produces: cookie-free `HttpClient` instances that behave consistently on Windows and sandboxed macOS PowerShell.
+
+- [ ] **Step 1: Record the existing failing smoke tests**
+
+Run: `pnpm --dir server vitest run tests/integration/dynamic-rest-decision-smoke.test.ts tests/integration/smoke-script.test.ts`
+
+Expected on the affected macOS environment: five local-request cases FAIL because `System.Net.CookieContainer` throws `GetDomainName: -1`; argument-validation cases PASS.
+
+- [ ] **Step 2: Disable unused cookie handling at client construction**
+
+Replace each direct client construction with:
+
+```powershell
+$handler = [System.Net.Http.HttpClientHandler]::new()
+$handler.UseCookies = $false
+$client = [System.Net.Http.HttpClient]::new($handler)
+```
+
+Dispose both `$client` and `$handler` in the scripts' existing outer cleanup. Do not alter URL validation, headers, payloads, timeout behavior, or response assertions.
+
+- [ ] **Step 3: Re-run both smoke suites**
+
+Run: `pnpm --dir server vitest run tests/integration/dynamic-rest-decision-smoke.test.ts tests/integration/smoke-script.test.ts`
+
+Expected: 12/12 tests PASS.
+
+- [ ] **Step 4: Commit the cross-platform transport fix**
+
+```bash
+git add scripts/smoke-dynamic-rest-decision.ps1 scripts/smoke-https-staging.ps1
+git commit -m "fix(smoke): disable unused PowerShell cookies"
+```
+
+---
+
+### Task 2: Contract 1.1 Companion Prompt Rules
 
 **Files:**
 - Modify: `server/tests/unit/rest-decision-prompt.test.ts`
@@ -82,7 +127,7 @@ git commit -m "feat(rest): align dynamic prompt with companion voice"
 
 ---
 
-### Task 2: Environment-selected Container Health Port
+### Task 3: Environment-selected Container Health Port
 
 **Files:**
 - Modify: `server/tests/unit/deployment-artifacts.test.ts`
@@ -141,13 +186,13 @@ git commit -m "fix(deploy): follow runtime server port"
 
 ---
 
-### Task 3: Server Regression and Runtime Smoke
+### Task 4: Server Regression and Runtime Smoke
 
 **Files:**
 - Verify only; no expected source changes.
 
 **Interfaces:**
-- Consumes: Tasks 1-2.
+- Consumes: Tasks 1-3.
 - Produces: evidence that canned mode works without credentials and real providers remain environment-configurable.
 
 - [ ] **Step 1: Run the complete server gate**
@@ -177,4 +222,3 @@ Expected: valid Contract 1.1 JSON; no StepFun key is required in canned mode.
 - [ ] **Step 4: Record the server verification**
 
 Add the exact commands and results to the final handoff; do not commit generated logs.
-
