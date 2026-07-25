@@ -190,6 +190,39 @@ final class UnifiedInboxAPIClientTests: XCTestCase {
         }
     }
 
+    func testSendDoesNotFollowRedirectAndReplayRequest() async throws {
+        let recorder = RequestRecorder()
+        StubURLProtocol.handler = { request in
+            recorder.append(request)
+            if recorder.requests.count == 1 {
+                return try Self.response(
+                    for: request,
+                    statusCode: 307,
+                    origin: "real",
+                    additionalHeaders: [
+                        "Location": "https://inbox.example.com/redirected-send"
+                    ],
+                    body: Data()
+                )
+            }
+            return try Self.successResponse(for: request, body: Self.sendResultJSON)
+        }
+        let client = try makeClient()
+
+        do {
+            _ = try await client.send(
+                draftID: "draft-1",
+                version: 5,
+                confirmationToken: "confirmation-token-value",
+                idempotencyKey: "send-action-idempotency-key"
+            )
+        } catch {
+            // A blocked redirect is surfaced to the caller as an ambiguous send outcome.
+        }
+
+        XCTAssertEqual(recorder.requests.count, 1)
+    }
+
     private var validToken: String {
         "app-token-000000000000000000000000"
     }
@@ -221,6 +254,7 @@ final class UnifiedInboxAPIClientTests: XCTestCase {
         for request: URLRequest,
         statusCode: Int,
         origin: String?,
+        additionalHeaders: [String: String] = [:],
         body: Data
     ) throws -> (HTTPURLResponse, Data) {
         var headers = [
@@ -230,6 +264,7 @@ final class UnifiedInboxAPIClientTests: XCTestCase {
         if let origin {
             headers["X-Hush-Data-Origin"] = origin
         }
+        headers.merge(additionalHeaders) { _, new in new }
         let response = try XCTUnwrap(
             HTTPURLResponse(
                 url: XCTUnwrap(request.url),
@@ -243,6 +278,10 @@ final class UnifiedInboxAPIClientTests: XCTestCase {
 
     private static let draftJSON = Data(
         #"{"id":"draft-1","inbox_item_id":"item-1","content":"Complete reply","content_type":"text","version":5,"origin":"user","status":"edited","provider_draft_id":null,"created_at":"2026-07-25T00:00:00Z","updated_at":"2026-07-25T00:01:00Z"}"#.utf8
+    )
+
+    private static let sendResultJSON = Data(
+        #"{"draft_id":"draft-1","provider":"feishu","status":"sent","provider_message_id":"provider-message","sent_at":"2026-07-25T00:02:00Z"}"#.utf8
     )
 }
 
@@ -295,6 +334,19 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
                 recordedRequest.httpBody = body
             }
             let (response, data) = try handler(recordedRequest)
+            if (300..<400).contains(response.statusCode),
+               let location = response.value(forHTTPHeaderField: "Location"),
+               let redirectURL = URL(string: location)
+            {
+                var redirectRequest = recordedRequest
+                redirectRequest.url = redirectURL
+                client?.urlProtocol(
+                    self,
+                    wasRedirectedTo: redirectRequest,
+                    redirectResponse: response
+                )
+                return
+            }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)

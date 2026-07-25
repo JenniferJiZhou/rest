@@ -50,7 +50,11 @@ final class UnifiedInboxAPIClient: UnifiedInboxClient, @unchecked Sendable {
         appSession = UUID().uuidString + UUID().uuidString
         sessionConfiguration.urlCache = nil
         sessionConfiguration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        session = URLSession(configuration: sessionConfiguration)
+        session = URLSession(
+            configuration: sessionConfiguration,
+            delegate: UnifiedInboxNoRedirectDelegate.shared,
+            delegateQueue: nil
+        )
     }
 
     func syncStatuses() async throws -> UnifiedInboxResponse<[InboxSyncStatusResponse]> {
@@ -220,6 +224,20 @@ final class UnifiedInboxAPIClient: UnifiedInboxClient, @unchecked Sendable {
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-._~")
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+    }
+}
+
+private final class UnifiedInboxNoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    static let shared = UnifiedInboxNoRedirectDelegate()
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
 
