@@ -31,7 +31,7 @@ private struct HushPhoneRootView: View {
             HushSettingsView()
         }
         .fullScreenCover(isPresented: $isShowingCompanion) {
-            HushAlwaysOnCompanionView {
+            HushAlwaysOnCompanionExperienceView {
                 isShowingCompanion = false
             }
         }
@@ -79,7 +79,7 @@ private struct HushPlaceholderView: View {
             HushSettingsView()
         }
         .fullScreenCover(isPresented: $isShowingCompanion) {
-            HushAlwaysOnCompanionView {
+            HushAlwaysOnCompanionExperienceView {
                 isShowingCompanion = false
             }
         }
@@ -300,12 +300,18 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
         case resting
     }
 
+    enum RestTriggerSource: Equatable {
+        case userInitiated
+        case agentInitiated
+    }
+
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var snapshot: HushCompanionSnapshot?
     @Published private(set) var restSeconds = 0
     @Published private(set) var connectionText = "正在寻找 Mac…"
     @Published private(set) var selectedQuest: HushQuestContent?
     @Published private(set) var suggestionIntro: String?
+    @Published private(set) var restTriggerSource: RestTriggerSource?
     @Published private(set) var agentErrorMessage: String?
     @Published private(set) var isRequestingManualRest = false
 
@@ -317,6 +323,7 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     private var latestSequenceBySession: [String: Int] = [:]
     private var handledDecisionIDs: Set<String> = []
     private var activeDecisionID: String?
+    private var firmHapticTask: Task<Void, Never>?
 
     init(
         agentService: any HushCompanionRestAgentServing =
@@ -366,12 +373,18 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
         case .connecting:
             return "保持 Hush 打开，正在接续 Mac 的真实工作计时。"
         case .working:
+            if
+                let message = snapshot?.latestDecision?.message
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                !message.isEmpty
+            {
+                return message
+            }
             return snapshot?.isMonitoring == true
-                ? "节奏平稳，Agent 会在 Mac 的检查点判断是否提醒。"
+                ? "我在这里陪你。需要停一停的时候，我会轻轻提醒你。"
                 : "Mac 已连接，等待开始关注一项工作。"
         case .restSuggested:
-            return suggestionIntro
-                ?? "如果方便，现在可以短暂离开屏幕。"
+            return suggestionIntro ?? "现在停一会儿正合适。"
         case .resting:
             return "不用赶时间，慢慢回来。"
         }
@@ -391,6 +404,8 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
         timer?.cancel()
         timer = nil
         transport.stop()
+        firmHapticTask?.cancel()
+        firmHapticTask = nil
         phase = .idle
         setScreenAwake(false)
     }
@@ -401,8 +416,7 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
 
     func requestManualRest() async {
         guard
-            let snapshot,
-            phase == .working,
+            phase == .working || phase == .connecting,
             !isRequestingManualRest
         else {
             return
@@ -410,45 +424,55 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
 
         isRequestingManualRest = true
         agentErrorMessage = nil
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         defer { isRequestingManualRest = false }
 
-        do {
-            let recommendation = try await agentService.recommendManualRest(
-                from: snapshot,
-                content: content
-            )
-            selectedQuest = recommendation.quest
-            suggestionIntro =
-                recommendation.intro
-                ?? "按你现在的节奏，先做一个短而明确的恢复动作。"
-            activeDecisionID = nil
-            phase = .restSuggested
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        } catch {
-            agentErrorMessage = error.localizedDescription
+        let fallbackQuest = content.quests.first ?? .emergencyFallback
+        activeDecisionID = nil
+        enterRest(
+            source: .userInitiated,
+            quest: fallbackQuest,
+            intro: userInitiatedRestIntro()
+        )
+
+        if let snapshot {
+            do {
+                let recommendation = try await agentService.recommendManualRest(
+                    from: snapshot,
+                    content: content
+                )
+                selectedQuest = recommendation.quest
+            } catch {
+                // A deliberate rest request should still work while the
+                // remote Agent is unavailable.
+                agentErrorMessage = nil
+            }
         }
     }
 
+    func acknowledgeRestTask() {
+        firmHapticTask?.cancel()
+        firmHapticTask = nil
+    }
+
+    // Kept for the legacy preview view below. The live experience enters the
+    // task directly and does not use a confirmation step.
     func beginRest() {
-        restSeconds = 0
         phase = .resting
-        sendCommand(.restStarted)
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
     func remindLater() {
-        sendCommand(.remindLater)
         clearSuggestion()
         phase = .working
     }
 
     func skipCurrentSuggestion() {
-        sendCommand(.suggestionDismissed)
         clearSuggestion()
         phase = .working
     }
 
     func finishRest() {
+        acknowledgeRestTask()
         sendCommand(.restCompleted)
         restSeconds = 0
         clearSuggestion()
@@ -512,12 +536,16 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
         }
 
         activeDecisionID = decision.id
-        selectedQuest = quest(id: decision.defaultQuestID)
-        suggestionIntro = decision.message
-        phase = .restSuggested
+        enterRest(
+            source: .agentInitiated,
+            quest: quest(id: decision.defaultQuestID),
+            intro: agentInitiatedRestIntro(
+                decision.message,
+                snapshot: snapshot
+            )
+        )
         if snapshot.interruptionMode == "firm" {
-            UINotificationFeedbackGenerator()
-                .notificationOccurred(.warning)
+            beginFirmHaptics()
         } else {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
@@ -562,7 +590,59 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     private func clearSuggestion() {
         selectedQuest = nil
         suggestionIntro = nil
+        restTriggerSource = nil
         activeDecisionID = nil
+    }
+
+    private func enterRest(
+        source: RestTriggerSource,
+        quest: HushQuestContent,
+        intro: String
+    ) {
+        restSeconds = 0
+        selectedQuest = quest
+        suggestionIntro = intro
+        restTriggerSource = source
+        phase = .resting
+        sendCommand(.restStarted)
+    }
+
+    private func userInitiatedRestIntro() -> String {
+        let options = [
+            "有点累啦？那就先停一下。",
+            "现在休息正合适呢。",
+            "想歇一会儿了？那就先照顾一下自己。"
+        ]
+        return options.randomElement() ?? "现在休息正合适呢。"
+    }
+
+    private func agentInitiatedRestIntro(
+        _ message: String,
+        snapshot: HushCompanionSnapshot
+    ) -> String {
+        let trimmed = message.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+
+        let minutes = max(1, snapshot.continuousScreenSeconds / 60)
+        return "这一段持续得有点久了，你已经在 \(snapshot.currentContext) 里忙了 \(minutes) 分钟。现在停一会儿正合适。"
+    }
+
+    private func beginFirmHaptics() {
+        firmHapticTask?.cancel()
+        firmHapticTask = Task { @MainActor [weak self] in
+            for _ in 0..<5 {
+                guard !Task.isCancelled, self?.phase == .resting else {
+                    return
+                }
+                UINotificationFeedbackGenerator()
+                    .notificationOccurred(.warning)
+                try? await Task.sleep(for: .milliseconds(850))
+            }
+        }
     }
 
     private func setScreenAwake(_ awake: Bool) {
@@ -573,6 +653,287 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
         let minutes = seconds / 60
         let remainder = seconds % 60
         return String(format: "%02d:%02d", minutes, remainder)
+    }
+}
+
+private struct HushAlwaysOnCompanionExperienceView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @StateObject private var model = HushAlwaysOnCompanionModel()
+    @State private var isShowingWorkDetails = false
+    @State private var exitProgress: CGFloat = 0
+    @State private var isCompletingExit = false
+    @State private var collapseTask: Task<Void, Never>?
+
+    let onClose: () -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                HushWaveBackground(revealProgress: exitProgress)
+
+                if model.phase == .resting {
+                    restTaskContent
+                        .padding(.horizontal, 30)
+                        .transition(.opacity)
+                } else if isShowingWorkDetails {
+                    workDetailsContent
+                        .padding(.horizontal, 24)
+                        .transition(.opacity)
+                } else {
+                    idleTimer
+                        .transition(.opacity)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                handleTap()
+            }
+            .onLongPressGesture(
+                minimumDuration: 0.7,
+                maximumDistance: 24
+            ) {
+                handleLongPress()
+            }
+            .simultaneousGesture(exitGesture(in: geometry.size))
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            guard model.phase == .idle else { return }
+            await model.start()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            model.refreshScreenAwake(isSceneActive: phase == .active)
+        }
+        .onDisappear {
+            collapseTask?.cancel()
+            model.stop()
+        }
+        .animation(.easeInOut(duration: 0.45), value: model.phase)
+        .animation(.easeInOut(duration: 0.35), value: isShowingWorkDetails)
+    }
+
+    private var idleTimer: some View {
+        VStack {
+            Text(model.formattedElapsed)
+                .font(.system(size: 15, weight: .light, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.38))
+                .contentTransition(.numericText())
+                .padding(.top, 12)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("已连续工作 \(model.formattedElapsed)")
+    }
+
+    private var workDetailsContent: some View {
+        VStack(spacing: 26) {
+            HStack(spacing: 7) {
+                Image(systemName: "laptopcomputer")
+                Text(model.connectionText)
+            }
+            .font(.caption)
+            .foregroundStyle(Color.white.opacity(0.52))
+
+            VStack(spacing: 9) {
+                Text(model.formattedElapsed)
+                    .font(
+                        .system(
+                            size: 78,
+                            weight: .ultraLight,
+                            design: .rounded
+                        )
+                        .monospacedDigit()
+                    )
+                    .contentTransition(.numericText())
+
+                Text("连续使用屏幕")
+                    .font(.subheadline)
+                    .tracking(1.4)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(model.statusText)
+                .font(.body)
+                .foregroundStyle(Color.white.opacity(0.78))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 330)
+
+            if let snapshot = model.snapshot {
+                Text(
+                    "\(snapshot.currentContext) · 当前 \(model.appContinuousMinutes) 分钟 · 今日 \(model.dailyMinutes) 分钟"
+                )
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(0.48))
+                .multilineTextAlignment(.center)
+            }
+
+            if model.isRequestingManualRest {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("正在准备一个休息任务…")
+                }
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(0.55))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var restTaskContent: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            if let intro = model.suggestionIntro {
+                HushCompanionTypewriterText(text: intro)
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let quest = model.selectedQuest {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(quest.title)
+                        .font(.title3.weight(.semibold))
+
+                    Text(quest.durationLabel)
+                        .font(.caption)
+                        .foregroundStyle(Color.white.opacity(0.5))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(
+                            Array(quest.steps.enumerated()),
+                            id: \.offset
+                        ) { index, step in
+                            Text("\(index + 1). \(step)")
+                        }
+                    }
+                    .font(.body)
+                    .foregroundStyle(Color.white.opacity(0.82))
+                }
+            }
+
+            Button("我休息好了") {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    model.finishRest()
+                    isShowingWorkDetails = false
+                }
+            }
+            .buttonStyle(HushCompanionPrimaryButtonStyle())
+        }
+        .frame(maxWidth: 420, maxHeight: .infinity, alignment: .center)
+        .onTapGesture {
+            model.acknowledgeRestTask()
+        }
+    }
+
+    private func exitGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard isValidExitDrag(value, in: size) else { return }
+                collapseTask?.cancel()
+                let distance = -value.translation.height
+                exitProgress = min(
+                    1,
+                    max(0, distance / (size.height * 0.58))
+                )
+            }
+            .onEnded { value in
+                guard isValidExitDrag(value, in: size) else { return }
+                let threshold = size.height * 0.25
+                if -value.translation.height >= threshold {
+                    completeExit()
+                } else {
+                    withAnimation(
+                        .easeOut(duration: reduceMotion ? 0.15 : 0.72)
+                    ) {
+                        exitProgress = 0
+                    }
+                }
+            }
+    }
+
+    private func isValidExitDrag(
+        _ value: DragGesture.Value,
+        in size: CGSize
+    ) -> Bool {
+        model.phase != .resting
+            && !isCompletingExit
+            && value.startLocation.y > size.height * 0.52
+            && value.translation.height < 0
+            && abs(value.translation.height) > abs(value.translation.width)
+    }
+
+    private func handleTap() {
+        guard !isCompletingExit else { return }
+        if model.phase == .resting {
+            model.acknowledgeRestTask()
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.35)) {
+            isShowingWorkDetails = true
+        }
+        scheduleCollapse()
+    }
+
+    private func handleLongPress() {
+        guard model.phase != .resting, !isCompletingExit else { return }
+        collapseTask?.cancel()
+        isShowingWorkDetails = true
+        Task {
+            await model.requestManualRest()
+        }
+    }
+
+    private func scheduleCollapse() {
+        collapseTask?.cancel()
+        collapseTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(9))
+            guard !Task.isCancelled, model.phase != .resting else { return }
+            withAnimation(.easeInOut(duration: 0.45)) {
+                isShowingWorkDetails = false
+            }
+        }
+    }
+
+    private func completeExit() {
+        isCompletingExit = true
+        collapseTask?.cancel()
+        let duration = reduceMotion ? 0.2 : 1.35
+        withAnimation(.easeInOut(duration: duration)) {
+            exitProgress = 1
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            model.stop()
+            onClose()
+        }
+    }
+}
+
+private struct HushCompanionTypewriterText: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visibleCharacterCount = 0
+
+    let text: String
+
+    var body: some View {
+        Text(String(text.prefix(visibleCharacterCount)))
+            .accessibilityLabel(text)
+            .task(id: text) {
+                visibleCharacterCount = reduceMotion ? text.count : 0
+                guard !reduceMotion, !text.isEmpty else { return }
+
+                for count in 1...text.count {
+                    guard !Task.isCancelled else { return }
+                    visibleCharacterCount = count
+                    try? await Task.sleep(for: .milliseconds(38))
+                }
+            }
     }
 }
 
