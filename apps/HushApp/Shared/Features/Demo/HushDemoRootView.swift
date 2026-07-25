@@ -289,12 +289,8 @@ struct HushDemoRootView: View {
                     && store.content.quests.count > 1,
                 onSwap: store.swapQuest,
                 onStart: store.startSession,
-                onRemindLater: store.generatedRestTask == nil
-                    ? nil
-                    : store.remindAboutGeneratedRestSuggestionLater,
-                onDismiss: store.generatedRestTask == nil
-                    ? nil
-                    : store.dismissGeneratedRestSuggestion
+                onRemindLater: generatedTaskRemindLaterAction,
+                onDismiss: generatedTaskDismissAction
             )
         case .session:
             DayResetView(
@@ -322,6 +318,20 @@ struct HushDemoRootView: View {
         case .inbox:
             EmptyView()
         }
+    }
+
+    private var generatedTaskRemindLaterAction: (() -> Void)? {
+        guard store.generatedRestTask != nil else {
+            return nil
+        }
+        return { store.remindAboutGeneratedRestSuggestionLater() }
+    }
+
+    private var generatedTaskDismissAction: (() -> Void)? {
+        guard store.generatedRestTask != nil else {
+            return nil
+        }
+        return { store.dismissGeneratedRestSuggestion() }
     }
 }
 

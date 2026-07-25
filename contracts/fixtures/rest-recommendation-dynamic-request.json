@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.1",
+  "request_id": "req_rest_recommend_dynamic_001",
+  "session_id": "session_rest_recommend_dynamic_001",
+  "fatigue_type": "cognitive_overload",
+  "user_preference": "quiet",
+  "available_minutes": 2,
+  "source": "manual_ios",
+  "location_tags": [
+    "desk"
+  ]
+}

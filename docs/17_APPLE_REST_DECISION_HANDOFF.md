@@ -15,6 +15,14 @@ The upgraded iOS DeviceActivity, Mac App, and Mac website clients now request
 - error/timeout/malformed response: ends generating, keeps the page usable,
   and does not fall back to a fixed Quest.
 
+User-initiated Mode B uses `POST /v1/rest/recommend` with Contract 1.1.
+The request omits content version and allowed/excluded Quest IDs because the
+user has already chosen to rest. The response has no `should_offer_rest`; it
+contains the same `GeneratedRestTask`, `default_quest_id=null`, and the three
+start/later/dismiss actions. The shared Apple client uses the configured
+HTTPS root, a 35-second timeout, and never falls back to a bundled Quest on
+failure. Legacy recommend Contract 1.0 remains available to old clients.
+
 The existing 1.0 handoff below remains valid for legacy clients. The canonical
 1.1 runbook is `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`.
 
@@ -31,14 +39,13 @@ Run from the repository root on macOS:
 
 ```bash
 xcodebuild -project apps/HushApp/Hush.xcodeproj \
-  -scheme HushMac -configuration Debug \
-  -destination 'platform=macOS' build
-xcodebuild -project apps/HushApp/Hush.xcodeproj \
   -scheme Hush -configuration Debug \
   -destination 'generic/platform=iOS Simulator' build
 xcodebuild -project apps/HushApp/Hush.xcodeproj \
+  -scheme HushMac -configuration Debug build
+xcodebuild -project apps/HushApp/Hush.xcodeproj \
   -scheme HushDeviceActivityMonitor -configuration Debug \
-  -destination 'generic/platform=iOS' build
+  -destination 'generic/platform=iOS Simulator' build
 ```
 
 M1 owns the iOS App/Extension and shared UI verification; M2 owns the Mac App
@@ -50,6 +57,7 @@ and Mac Website verification. For each applicable surface, test true, false,
 | true | notification opens generated title, ordered steps, and timer initialized from `duration_seconds`; remind later/dismiss work |
 | false | companion appears without notification, task navigation, Shield, or Lockdown |
 | 503/timeout/malformed | generating ends and no fixed Quest fallback or notification appears |
+| Mode B manual rest | generated title, ordered steps, and timer use the 1.1 recommend response; no fixed Quest lookup |
 | all results | checkpoint cadence and monitoring limits remain unchanged |
 
 Any Debug build failure, stuck generating state, fixed Quest lookup/fallback,

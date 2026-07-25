@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   fatigueReflectionSchema,
-  restQuestRecommendationSchema,
-  type FatigueCheckIn,
-  type RestQuest,
-  type RestRecommendationRequest
+  type FatigueCheckIn
 } from "../../src/domain/contracts.js";
-import type { RestDecisionContext } from "../../src/domain/ports.js";
+import type {
+  DynamicManualRestContext,
+  RestDecisionContext
+} from "../../src/domain/ports.js";
 import { routeRestAgentMode } from "../../src/agent/rest-mode-router.js";
 
 describe("Rest Agent mode router", () => {
@@ -33,18 +33,23 @@ describe("Rest Agent mode router", () => {
     expect(route.system).not.toContain("allowedQuestIds");
   });
 
-  it("routes Mode B to the fixed manual Quest prompt and schema", () => {
+  it("routes Mode B to dynamic manual task generation", () => {
     const route = routeRestAgentMode({
       mode: "manual_rest_quest",
-      request: manualRequest(),
-      allowedQuests: [quest()]
+      context: manualContext()
     });
+    const input = JSON.parse(route.input) as Record<string, unknown>;
 
-    expect(route.promptVersion).toBe("manual-rest-quest-v1.0");
-    expect(route.prompt).toContain(
-      "Select exactly one quest from the provided fixed library."
-    );
-    expect(route.outputSchema).toBe(restQuestRecommendationSchema);
+    expect(route.promptVersion).toBe("dynamic-manual-rest-v1.1");
+    expect(route.system).toContain("already chosen to rest");
+    expect(route.system).not.toContain("fixed library");
+    expect(route.outputSchema).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["message", "generatedTask"]
+    });
+    expect(input).not.toHaveProperty("allowedQuestIds");
+    expect(JSON.stringify(input)).not.toContain("quest_id");
   });
 
   it("routes Mode C to the fatigue reflection prompt and schema", () => {
@@ -71,7 +76,7 @@ function decisionContext(): RestDecisionContext {
       targetType: "app"
     },
     monitoredContext: {
-      userProvidedLabel: "写作",
+      userProvidedLabel: "writing",
       labelSource: "user",
       websiteDomain: null,
       rawAppIdentityAvailable: false,
@@ -96,36 +101,15 @@ function decisionContext(): RestDecisionContext {
   };
 }
 
-function manualRequest(): RestRecommendationRequest {
+function manualContext(): DynamicManualRestContext {
   return {
-    schema_version: "1.0",
-    request_id: "req_router_manual",
-    session_id: "session_router",
-    content_version: "1.0.0",
-    fatigue_type: "physical",
-    user_preference: "quiet",
-    available_minutes: 2,
+    requestId: "req_router_manual",
+    sessionId: "session_router",
+    fatigueType: "physical",
+    userPreference: "quiet",
+    availableMinutes: 2,
     source: "manual_ios",
-    location_tags: [],
-    excluded_quest_ids: [],
-    allowed_quest_ids: []
-  };
-}
-
-function quest(): RestQuest {
-  return {
-    id: "look_far_01",
-    content_version: "1.0.0",
-    title: "看远一点",
-    fatigue_types: ["physical"],
-    duration_seconds: 60,
-    energy_required: "very_low",
-    location_tags: ["any"],
-    time_tags: ["any"],
-    steps: ["看向远处"],
-    requires_screen: false,
-    safety_note: null,
-    anchor_compatible: true
+    locationTags: []
   };
 }
 
@@ -135,7 +119,7 @@ function fatigueRequest(): FatigueCheckIn {
     request_id: "req_router_fatigue",
     session_id: "session_router",
     source: "manual_ios",
-    description: "脑子有点转不动",
+    description: "My mind feels overloaded.",
     input_mode: "text",
     available_minutes: 2
   };

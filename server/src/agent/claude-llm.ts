@@ -1,14 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ZodError, type ZodType } from "zod";
 import {
+  restQuestRecommendationSchema,
   type FatigueCheckIn,
   type FatigueReflection,
   type RestQuest,
   type RestQuestRecommendation,
-  type RestRecommendationRequest
+  type RestRecommendationRequestV1
 } from "../domain/contracts.js";
 import { AppError } from "../domain/errors.js";
-import { routeRestAgentMode } from "./rest-mode-router.js";
+import {
+  buildLegacyManualRestQuestPrompt,
+  routeRestAgentMode
+} from "./rest-mode-router.js";
 import type {
   AgentLLM,
   DataOrigin,
@@ -72,18 +76,13 @@ export class ClaudeAgentLLM implements AgentLLM {
   }
 
   async chooseQuest(
-    input: RestRecommendationRequest,
+    input: RestRecommendationRequestV1,
     allowedQuests: RestQuest[],
     options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation> {
-    const route = routeRestAgentMode({
-      mode: "manual_rest_quest",
-      request: input,
-      allowedQuests
-    });
     return this.completeJson(
-      route.prompt,
-      route.outputSchema,
+      buildLegacyManualRestQuestPrompt(input, allowedQuests),
+      restQuestRecommendationSchema,
       options
     );
   }

@@ -72,8 +72,8 @@ corepack pnpm test:vertical
 corepack pnpm test:deployment
 ```
 
-`test:contracts` validates fixtures and local OpenAPI references. The current
-full suite contains 432 deterministic tests. W1-04
+`test:contracts` validates fixtures and local OpenAPI references. The
+full suite is deterministic. W1-04
 vertical-slice tests use real TCP/HTTP on a random `127.0.0.1` port and do not
 expose a stable development port.
 
@@ -82,8 +82,9 @@ expose a stable development port.
 - Without both `CLAUDE_API_KEY` and `CLAUDE_MODEL`, Agent calls use
   `CannedAgentLLM`. Canned output is Mock data; it is not real Claude output.
 - `HUSH_REST_DECISION_PROVIDER` independently selects `real`, `canned`, or
-  `unavailable` for `POST /v1/rest/evaluate`. Contract 1.0 Real uses the
-  legacy Claude/fixed-Quest configuration. Contract 1.1 Real uses
+  `unavailable` for Contract 1.1 `POST /v1/rest/evaluate` and
+  `POST /v1/rest/recommend`. Contract 1.0 Real uses the legacy
+  Claude/fixed-Quest configuration. Contract 1.1 Real uses
   `STEPFUN_API_KEY`, `STEPFUN_BASE_URL`, explicit `STEPFUN_MODEL`, and
   `STEPFUN_TIMEOUT_MS`. Incomplete Real configuration selects the explicit
   Unavailable Provider; it never silently falls back to Canned.

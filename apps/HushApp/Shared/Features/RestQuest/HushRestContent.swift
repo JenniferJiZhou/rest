@@ -35,6 +35,181 @@ struct HushDynamicRestSuggestion: Equatable, Sendable {
     let generatedTask: GeneratedRestTask
 }
 
+struct HushManualRestContext: Equatable, Sendable {
+    let sessionID: String
+    let fatigueType: String
+    let userPreference: String?
+    let availableMinutes: Int
+    let source: String
+    let locationTags: [String]
+}
+
+@MainActor
+protocol HushManualRestTaskProviding {
+    func generateTask(
+        context: HushManualRestContext
+    ) async throws -> HushDynamicRestSuggestion
+}
+
+@MainActor
+final class HTTPManualRestTaskProvider: HushManualRestTaskProviding {
+    enum ProviderError: Error {
+        case invalidBaseURL
+        case invalidResponse
+        case requestFailed
+    }
+
+    private let baseURL: URL
+    private let session: URLSession
+
+    init(baseURLString: String) throws {
+        let trimmed = baseURLString.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard
+            let baseURL = URL(string: trimmed),
+            baseURL.scheme?.lowercased() == "https",
+            baseURL.host != nil
+        else {
+            throw ProviderError.invalidBaseURL
+        }
+
+        self.baseURL = baseURL
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 35
+        configuration.timeoutIntervalForResource = 35
+        session = URLSession(configuration: configuration)
+    }
+
+    static var automatic: HTTPManualRestTaskProvider? {
+        #if os(iOS)
+        let value = UserDefaults(
+            suiteName: "group.com.JenniferJi.Hush"
+        )?.string(forKey: "agent.baseURL")
+        #else
+        let value = UserDefaults.standard.string(
+            forKey: "mac.agent.baseURL"
+        )
+        #endif
+        guard let value else {
+            return nil
+        }
+        return try? HTTPManualRestTaskProvider(baseURLString: value)
+    }
+
+    func generateTask(
+        context: HushManualRestContext
+    ) async throws -> HushDynamicRestSuggestion {
+        let requestID =
+            "req_manual_rest_\(UUID().uuidString.lowercased())"
+        let body = ManualRestRequest(
+            schemaVersion: "1.1",
+            requestID: requestID,
+            sessionID: context.sessionID,
+            fatigueType: context.fatigueType,
+            userPreference: context.userPreference,
+            availableMinutes: context.availableMinutes,
+            source: context.source,
+            locationTags: context.locationTags
+        )
+        let endpoint = baseURL
+            .appendingPathComponent("v1")
+            .appendingPathComponent("rest")
+            .appendingPathComponent("recommend")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 35
+        request.httpBody = try JSONEncoder().encode(body)
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        request.setValue(requestID, forHTTPHeaderField: "X-Request-ID")
+        request.setValue(
+            Bundle.main.object(
+                forInfoDictionaryKey: "CFBundleShortVersionString"
+            ) as? String ?? "unknown-apple-client",
+            forHTTPHeaderField: "X-Client-Version"
+        )
+        request.setValue("1.1", forHTTPHeaderField: "X-Contract-Version")
+
+        let (data, response) = try await session.data(for: request)
+        guard
+            let httpResponse = response as? HTTPURLResponse,
+            (200..<300).contains(httpResponse.statusCode),
+            httpResponse.value(
+                forHTTPHeaderField: "X-Contract-Version"
+            ) == "1.1",
+            httpResponse.value(
+                forHTTPHeaderField: "X-Request-ID"
+            ) == requestID
+        else {
+            throw ProviderError.requestFailed
+        }
+        let result = try JSONDecoder().decode(
+            ManualRestResponse.self,
+            from: data
+        )
+        guard
+            result.schemaVersion == "1.1",
+            result.requestID == requestID,
+            result.defaultQuestID == nil,
+            result.actions == [
+                "start_rest_session",
+                "remind_later",
+                "dismiss"
+            ]
+        else {
+            throw ProviderError.invalidResponse
+        }
+        return HushDynamicRestSuggestion(
+            requestID: result.requestID,
+            message: result.message,
+            generatedTask: result.generatedTask
+        )
+    }
+}
+
+private struct ManualRestRequest: Encodable {
+    let schemaVersion: String
+    let requestID: String
+    let sessionID: String
+    let fatigueType: String
+    let userPreference: String?
+    let availableMinutes: Int
+    let source: String
+    let locationTags: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case requestID = "request_id"
+        case sessionID = "session_id"
+        case fatigueType = "fatigue_type"
+        case userPreference = "user_preference"
+        case availableMinutes = "available_minutes"
+        case source
+        case locationTags = "location_tags"
+    }
+}
+
+private struct ManualRestResponse: Decodable {
+    let schemaVersion: String
+    let requestID: String
+    let message: String
+    let generatedTask: GeneratedRestTask
+    let defaultQuestID: String?
+    let actions: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case requestID = "request_id"
+        case message
+        case generatedTask = "generated_task"
+        case defaultQuestID = "default_quest_id"
+        case actions
+    }
+}
+
 extension Notification.Name {
     static let hushDynamicRestSuggestionOpened = Notification.Name(
         "hush.dynamic-rest-suggestion-opened"

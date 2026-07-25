@@ -65,6 +65,113 @@ describe("DynamicRestDecisionProvider", () => {
     });
   });
 
+  it("generates Mode B with the same generated task structure and no Quest input", async () => {
+    const client = new FakeModelClient(
+      JSON.stringify({
+        message: "好，现在给自己留一点空间。",
+        generatedTask: {
+          title: "桌边缓一缓",
+          durationSeconds: 90,
+          steps: ["放下双手", "看向远处", "慢慢呼吸"]
+        }
+      })
+    );
+    const provider = new DynamicRestDecisionProvider(
+      client,
+      "configured-stepfun-model"
+    );
+
+    await expect(
+      provider.generate({
+        requestId: "req_manual_dynamic",
+        sessionId: "session_manual_dynamic",
+        fatigueType: "cognitive_overload",
+        userPreference: "quiet",
+        availableMinutes: 2,
+        source: "manual_ios",
+        locationTags: ["desk"]
+      })
+    ).resolves.toEqual({
+      message: "好，现在给自己留一点空间。",
+      generatedTask: {
+        title: "桌边缓一缓",
+        durationSeconds: 90,
+        steps: ["放下双手", "看向远处", "慢慢呼吸"]
+      }
+    });
+    const request = client.requests[0]!;
+    expect(request.model).toBe("configured-stepfun-model");
+    expect(request.system).toContain("already chosen to rest");
+    expect(request.system).not.toContain("fixed library");
+    expect(request.input).not.toContain("allowedQuestIds");
+    expect(request.input).not.toContain("quest_id");
+    expect(request.outputSchema).not.toHaveProperty(
+      "properties.questId"
+    );
+  });
+
+  it.each([
+    ["malformed JSON", '{"message":'],
+    [
+      "missing generated task",
+      JSON.stringify({ message: "现在休息一下。" })
+    ],
+    [
+      "invalid generated task field",
+      JSON.stringify({
+        message: "现在休息一下。",
+        generatedTask: {
+          title: "桌边休息",
+          durationSeconds: "60",
+          steps: ["看向远处"]
+        }
+      })
+    ]
+  ])("rejects Mode B %s", async (_case, output) => {
+    await expect(
+      new DynamicRestDecisionProvider(
+        new FakeModelClient(output),
+        "configured-stepfun-model"
+      ).generate({
+        requestId: "req_manual_invalid",
+        sessionId: "session_manual_invalid",
+        fatigueType: "unknown",
+        userPreference: null,
+        availableMinutes: 2,
+        source: "manual_macos",
+        locationTags: []
+      })
+    ).rejects.toMatchObject({
+      code: "LLM_INVALID_OUTPUT",
+      statusCode: 503
+    });
+  });
+
+  it.each([
+    [400, false, "configuration"],
+    [401, false, "authentication"],
+    [429, true, "unavailable"],
+    [500, true, "unavailable"],
+    [503, true, "unavailable"]
+  ])(
+    "sanitizes upstream HTTP %s",
+    async (status, retryable, reason) => {
+      const provider = new DynamicRestDecisionProvider(
+        new ThrowingModelClient(
+          Object.assign(new Error("raw provider body"), { status })
+        ),
+        "configured-stepfun-model"
+      );
+
+      await expect(provider.decide(context())).rejects.toMatchObject({
+        code: "INTERNAL_ERROR",
+        statusCode: 503,
+        retryable,
+        details: { reason }
+      });
+    }
+  );
+
   it.each([
     ["malformed JSON", '{"shouldOfferRest":'],
     [
@@ -141,6 +248,14 @@ class FakeModelClient implements RestDecisionModelClient {
   ): Promise<string> {
     this.requests.push(structuredClone(request));
     return this.output;
+  }
+}
+
+class ThrowingModelClient implements RestDecisionModelClient {
+  constructor(private readonly error: Error) {}
+
+  async complete(): Promise<string> {
+    throw this.error;
   }
 }
 

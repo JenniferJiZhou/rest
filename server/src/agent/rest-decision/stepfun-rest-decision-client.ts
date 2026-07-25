@@ -21,66 +21,51 @@ export class StepFunRestDecisionClient
     request: RestDecisionModelRequest,
     options?: ProviderCallOptions
   ): Promise<string> {
-    const response = await this.fetcher(`${this.baseUrl}/responses`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: request.model,
-        instructions: request.system,
-        input: request.input,
-        stream: false,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "dynamic_rest_decision",
-            strict: true,
-            schema: request.outputSchema
-          }
-        }
-      }),
-      ...(options?.signal ? { signal: options.signal } : {})
-    });
+    const response = await this.fetcher(
+      `${this.baseUrl}/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: request.model,
+          messages: [
+            { role: "system", content: request.system },
+            { role: "user", content: request.input }
+          ],
+          response_format: { type: "json_object" },
+          stream: false
+        }),
+        ...(options?.signal ? { signal: options.signal } : {})
+      }
+    );
     if (!response.ok) {
       throw providerHttpError(response.status);
     }
     const payload = (await response.json()) as unknown;
-    const output = extractOutputText(payload);
+    const output = extractMessageContent(payload);
     if (output === null) {
       throw new SyntaxError(
-        "StepFun response did not contain completed output text."
+        "StepFun response did not contain assistant message content."
       );
     }
     return output.trim();
   }
 }
 
-function extractOutputText(payload: unknown): string | null {
-  if (!isRecord(payload) || payload.status !== "completed") {
+function extractMessageContent(payload: unknown): string | null {
+  if (!isRecord(payload) || !Array.isArray(payload.choices)) {
     return null;
   }
-  const output = payload.output;
-  if (!Array.isArray(output)) {
+  const choice = payload.choices[0];
+  if (!isRecord(choice) || !isRecord(choice.message)) {
     return null;
   }
-  const texts: string[] = [];
-  for (const item of output) {
-    if (!isRecord(item) || !Array.isArray(item.content)) {
-      continue;
-    }
-    for (const content of item.content) {
-      if (
-        isRecord(content) &&
-        content.type === "output_text" &&
-        typeof content.text === "string"
-      ) {
-        texts.push(content.text);
-      }
-    }
-  }
-  return texts.length > 0 ? texts.join("") : null;
+  return typeof choice.message.content === "string"
+    ? choice.message.content
+    : null;
 }
 
 function providerHttpError(status: number): Error & { status: number } {

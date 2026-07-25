@@ -42,8 +42,9 @@ describe("OpenAPI contract", () => {
     for (const [path, method] of operations) {
       const responses = document.paths[path]![method]!.responses;
       const expectedError =
-        path === "/v1/rest/evaluate"
-          ? "#/components/responses/RestEvaluationError"
+        path === "/v1/rest/evaluate" ||
+        path === "/v1/rest/recommend"
+          ? "#/components/responses/RestContractError"
           : "#/components/responses/Error";
       expect(responses["409"]).toEqual({
         $ref: expectedError
@@ -64,7 +65,7 @@ describe("OpenAPI contract", () => {
     }
   });
 
-  it("declares Provider unavailable for Rest evaluate", () => {
+  it("declares Provider unavailable for dynamic Rest operations", () => {
     const document = parse(
       readFileSync(openApiPath, "utf8")
     ) as OpenApiDocument;
@@ -72,25 +73,34 @@ describe("OpenAPI contract", () => {
     expect(
       document.paths["/v1/rest/evaluate"]!.post!.responses["503"]
     ).toEqual({
-      $ref: "#/components/responses/RestEvaluationError"
+      $ref: "#/components/responses/RestContractError"
+    });
+    expect(
+      document.paths["/v1/rest/recommend"]!.post!.responses["503"]
+    ).toEqual({
+      $ref: "#/components/responses/RestContractError"
     });
   });
 
-  it("negotiates Contract 1.0 and 1.1 only for Rest evaluate", () => {
+  it("negotiates Contract 1.0 and 1.1 for evaluate and recommend", () => {
     const document = parse(
       readFileSync(openApiPath, "utf8")
     ) as OpenApiDocument;
-    const evaluate = document.paths["/v1/rest/evaluate"]!.post!;
-    const contractParameter = evaluate.parameters?.find(
-      (parameter) =>
-        "$ref" in parameter &&
-        parameter.$ref ===
-          "#/components/parameters/RestEvaluationContractVersion"
-    );
-
-    expect(contractParameter).toBeDefined();
+    for (const path of [
+      "/v1/rest/evaluate",
+      "/v1/rest/recommend"
+    ]) {
+      const operation = document.paths[path]!.post!;
+      const contractParameter = operation.parameters?.find(
+        (parameter) =>
+          "$ref" in parameter &&
+          parameter.$ref ===
+            "#/components/parameters/RestContractVersion"
+      );
+      expect(contractParameter).toBeDefined();
+    }
     expect(
-      document.components.parameters.RestEvaluationContractVersion!
+      document.components.parameters.RestContractVersion!
         .schema.enum
     ).toEqual(["1.0", "1.1"]);
     expect(

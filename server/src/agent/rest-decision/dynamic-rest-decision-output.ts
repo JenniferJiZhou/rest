@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { restSuggestionReasonCodeSchema } from "../../domain/contracts.js";
 import type { DynamicRestDecisionCandidate } from "../../domain/ports.js";
+import type { DynamicManualRestCandidate } from "../../domain/ports.js";
 
 export const dynamicGeneratedTaskSchema = z
   .object({
@@ -35,17 +36,30 @@ export const dynamicRestDecisionCandidateSchema = z
     }
   });
 
+export const dynamicManualRestCandidateSchema = z
+  .object({
+    message: z.string(),
+    generatedTask: dynamicGeneratedTaskSchema
+  })
+  .strict();
+
 export function parseDynamicRestDecisionModelOutput(
   output: string
 ): DynamicRestDecisionCandidate {
   return dynamicRestDecisionCandidateSchema.parse(JSON.parse(output));
 }
 
-export function buildDynamicRestDecisionOutputJsonSchema(): Record<
+export function parseDynamicManualRestModelOutput(
+  output: string
+): DynamicManualRestCandidate {
+  return dynamicManualRestCandidateSchema.parse(JSON.parse(output));
+}
+
+export function buildGeneratedRestTaskOutputJsonSchema(): Record<
   string,
   unknown
 > {
-  const generatedTask = {
+  return {
     type: "object",
     additionalProperties: false,
     required: ["title", "durationSeconds", "steps"],
@@ -58,6 +72,28 @@ export function buildDynamicRestDecisionOutputJsonSchema(): Record<
       }
     }
   };
+}
+
+export function buildDynamicManualRestOutputJsonSchema(): Record<
+  string,
+  unknown
+> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["message", "generatedTask"],
+    properties: {
+      message: { type: "string" },
+      generatedTask: buildGeneratedRestTaskOutputJsonSchema()
+    }
+  };
+}
+
+export function buildDynamicRestDecisionOutputJsonSchema(): Record<
+  string,
+  unknown
+> {
+  const generatedTask = buildGeneratedRestTaskOutputJsonSchema();
   return {
     type: "object",
     additionalProperties: false,

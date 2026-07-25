@@ -8,7 +8,7 @@ param(
     [ValidateRange(1, 120)]
     [int]$TimeoutSeconds = 40,
     [switch]$ExpectProviderUnavailable,
-    [ValidateSet("All", "Offer", "Companion")]
+    [ValidateSet("All", "Offer", "Companion", "Manual")]
     [string]$FixtureMode = "All"
 )
 
@@ -160,6 +160,19 @@ function New-DynamicPayload(
     }
 }
 
+function New-ManualPayload([string]$RequestId) {
+    return @{
+        schema_version = "1.1"
+        request_id = $RequestId
+        session_id = "session_dynamic_smoke_manual"
+        fatigue_type = "cognitive_overload"
+        user_preference = "quiet"
+        available_minutes = 2
+        source = "manual_macos"
+        location_tags = @("desk")
+    }
+}
+
 function AssertSuccessfulDecision(
     [string]$Name,
     $Body
@@ -211,6 +224,32 @@ function AssertSuccessfulDecision(
     }
 }
 
+function AssertSuccessfulManualRest($Body) {
+    if ($Body.PSObject.Properties.Name -contains "should_offer_rest") {
+        Fail "Manual response must not contain should_offer_rest."
+    }
+    if ($Body.PSObject.Properties.Name -contains "quest_id") {
+        Fail "Manual response must not contain quest_id."
+    }
+    if ($null -eq $Body.generated_task -or
+        [string]::IsNullOrWhiteSpace($Body.generated_task.title) -or
+        $Body.generated_task.duration_seconds -isnot [int] -or
+        @($Body.generated_task.steps).Count -eq 0) {
+        Fail "Manual generated_task is incomplete."
+    }
+    if ($Body.PSObject.Properties.Name -notcontains "default_quest_id" -or
+        $null -ne $Body.default_quest_id) {
+        Fail "Manual default_quest_id must be present and null."
+    }
+    $actions = @($Body.actions)
+    if ($actions.Count -ne 3 -or
+        $actions[0] -ne "start_rest_session" -or
+        $actions[1] -ne "remind_later" -or
+        $actions[2] -ne "dismiss") {
+        Fail "Manual actions do not match Contract 1.1."
+    }
+}
+
 try {
     $health = SendJson "GET" "/v1/health" @{} $null
     if ([int]$health.Response.StatusCode -ne 200) {
@@ -236,7 +275,7 @@ try {
     Write-Output "PASS health"
 
     $fixtures = if ($FixtureMode -eq "All") {
-        @("Offer", "Companion")
+        @("Offer", "Companion", "Manual")
     } else {
         @($FixtureMode)
     }
@@ -251,11 +290,17 @@ try {
             "X-Client-Version" = $ClientVersion
             "X-Contract-Version" = $ContractVersion
         }
-        $result = SendJson `
-            "POST" `
-            "/v1/rest/evaluate" `
-            $headers `
-            (New-DynamicPayload $requestId $name)
+        $path = if ($name -eq "Manual") {
+            "/v1/rest/recommend"
+        } else {
+            "/v1/rest/evaluate"
+        }
+        $payload = if ($name -eq "Manual") {
+            New-ManualPayload $requestId
+        } else {
+            New-DynamicPayload $requestId $name
+        }
+        $result = SendJson "POST" $path $headers $payload
         $status = [int]$result.Response.StatusCode
         $expectedStatus = if ($ExpectProviderUnavailable) { 503 } else { 200 }
         if ($status -ne $expectedStatus) {
@@ -273,7 +318,11 @@ try {
                 Fail "$name 503 response contains a success payload."
             }
         } else {
-            AssertSuccessfulDecision $name $body
+            if ($name -eq "Manual") {
+                AssertSuccessfulManualRest $body
+            } else {
+                AssertSuccessfulDecision $name $body
+            }
         }
         Write-Output "PASS $name HTTP $status origin $ExpectedDataOrigin"
     }

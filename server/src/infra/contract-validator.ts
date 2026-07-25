@@ -94,6 +94,16 @@ export const FIXTURE_CONTRACTS: FixtureContract[] = [
     fragment: "/$defs/RestQuestRecommendation"
   },
   {
+    fixture: "rest-recommendation-dynamic-request.json",
+    schema: "rest-recommendation.schema.json",
+    fragment: "/$defs/RestRecommendationRequestV1_1"
+  },
+  {
+    fixture: "rest-recommendation-dynamic-success.json",
+    schema: "rest-recommendation.schema.json",
+    fragment: "/$defs/DynamicRestTaskRecommendation"
+  },
+  {
     fixture: "handoff-start-request.json",
     schema: "handoff-start-request.schema.json"
   },

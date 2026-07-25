@@ -30,6 +30,7 @@ import {
 import {
   type AgentLLM,
   type DataOrigin,
+  type DynamicManualRestProvider,
   type DynamicRestDecisionCandidate,
   type HandoffCompletionSink,
   type MailProvider,
@@ -57,6 +58,8 @@ export interface ServerCompositionOverrides {
   demoRestDecisionProvider?: RestDecisionProvider;
   normalDynamicRestDecisionProvider?: RestDecisionProvider<DynamicRestDecisionCandidate>;
   demoDynamicRestDecisionProvider?: RestDecisionProvider<DynamicRestDecisionCandidate>;
+  normalDynamicManualRestProvider?: DynamicManualRestProvider;
+  demoDynamicManualRestProvider?: DynamicManualRestProvider;
   normalInboxProvider?: UnifiedInboxProvider;
   demoInboxProvider?: UnifiedInboxProvider;
   realMail?: MailProvider;
@@ -97,6 +100,14 @@ export function buildServerDependencies(
   const demoDynamicRestDecisionProvider =
     overrides.demoDynamicRestDecisionProvider ??
     new CannedDynamicRestDecisionProvider();
+  const normalDynamicManualRestProvider =
+    overrides.normalDynamicManualRestProvider ??
+    asDynamicManualRestProvider(normalDynamicRestDecisionProvider) ??
+    new UnavailableDynamicRestDecisionProvider();
+  const demoDynamicManualRestProvider =
+    overrides.demoDynamicManualRestProvider ??
+    asDynamicManualRestProvider(demoDynamicRestDecisionProvider) ??
+    new CannedDynamicRestDecisionProvider();
   const normalInboxProvider =
     overrides.normalInboxProvider ??
     (config.HUSH_UNIFIED_INBOX_PROVIDER === "canned"
@@ -129,6 +140,7 @@ export function buildServerDependencies(
   return {
     config,
     restDecisionOrigin: graphOrigin(normalDynamicRestDecisionProvider),
+    manualRestOrigin: graphOrigin(normalDynamicManualRestProvider),
     legacyRestDecisionOrigin: graphOrigin(normalRestDecisionProvider),
     restDecisionHealth:
       normalDynamicRestDecisionProvider.configurationHealth ??
@@ -163,6 +175,7 @@ export function buildServerDependencies(
         llmTimeoutMs: config.LLM_TIMEOUT_MS,
         restDecisionTimeoutMs: config.REST_DECISION_TIMEOUT_MS,
         dynamicDecisionProvider: normalDynamicRestDecisionProvider,
+        dynamicManualRestProvider: normalDynamicManualRestProvider,
         dynamicRestDecisionTimeoutMs: config.STEPFUN_TIMEOUT_MS
       }
     ),
@@ -176,6 +189,7 @@ export function buildServerDependencies(
         llmTimeoutMs: config.LLM_TIMEOUT_MS,
         restDecisionTimeoutMs: config.REST_DECISION_TIMEOUT_MS,
         dynamicDecisionProvider: demoDynamicRestDecisionProvider,
+        dynamicManualRestProvider: demoDynamicManualRestProvider,
         dynamicRestDecisionTimeoutMs: config.STEPFUN_TIMEOUT_MS
       }
     ),
@@ -227,7 +241,7 @@ export function buildServerDependencies(
 
 function createDynamicRestDecisionProvider(
   config: AppConfig
-): RestDecisionProvider<DynamicRestDecisionCandidate> {
+): DynamicRestProvider {
   if (config.HUSH_REST_DECISION_PROVIDER === "canned") {
     return new CannedDynamicRestDecisionProvider();
   }
@@ -248,6 +262,20 @@ function createDynamicRestDecisionProvider(
     ),
     config.STEPFUN_MODEL
   );
+}
+
+type DynamicRestProvider =
+  RestDecisionProvider<DynamicRestDecisionCandidate> &
+  DynamicManualRestProvider;
+
+function asDynamicManualRestProvider(
+  provider: RestDecisionProvider<DynamicRestDecisionCandidate>
+): DynamicManualRestProvider | null {
+  return "generate" in provider &&
+    typeof provider.generate === "function"
+    ? (provider as RestDecisionProvider<DynamicRestDecisionCandidate> &
+        DynamicManualRestProvider)
+    : null;
 }
 
 function createRestDecisionProvider(

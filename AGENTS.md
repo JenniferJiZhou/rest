@@ -44,16 +44,18 @@ Photon 只提供 Hush 自己的消息身份，不读取用户既有 iMessage、�
 
 ### 3.1 Contract 1.1 动态任务局部例外
 
-经 Product Owner 批准，`POST /v1/rest/evaluate` 的 Contract 1.1
-`work_state_or_rest_decision` 模式可由 StepFun 在版本化受控 Prompt 和严格
-结构 Schema 下生成一次性的办公休息任务。该例外只允许返回
+经 Product Owner 批准，Contract 1.1 的
+`work_state_or_rest_decision`（Mode A）和
+`POST /v1/rest/recommend` 的 `manual_rest_quest`（Mode B）可由 StepFun
+在版本化受控 Prompt 和严格结构 Schema 下生成一次性的办公休息任务。
+该例外只允许返回
 `title`、`duration_seconds`、`steps`；不得让模型控制通知、Shield、Lockdown、
 设备、下一 checkpoint、邮件或消息。
 
 以下流程继续使用固定内容，不在例外范围内：
 
 - Contract 1.0 Rest Decision；
-- manual rest / `POST /v1/rest/recommend`；
+- Contract 1.0 manual rest / `POST /v1/rest/recommend`；
 - fatigue reflection；
 - Guided Drift、Blue Reset 和其他本地内容流程。
 
@@ -120,9 +122,11 @@ fixture 影响；不得在 Provider PR 中静默修改契约。Provider 实现�
 - 时间统一为 ISO 8601 且带时区。
 - 未知或无法安全判断的优先级必须使用 `uncertain`，不得强制归类。
 - 所有客户端入口只生成 `RestEntryContext`，不得复制业务流程。
-- Contract 1.0、manual rest 和其他固定内容流程返回 Quest 时优先返回
-  `quest_id`，步骤以固定内容库为准。
-- Contract 1.1 Mode A 的 `generated_task` 是一次性结构化任务，
+- Contract 1.0 和其他固定内容流程返回 Quest 时优先返回 `quest_id`，
+  步骤以固定内容库为准。
+- Contract 1.1 的 Mode A / Mode B 返回结构化 `generated_task`；
+  `default_quest_id` 必须为 `null`。
+- Contract 1.1 Mode A / Mode B 的 `generated_task` 是一次性结构化任务，
   `default_quest_id` 必须为 `null`，不得查询固定 Quest Repository。
 
 ## 6. 完成前自检

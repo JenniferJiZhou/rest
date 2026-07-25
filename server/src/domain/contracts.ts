@@ -517,7 +517,7 @@ export const restQuestSchema = z
   })
   .strict();
 
-export const restRecommendationRequestSchema = z
+export const restRecommendationRequestV1Schema = z
   .object({
     schema_version: schemaVersion,
     request_id: requestId,
@@ -536,6 +536,30 @@ export const restRecommendationRequestSchema = z
   })
   .strict();
 
+export const restRecommendationRequestV1_1Schema = z
+  .object({
+    schema_version: z.literal(DYNAMIC_REST_CONTRACT_VERSION),
+    request_id: requestId,
+    session_id: z.string().min(1),
+    fatigue_type: fatigueTypeSchema,
+    user_preference: z
+      .enum(["quiet", "move", "surprise"])
+      .nullable()
+      .optional(),
+    available_minutes: z.number().int().min(1).max(10),
+    source: z.string().min(1),
+    location_tags: z.array(z.string()).optional().default([])
+  })
+  .strict();
+
+export const restRecommendationRequestSchema = z.discriminatedUnion(
+  "schema_version",
+  [
+    restRecommendationRequestV1Schema,
+    restRecommendationRequestV1_1Schema
+  ]
+);
+
 export const restQuestRecommendationSchema = z
   .object({
     schema_version: schemaVersion,
@@ -547,6 +571,29 @@ export const restQuestRecommendationSchema = z
     fallback_quest_id: z.string().nullable().optional()
   })
   .strict();
+
+export const dynamicRestTaskRecommendationSchema = z
+  .object({
+    schema_version: z.literal(DYNAMIC_REST_CONTRACT_VERSION),
+    request_id: requestId,
+    message: z.string(),
+    generated_task: generatedRestTaskSchema,
+    default_quest_id: z.null(),
+    actions: z.tuple([
+      z.literal("start_rest_session"),
+      z.literal("remind_later"),
+      z.literal("dismiss")
+    ])
+  })
+  .strict();
+
+export const restRecommendationSchema = z.discriminatedUnion(
+  "schema_version",
+  [
+    restQuestRecommendationSchema,
+    dynamicRestTaskRecommendationSchema
+  ]
+);
 
 export const restFeedbackSchema = z
   .object({
@@ -728,11 +775,23 @@ export type FatigueCheckIn = z.infer<typeof fatigueCheckInSchema>;
 export type FatigueReflection = z.infer<typeof fatigueReflectionSchema>;
 export type FatigueType = z.infer<typeof fatigueTypeSchema>;
 export type RestQuest = z.infer<typeof restQuestSchema>;
+export type RestRecommendationRequestV1 = z.infer<
+  typeof restRecommendationRequestV1Schema
+>;
+export type RestRecommendationRequestV1_1 = z.infer<
+  typeof restRecommendationRequestV1_1Schema
+>;
 export type RestRecommendationRequest = z.infer<
   typeof restRecommendationRequestSchema
 >;
 export type RestQuestRecommendation = z.infer<
   typeof restQuestRecommendationSchema
+>;
+export type DynamicRestTaskRecommendation = z.infer<
+  typeof dynamicRestTaskRecommendationSchema
+>;
+export type RestRecommendation = z.infer<
+  typeof restRecommendationSchema
 >;
 export type RestFeedback = z.infer<typeof restFeedbackSchema>;
 export type HandoffStartRequest = z.infer<typeof handoffStartRequestSchema>;

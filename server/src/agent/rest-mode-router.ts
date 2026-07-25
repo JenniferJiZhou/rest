@@ -1,13 +1,16 @@
 import {
   CONTRACT_VERSION,
   fatigueReflectionSchema,
-  restQuestRecommendationSchema,
   type FatigueCheckIn,
   type RestQuest,
-  type RestRecommendationRequest
+  type RestRecommendationRequestV1
 } from "../domain/contracts.js";
-import type { RestDecisionContext } from "../domain/ports.js";
+import type {
+  DynamicManualRestContext,
+  RestDecisionContext
+} from "../domain/ports.js";
 import {
+  buildDynamicManualRestOutputJsonSchema,
   buildDynamicRestDecisionOutputJsonSchema
 } from "./rest-decision/dynamic-rest-decision-output.js";
 import {
@@ -23,8 +26,7 @@ interface DynamicModeInput {
 
 interface ManualModeInput {
   mode: "manual_rest_quest";
-  request: RestRecommendationRequest;
-  allowedQuests: RestQuest[];
+  context: DynamicManualRestContext;
 }
 
 interface FatigueModeInput {
@@ -42,9 +44,10 @@ interface DynamicModeRoute {
 
 interface ManualModeRoute {
   mode: ManualModeInput["mode"];
-  promptVersion: "manual-rest-quest-v1.0";
-  prompt: string;
-  outputSchema: typeof restQuestRecommendationSchema;
+  promptVersion: "dynamic-manual-rest-v1.1";
+  system: string;
+  input: string;
+  outputSchema: Record<string, unknown>;
 }
 
 interface FatigueModeRoute {
@@ -59,6 +62,18 @@ type RestModeRoute =
   | DynamicModeRoute
   | ManualModeRoute
   | FatigueModeRoute;
+
+const DYNAMIC_MANUAL_REST_SYSTEM_PROMPT = `You are Hush Mode B: manual_rest_quest.
+
+The user has already chosen to rest. Briefly acknowledge that choice and
+create one short, low-disruption task that can begin at or near a desk.
+Use the supplied fatigue, preference, available-time, source, and location
+context. Require no special equipment, device control, notification,
+Shield, Lockdown, checkpoint change, message, or contact with another person.
+
+Return exactly one JSON object matching the supplied schema.
+Do not return Markdown, analysis, shouldOfferRest, quest IDs, request IDs,
+schema versions, actions, or device-control fields.`;
 
 export function routeRestAgentMode(
   input: DynamicModeInput
@@ -78,12 +93,22 @@ export function routeRestAgentMode(input: RestModeInput): RestModeRoute {
     case "manual_rest_quest":
       return {
         mode: input.mode,
-        promptVersion: "manual-rest-quest-v1.0",
-        prompt: buildManualRestQuestPrompt(
-          input.request,
-          input.allowedQuests
-        ),
-        outputSchema: restQuestRecommendationSchema
+        promptVersion: "dynamic-manual-rest-v1.1",
+        system: DYNAMIC_MANUAL_REST_SYSTEM_PROMPT,
+        input: JSON.stringify({
+          promptVersion: "dynamic-manual-rest-v1.1",
+          mode: input.mode,
+          responseLocale: "zh-CN",
+          context: {
+            sessionId: input.context.sessionId,
+            fatigueType: input.context.fatigueType,
+            userPreference: input.context.userPreference,
+            availableMinutes: input.context.availableMinutes,
+            source: input.context.source,
+            locationTags: [...input.context.locationTags]
+          }
+        }),
+        outputSchema: buildDynamicManualRestOutputJsonSchema()
       };
     case "fatigue_reflection":
       return {
@@ -95,12 +120,13 @@ export function routeRestAgentMode(input: RestModeInput): RestModeRoute {
   }
 }
 
-function buildManualRestQuestPrompt(
-  request: RestRecommendationRequest,
+export function buildLegacyManualRestQuestPrompt(
+  request: RestRecommendationRequestV1,
   allowedQuests: RestQuest[]
 ): string {
   return [
     "Select exactly one quest from the provided fixed library.",
+    "This is the legacy Contract 1.0 compatibility path.",
     "Never invent a quest ID, steps, medical advice, or safety advice.",
     `schema_version must be "${CONTRACT_VERSION}", request_id must be "${request.request_id}", content_version must be "${request.content_version}".`,
     `Request: ${JSON.stringify(request)}`,

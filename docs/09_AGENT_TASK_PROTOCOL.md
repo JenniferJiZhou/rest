@@ -90,7 +90,8 @@ git worktree add ../hush-agent-m2-wave -b feat/m2/wave-ui main
 - 是否修改了 schema/枚举？
 - 是否硬编码 API key/URL？
 - 是否跳过 Mock？
-- 是否让 LLM 生成自由动作？若是 Contract 1.1 Mode A 的已批准局部例外，
+- 是否让 LLM 生成自由动作？若是 Contract 1.1 Mode A / Mode B
+  的已批准局部例外，
   是否仍限制为结构化办公休息任务且不控制设备/通知/checkpoint？
 - 是否保存私人输入？
 - 是否新增了依赖？

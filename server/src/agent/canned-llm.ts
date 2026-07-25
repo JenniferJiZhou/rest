@@ -6,7 +6,7 @@ import {
   type FatigueReflection,
   type RestQuest,
   type RestQuestRecommendation,
-  type RestRecommendationRequest
+  type RestRecommendationRequestV1
 } from "../domain/contracts.js";
 import type {
   AgentLLM,
@@ -122,7 +122,7 @@ export class CannedAgentLLM implements AgentLLM {
   }
 
   async chooseQuest(
-    input: RestRecommendationRequest,
+    input: RestRecommendationRequestV1,
     allowedQuests: RestQuest[],
     options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation> {

@@ -3,7 +3,7 @@ import type {
   FatigueReflection,
   RestQuest,
   RestQuestRecommendation,
-  RestRecommendationRequest
+  RestRecommendationRequestV1
 } from "../domain/contracts.js";
 import type {
   AgentLLM,
@@ -44,7 +44,7 @@ export class ResilientAgentLLM implements AgentLLM {
   }
 
   async chooseQuest(
-    input: RestRecommendationRequest,
+    input: RestRecommendationRequestV1,
     allowedQuests: RestQuest[],
     options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation> {

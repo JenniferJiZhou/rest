@@ -7,7 +7,7 @@ import type {
   RestFeedback,
   RestQuest,
   RestQuestRecommendation,
-  RestRecommendationRequest,
+  RestRecommendationRequestV1,
   RestSuggestion
 } from "./contracts.js";
 import type {
@@ -115,7 +115,7 @@ export interface AgentLLM {
     options?: ProviderCallOptions
   ): Promise<FatigueReflection>;
   chooseQuest(
-    input: RestRecommendationRequest,
+    input: RestRecommendationRequestV1,
     allowedQuests: RestQuest[],
     options?: ProviderCallOptions
   ): Promise<RestQuestRecommendation>;
@@ -175,6 +175,37 @@ export interface GeneratedRestTaskCandidate {
   title: string;
   durationSeconds: number;
   steps: string[];
+}
+
+export interface DynamicManualRestContext {
+  requestId: string;
+  sessionId: string;
+  fatigueType:
+    | "physical"
+    | "sensory_overload"
+    | "cognitive_overload"
+    | "emotional_social"
+    | "bedtime_arousal"
+    | "unknown";
+  userPreference: "quiet" | "move" | "surprise" | null;
+  availableMinutes: number;
+  source: string;
+  locationTags: string[];
+}
+
+export interface DynamicManualRestCandidate {
+  message: string;
+  generatedTask: GeneratedRestTaskCandidate;
+}
+
+export interface DynamicManualRestProvider {
+  readonly dataOrigin?: DataOrigin;
+  readonly configurationHealth?: ProviderHealth;
+  health(): Promise<ProviderHealth>;
+  generate(
+    context: DynamicManualRestContext,
+    options?: ProviderCallOptions
+  ): Promise<DynamicManualRestCandidate>;
 }
 
 export interface DynamicRestDecisionCandidate {

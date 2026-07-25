@@ -5,7 +5,11 @@ import {
 } from "../../src/infra/contract-validator.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { usageSummarySchema } from "../../src/domain/contracts.js";
+import {
+  dynamicRestTaskRecommendationSchema,
+  restRecommendationRequestV1_1Schema,
+  usageSummarySchema
+} from "../../src/domain/contracts.js";
 
 describe("contract fixtures", () => {
   const validator = createContractValidator();
@@ -33,5 +37,28 @@ describe("contract fixtures", () => {
     ) as unknown;
 
     expect(usageSummarySchema.safeParse(input).success).toBe(true);
+  });
+
+  it.each([
+    [
+      "rest-recommendation-dynamic-request.json",
+      restRecommendationRequestV1_1Schema
+    ],
+    [
+      "rest-recommendation-dynamic-success.json",
+      dynamicRestTaskRecommendationSchema
+    ]
+  ])("%s matches the runtime dynamic manual-rest contract", (
+    fixture,
+    schema
+  ) => {
+    const input = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "../contracts/fixtures", fixture),
+        "utf8"
+      )
+    ) as unknown;
+
+    expect(schema.safeParse(input).success).toBe(true);
   });
 });

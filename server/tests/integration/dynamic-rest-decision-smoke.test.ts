@@ -56,6 +56,7 @@ describe("Contract 1.1 dynamic Rest Decision smoke script", () => {
     expect(result.output).toContain("PASS health");
     expect(result.output).toContain("PASS Offer HTTP 200");
     expect(result.output).toContain("PASS Companion HTTP 200");
+    expect(result.output).toContain("PASS Manual HTTP 200");
     expect(result.output).toContain(
       "PASS dynamic rest decision smoke summary"
     );
@@ -78,6 +79,24 @@ describe("Contract 1.1 dynamic Rest Decision smoke script", () => {
     expect(result.code).toBe(0);
     expect(result.output).toContain("PASS health");
     expect(result.output).toContain("PASS Offer HTTP 503");
+  }, smokeTestTimeoutMs);
+
+  it("validates unavailable Contract 1.1 manual generation locally", async () => {
+    const baseUrl = await listen("unavailable");
+
+    const result = await runSmoke([
+      "-BaseUrl",
+      baseUrl,
+      "-ExpectedDataOrigin",
+      "mock",
+      "-ExpectProviderUnavailable",
+      "-FixtureMode",
+      "Manual"
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.output).toContain("PASS health");
+    expect(result.output).toContain("PASS Manual HTTP 503");
   }, smokeTestTimeoutMs);
 
   it("fails when X-Hush-Data-Origin is not the expected value", async () => {

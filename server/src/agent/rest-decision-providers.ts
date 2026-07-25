@@ -1,5 +1,8 @@
 import type {
   DynamicRestDecisionCandidate,
+  DynamicManualRestCandidate,
+  DynamicManualRestContext,
+  DynamicManualRestProvider,
   ProviderCallOptions,
   ProviderHealth,
   RestContentRepository,
@@ -9,7 +12,9 @@ import type {
 } from "../domain/ports.js";
 
 export class CannedDynamicRestDecisionProvider
-  implements RestDecisionProvider<DynamicRestDecisionCandidate>
+  implements
+    RestDecisionProvider<DynamicRestDecisionCandidate>,
+    DynamicManualRestProvider
 {
   readonly dataOrigin = "mock" as const;
   readonly configurationHealth = "ready" as const;
@@ -56,10 +61,30 @@ export class CannedDynamicRestDecisionProvider
       }
     };
   }
+
+  async generate(
+    context: DynamicManualRestContext,
+    _options?: ProviderCallOptions
+  ): Promise<DynamicManualRestCandidate> {
+    return {
+      message: "好，现在给自己留一点空间。",
+      generatedTask: {
+        title: "一分钟桌边重置",
+        durationSeconds: Math.min(context.availableMinutes * 60, 60),
+        steps: [
+          "暂时让双手离开键盘",
+          "看向比屏幕更远的位置",
+          "肩膀放松后再回来"
+        ]
+      }
+    };
+  }
 }
 
 export class UnavailableDynamicRestDecisionProvider
-  implements RestDecisionProvider<DynamicRestDecisionCandidate>
+  implements
+    RestDecisionProvider<DynamicRestDecisionCandidate>,
+    DynamicManualRestProvider
 {
   readonly dataOrigin = "mock" as const;
   readonly configurationHealth = "unavailable" as const;
@@ -72,6 +97,13 @@ export class UnavailableDynamicRestDecisionProvider
     _context: RestDecisionContext,
     _options?: ProviderCallOptions
   ): Promise<DynamicRestDecisionCandidate> {
+    throw new Error("Dynamic Rest Decision Provider is unavailable.");
+  }
+
+  async generate(
+    _context: DynamicManualRestContext,
+    _options?: ProviderCallOptions
+  ): Promise<DynamicManualRestCandidate> {
     throw new Error("Dynamic Rest Decision Provider is unavailable.");
   }
 }
