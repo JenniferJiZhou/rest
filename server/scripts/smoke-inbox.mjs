@@ -13,7 +13,19 @@ const stages = new Set([
   "send"
 ]);
 const errorCodePattern = /^[A-Z][A-Z0-9_]{0,80}$/;
-const publicIdKeys = new Set(["id", "draft_id", "target_id"]);
+const providerPrivateIdKeys = new Set([
+  "provider_participant_id",
+  "participant_id",
+  "open_dingtalk_id",
+  "open_id",
+  "user_id",
+  "corp_id",
+  "member_id",
+  "employee_id",
+  "union_id",
+  "sender_id",
+  "recipient_id"
+]);
 
 class SmokeFailure extends Error {
   constructor(stage, status, code) {
@@ -202,6 +214,9 @@ async function sendDraft(request, provider, itemId) {
     throw new SmokeFailure("item", 0, "HUSH_SMOKE_DRAFT_MISSING");
   }
   const draftId = item.draft_id;
+  if (!safePathSegment(draftId)) {
+    throw new SmokeFailure("item", 0, "HUSH_SMOKE_DRAFT_ID_INVALID");
+  }
   const draft = await request(
     "draft",
     `/v1/inbox/drafts/${encodeURIComponent(draftId)}`
@@ -280,13 +295,25 @@ function validPublicCard(card) {
   return (
     isRecord(card) &&
     nonEmptyString(card.id) &&
+    nonEmptyString(card.account_id) &&
+    nullableNonEmptyString(card.conversation_id) &&
     (card.item_kind === "message" || card.item_kind === "conversation_digest") &&
     (card.conversation_type === "direct" || card.conversation_type === "group") &&
     nonEmptyString(card.conversation_name) &&
+    nonEmptyString(card.provider_message_id) &&
+    nullableNonEmptyString(card.sender) &&
+    validSenderRef(card.sender_ref) &&
+    stringArray(card.recipients) &&
+    (card.subject === null || typeof card.subject === "string") &&
+    nullableNonEmptyString(card.content) &&
+    isoDate(card.received_at) &&
+    validCoverage(card.coverage) &&
     Number.isInteger(card.revision) && card.revision >= 1 &&
     Number.isInteger(card.message_count) && card.message_count >= 1 &&
     isoDate(card.window_started_at) && isoDate(card.window_ended_at) &&
     Date.parse(card.window_started_at) <= Date.parse(card.window_ended_at) &&
+    nullableIsoDate(card.sealed_at) &&
+    nullableIsoDate(card.acknowledged_at) &&
     nonEmptyString(card.summary) &&
     stringArray(card.important_points) &&
     stringArray(card.todos) &&
@@ -295,7 +322,11 @@ function validPublicCard(card) {
     validReplyTargets(card.reply_targets) &&
     (card.draft_id === null || nonEmptyString(card.draft_id)) &&
     ["pending", "ready", "failed"].includes(card.sync_status) &&
-    (!card.needs_reply || nonEmptyString(card.draft_id))
+    (!card.needs_reply || nonEmptyString(card.draft_id)) &&
+    (
+      !(card.conversation_type === "group" && card.item_kind === "conversation_digest") ||
+      (card.sender === null && card.sender_ref === null && card.content === null)
+    )
   );
 }
 
@@ -314,6 +345,11 @@ function validReplyTargets(value) {
   );
 }
 
+function validSenderRef(value) {
+  return value === null ||
+    (typeof value === "string" && /^participant_[a-zA-Z0-9_-]{8,64}$/.test(value));
+}
+
 function containsPrivateIdKey(value) {
   if (Array.isArray(value)) return value.some(containsPrivateIdKey);
   if (!isRecord(value)) return false;
@@ -325,8 +361,11 @@ function containsPrivateIdKey(value) {
 
 function privateIdKey(key) {
   const normalized = key.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-  return normalized === "sender_ref" ||
-    (normalized.endsWith("_id") && !publicIdKeys.has(normalized));
+  return providerPrivateIdKeys.has(normalized);
+}
+
+function safePathSegment(value) {
+  return nonEmptyString(value) && !/[\\/]/.test(value) && value !== "." && value !== "..";
 }
 
 function stringArray(value) {

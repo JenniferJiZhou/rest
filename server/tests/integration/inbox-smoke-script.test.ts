@@ -22,7 +22,10 @@ describe("Unified Inbox external smoke harness", () => {
   });
 
   it("validates complete public cards without exposing private content", async () => {
-    const privateValues = ["private-summary", "private-draft", "private-name"];
+    const privateValues = [
+      "private-account", "private-conversation", "private-provider-message",
+      "private-summary", "private-draft", "private-name"
+    ];
     const baseUrl = await startServer((request, response) => {
       if (request.url === "/v1/inbox/sync-status") return json(response, 200, [readySync("feishu")]);
       if (request.url === "/v1/inbox/items?limit=100") {
@@ -43,7 +46,7 @@ describe("Unified Inbox external smoke harness", () => {
   it("rejects recursively nested private provider identifiers from cards", async () => {
     const baseUrl = await readServer({
       ...publicCard("dingtalk"),
-      nested: { nativeProviderId: "private-id" }
+      nested: { openDingtalkId: "private-id" }
     });
 
     const result = await runSmoke(baseUrl, ["--provider", "dingtalk", "--mode", "read"]);
@@ -91,6 +94,29 @@ describe("Unified Inbox external smoke harness", () => {
       expect(result.code).not.toBe(0);
       expect(result.output).toContain("stage=arguments status=0");
     }
+  }, timeout);
+
+  it("rejects a server-returned dot-segment draft ID before constructing draft paths", async () => {
+    const requests: string[] = [];
+    const baseUrl = await startServer((request, response) => {
+      requests.push(request.url ?? "");
+      if (request.url === "/v1/inbox/items/item-42") {
+        return json(response, 200, { id: "item-42", provider: "dingtalk", draft_id: ".." });
+      }
+      return error(response, 500);
+    });
+
+    const result = await runSmoke(
+      baseUrl,
+      ["--provider", "dingtalk", "--mode", "send", "--item-id", "item-42"],
+      { HUSH_SMOKE_ALLOW_SEND: "true" }
+    );
+
+    expect(result.code).not.toBe(0);
+    expect(result.output).toBe(
+      "FAIL provider=dingtalk stage=item status=0 error_code=HUSH_SMOKE_DRAFT_ID_INVALID\n"
+    );
+    expect(requests).toEqual(["/v1/inbox/items/item-42"]);
   }, timeout);
 
   it("binds send resources and uses one request id for the HTTP header and body", async () => {
@@ -214,7 +240,7 @@ function readySync(provider: string) {
 }
 
 function publicCard(provider: string): Record<string, unknown> {
-  return { id: "item-public-42", provider, conversation_type: "group", conversation_name: "private-name", item_kind: "conversation_digest", revision: 2, message_count: 3, window_started_at: "2026-07-24T00:00:00.000Z", window_ended_at: "2026-07-24T01:00:00.000Z", summary: "private-summary", important_points: ["point"], todos: [], priority: "normal", needs_reply: true, reply_targets: [{ target_id: "participant_abcdefgh", display_name: "private-target", reason: "reply needed" }], draft_id: "private-draft", sync_status: "ready" };
+  return { id: "item-public-42", provider, account_id: "private-account", conversation_id: "private-conversation", conversation_type: "group", conversation_name: "private-name", provider_message_id: "private-provider-message", sender: null, sender_ref: null, recipients: [], subject: null, content: null, received_at: "2026-07-24T00:00:00.000Z", coverage: { source: "official_api", complete: true, note: null }, item_kind: "conversation_digest", revision: 2, message_count: 3, window_started_at: "2026-07-24T00:00:00.000Z", window_ended_at: "2026-07-24T01:00:00.000Z", sealed_at: null, acknowledged_at: null, summary: "private-summary", important_points: ["point"], todos: [], priority: "normal", needs_reply: true, reply_targets: [{ target_id: "participant_abcdefgh", display_name: "private-target", reason: "reply needed" }], draft_id: "private-draft", sync_status: "ready" };
 }
 
 async function startServer(handler: RequestListener): Promise<string> {
