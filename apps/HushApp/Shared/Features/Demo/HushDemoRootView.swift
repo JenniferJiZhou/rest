@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HushDemoRootView: View {
     @StateObject private var store: HushDemoStore
+    @StateObject private var ambientAudio = HushAmbientAudioModel()
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
     @State private var isShowingSettings = false
@@ -55,6 +56,7 @@ struct HushDemoRootView: View {
                         HushRestTaskGeneratingView()
                     } else {
                         HushDoorView(
+                            ambientAudio: ambientAudio,
                             taskText: agentTaskText,
                             onOpenTask: openAgentTask,
                             onSettings: {
@@ -166,6 +168,23 @@ struct HushDemoRootView: View {
             companionMessage = message?.isEmpty == false ? message : nil
             openedSuggestionMessage = nil
             store.clearGeneratedRestSuggestion()
+        }
+        .alert(
+            "声音暂不可用",
+            isPresented: Binding(
+                get: { ambientAudio.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        ambientAudio.clearError()
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {
+                ambientAudio.clearError()
+            }
+        } message: {
+            Text(ambientAudio.errorMessage ?? "")
         }
         .sheet(isPresented: $isShowingSettings) {
             HushSettingsView(

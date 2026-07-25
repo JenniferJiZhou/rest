@@ -1,6 +1,188 @@
+import AVFoundation
 import SwiftUI
 
+enum HushAmbientSound: String, CaseIterable, Identifiable {
+    case whiteNoise
+    case pinkNoise
+    case brownNoise
+    case oceanWaves
+    case rain
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .whiteNoise:
+            "白噪音"
+        case .pinkNoise:
+            "粉红噪音"
+        case .brownNoise:
+            "棕色噪音"
+        case .oceanWaves:
+            "海浪"
+        case .rain:
+            "轻雨"
+        }
+    }
+
+    fileprivate var resourceName: String {
+        switch self {
+        case .whiteNoise:
+            "white-noise"
+        case .pinkNoise:
+            "pink-noise"
+        case .brownNoise:
+            "brown-noise"
+        case .oceanWaves:
+            "ocean-waves"
+        case .rain:
+            "rain"
+        }
+    }
+}
+
+enum HushAmbientVolume: String, CaseIterable, Identifiable {
+    case quiet
+    case balanced
+    case clear
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .quiet:
+            "轻声"
+        case .balanced:
+            "平稳"
+        case .clear:
+            "清晰"
+        }
+    }
+
+    fileprivate var value: Float {
+        switch self {
+        case .quiet:
+            0.12
+        case .balanced:
+            0.2
+        case .clear:
+            0.32
+        }
+    }
+}
+
+@MainActor
+final class HushAmbientAudioModel: ObservableObject {
+    @Published var selectedSound: HushAmbientSound {
+        didSet {
+            defaults.set(selectedSound.rawValue, forKey: Self.soundKey)
+            guard isPlaying else { return }
+            startPlayback()
+        }
+    }
+
+    @Published var volume: HushAmbientVolume {
+        didSet {
+            defaults.set(volume.rawValue, forKey: Self.volumeKey)
+            player?.volume = volume.value
+        }
+    }
+
+    @Published private(set) var isPlaying = false
+    @Published private(set) var errorMessage: String?
+
+    private static let soundKey = "hush.ambient.sound"
+    private static let volumeKey = "hush.ambient.volume"
+
+    private let defaults = UserDefaults.standard
+    private var player: AVAudioPlayer?
+
+    init() {
+        selectedSound = HushAmbientSound(
+            rawValue: defaults.string(forKey: Self.soundKey) ?? ""
+        ) ?? .oceanWaves
+        volume = HushAmbientVolume(
+            rawValue: defaults.string(forKey: Self.volumeKey) ?? ""
+        ) ?? .balanced
+    }
+
+    func togglePlayback() {
+        isPlaying ? stopPlayback() : startPlayback()
+    }
+
+    func stopPlayback() {
+        player?.stop()
+        player = nil
+        isPlaying = false
+        deactivateAudioSessionIfNeeded()
+    }
+
+    func clearError() {
+        errorMessage = nil
+    }
+
+    private func startPlayback() {
+        player?.stop()
+        player = nil
+        isPlaying = false
+        errorMessage = nil
+
+        guard
+            let url = Bundle.main.url(
+                forResource: selectedSound.resourceName,
+                withExtension: "mp3"
+            )
+        else {
+            errorMessage = "声音资源还没有加入当前 App Target。"
+            return
+        }
+
+        do {
+            try activateAudioSessionIfNeeded()
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.numberOfLoops = -1
+            player.volume = volume.value
+            player.prepareToPlay()
+            guard player.play() else {
+                throw HushAmbientAudioError.playbackFailed
+            }
+            self.player = player
+            isPlaying = true
+        } catch {
+            errorMessage = "暂时无法播放这个声音。"
+            deactivateAudioSessionIfNeeded()
+        }
+    }
+
+    private func activateAudioSessionIfNeeded() throws {
+        #if os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(
+            .ambient,
+            mode: .default,
+            options: [.mixWithOthers]
+        )
+        try session.setActive(true)
+        #endif
+    }
+
+    private func deactivateAudioSessionIfNeeded() {
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setActive(
+            false,
+            options: [.notifyOthersOnDeactivation]
+        )
+        #endif
+    }
+}
+
+private enum HushAmbientAudioError: Error {
+    case playbackFailed
+}
+
 struct HushDoorView: View {
+    @ObservedObject var ambientAudio: HushAmbientAudioModel
+
     let taskText: String
     let onOpenTask: () -> Void
     let onSettings: () -> Void
@@ -26,6 +208,65 @@ struct HushDoorView: View {
                 )
 
                 HStack(spacing: HushSpacing.xs) {
+                    Menu {
+                        Button(
+                            ambientAudio.isPlaying
+                                ? "停止播放"
+                                : "开始播放"
+                        ) {
+                            ambientAudio.togglePlayback()
+                        }
+
+                        Divider()
+
+                        Picker(
+                            "陪伴声音",
+                            selection: $ambientAudio.selectedSound
+                        ) {
+                            ForEach(HushAmbientSound.allCases) { sound in
+                                Text(sound.title).tag(sound)
+                            }
+                        }
+
+                        Picker(
+                            "音量",
+                            selection: $ambientAudio.volume
+                        ) {
+                            ForEach(HushAmbientVolume.allCases) { volume in
+                                Text(volume.title).tag(volume)
+                            }
+                        }
+                    } label: {
+                        Image(
+                            systemName: ambientAudio.isPlaying
+                                ? "speaker.wave.2.fill"
+                                : "speaker.slash"
+                        )
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(
+                            Color.white.opacity(
+                                ambientAudio.isPlaying ? 0.9 : 0.68
+                            )
+                        )
+                        .frame(width: 34, height: 34)
+                        .background(
+                            Circle().fill(Color.white.opacity(0.035))
+                        )
+                        .overlay(
+                            Circle().stroke(
+                                Color.white.opacity(
+                                    ambientAudio.isPlaying ? 0.2 : 0.1
+                                ),
+                                lineWidth: 0.8
+                            )
+                        )
+                    }
+                    .accessibilityLabel(
+                        ambientAudio.isPlaying
+                            ? "陪伴声音正在播放"
+                            : "选择陪伴声音"
+                    )
+
                     if let onOpenCompanion {
                         Button(action: onOpenCompanion) {
                             Image(systemName: "sun.max.fill")
