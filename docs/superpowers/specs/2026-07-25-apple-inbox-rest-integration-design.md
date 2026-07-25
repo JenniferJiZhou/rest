@@ -112,6 +112,16 @@ Server composition retains replaceable canned and real providers. Dynamic Rest k
 StepFun interface, and Inbox intelligence keeps its own StepFun configuration so either
 can be tested without live credentials.
 
+The untracked local `server/src/agent/prompts/always-on-companion-agent.md` is treated as
+source material, not as a runtime prompt to copy unchanged. Its still-applicable tone,
+truthfulness, privacy, and health-safety rules are migrated into the current TypeScript
+prompt builders. Its fixed-quest Contract 1.0 output examples are not migrated: Contract
+1.1 Mode A and Mode B continue to return the current schema-validated `generated_task`.
+Prompt-builder tests verify both the retained behavioral constraints and the current
+output schema. The Coding Agent animation brief in
+`docs/19_WORK_COMPANION_TRIGGERED_EXIT_ANIMATION_PROMPT.md` remains development context
+only and is not loaded by the server.
+
 The runtime listener uses `PORT`. Container metadata and health checking must not assume
 port 3000 at runtime. Deployment succeeds by changing server environment variables only;
 no source or image command edit is required for a platform-selected port. Local defaults
