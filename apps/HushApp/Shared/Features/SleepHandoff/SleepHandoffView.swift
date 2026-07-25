@@ -28,6 +28,19 @@ enum HushSleepExitPolicy {
     static func completionDuration(reduceMotion: Bool) -> TimeInterval {
         reduceMotion ? 0.2 : 1.35
     }
+
+    static func recapOffset(
+        reduceMotion: Bool,
+        isVisible: Bool
+    ) -> CGFloat {
+        reduceMotion ? 0 : (isVisible ? 0 : 18)
+    }
+
+    static func recapAnimationDuration(
+        reduceMotion: Bool
+    ) -> TimeInterval {
+        reduceMotion ? 0.2 : 0.75
+    }
 }
 
 @MainActor
@@ -407,7 +420,7 @@ struct SleepHandoffView: View {
     }
 
     private func completion(size: CGSize) -> some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             // Night background covering the idle line composition behind us.
             Color.black.ignoresSafeArea()
 
@@ -448,19 +461,22 @@ struct SleepHandoffView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.top, size.height * 0.15)
 
-            // 3) Sign-off — bottom-right corner, sitting on the tide, bold, and
-            //    staying alongside the resting task. Not a button.
-            Button(action: onFinish) {
-                goodnight
-            }
+            // 3) Sign-off — the wrapper positions the intrinsic button without
+            //    expanding its hit or accessibility frame across the screen.
+            VStack(spacing: 0) {
+                Button(action: onFinish) {
+                    goodnight
+                }
                 .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.trailing, 26)
-                .padding(.bottom, size.height * 0.055)
-                .opacity(isGoodnightVisible ? 1 : 0)
-                .offset(y: reduceMotion ? 0 : (isGoodnightVisible ? 0 : 14))
+                .fixedSize()
+                .contentShape(Rectangle())
                 .accessibilityLabel("今晚先到这里")
                 .accessibilityHidden(!isGoodnightVisible)
+            }
+            .padding(.trailing, 26)
+            .padding(.bottom, size.height * 0.055)
+            .opacity(isGoodnightVisible ? 1 : 0)
+            .offset(y: reduceMotion ? 0 : (isGoodnightVisible ? 0 : 14))
         }
         .task {
             await runCompletionSequence()
@@ -489,6 +505,7 @@ struct SleepHandoffView: View {
                 Array(recapEntries.enumerated()),
                 id: \.offset
             ) { index, entry in
+                let isVisible = visibleRecapCount > index
                 VStack(alignment: .leading, spacing: 8) {
                     // Question is secondary; the kept answer is primary.
                     if !entry.question.isEmpty {
@@ -503,9 +520,21 @@ struct SleepHandoffView: View {
                         .foregroundStyle(Color.white.opacity(0.86))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .opacity(visibleRecapCount > index ? 1 : 0)
-                .offset(y: visibleRecapCount > index ? 0 : 18)
-                .animation(.easeOut(duration: 0.75), value: visibleRecapCount)
+                .opacity(isVisible ? 1 : 0)
+                .offset(
+                    y: HushSleepExitPolicy.recapOffset(
+                        reduceMotion: reduceMotion,
+                        isVisible: isVisible
+                    )
+                )
+                .animation(
+                    .easeOut(
+                        duration: HushSleepExitPolicy.recapAnimationDuration(
+                            reduceMotion: reduceMotion
+                        )
+                    ),
+                    value: visibleRecapCount
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

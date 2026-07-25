@@ -37,4 +37,32 @@ final class HushSleepExitPolicyTests: XCTestCase {
             accuracy: 0.0001
         )
     }
+
+    func testReduceMotionRecapHasNoTranslationAndFastAnimation() {
+        XCTAssertEqual(
+            HushSleepExitPolicy.recapOffset(
+                reduceMotion: true,
+                isVisible: false
+            ),
+            0,
+            accuracy: 0.0001
+        )
+        XCTAssertLessThanOrEqual(
+            HushSleepExitPolicy.recapAnimationDuration(reduceMotion: true),
+            0.2
+        )
+        XCTAssertEqual(
+            HushSleepExitPolicy.recapOffset(
+                reduceMotion: false,
+                isVisible: false
+            ),
+            18,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            HushSleepExitPolicy.recapAnimationDuration(reduceMotion: false),
+            0.75,
+            accuracy: 0.0001
+        )
+    }
 }

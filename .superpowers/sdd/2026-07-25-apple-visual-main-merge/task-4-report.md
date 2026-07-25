@@ -51,3 +51,22 @@ No blocking concerns. Per the speed constraint, verification was limited to the 
 ### Concerns
 
 No blocking concerns. No optional probes or manual visual checks were run.
+
+## Fix Round 2
+
+### Implementation
+
+- Added pure recap presentation policy for Reduce Motion: hidden recap rows use zero translation and at most a 0.2-second animation; normal motion retains the 18pt offset and 0.75-second animation.
+- Changed the completed Sleep layout to position the semantic finish Button through the parent ZStack and a non-semantic padded wrapper. The Button itself now remains fixed to the intrinsic visible `晚安` label and no longer spans the completed screen.
+- Extended `HushSleepExitPolicyTests` to cover reduced and ordinary recap offset/duration policy.
+
+### Commands And Results
+
+- RED: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project apps/HushApp/Hush.xcodeproj -scheme Hush -destination 'platform=iOS Simulator,id=81BCDB5F-EA77-4398-ADA3-693501DF83BB' -derivedDataPath /tmp/HushVisualTask1Tests -only-testing:HushTests/HushSleepExitPolicyTests test` -> expected FAIL because recap policy methods did not exist.
+- GREEN: the same focused command -> PASS.
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -quiet -project apps/HushApp/Hush.xcodeproj -scheme Hush -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/HushVisualBaselineIOS CODE_SIGNING_ALLOWED=NO build` -> PASS.
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -quiet -project apps/HushApp/Hush.xcodeproj -scheme HushMac -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/HushVisualBaselineMac CODE_SIGNING_ALLOWED=NO build` -> PASS.
+
+### Concerns
+
+No blocking concerns. No optional probes or manual visual checks were run.
