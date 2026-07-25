@@ -11,6 +11,9 @@ Windows 电脑上，用飞书或钉钉官方 CLI 完成真实用户授权，并�
 后，才可临时启用一次发送。
 
 > 状态声明：本文只提供验证步骤，不代表任何真实账号已经完成授权或验证。
+> CI、fixture 或 mock 测试通过，只能证明对应的仓库内测试路径通过；它们不能
+> 证明飞书/钉钉真实账号已授权或真实链路成功，也不能替代指定电脑上的官方 CLI
+> preflight 和本文的真实 provider read smoke。
 
 ## 1. 适用范围、非目标与完成标准
 
@@ -195,8 +198,9 @@ lark-cli auth status --json --verify
 信息。
 
 `--verify` 只用于这次 preflight：它通过网络验证官方 CLI 本地保存的登录态，
-不会要求操作员打印 token。Hush Connector 的日常 poll 只调用
-`lark-cli auth status --json`，不会加 `--verify`。
+不会要求操作员打印 token。Hush Connector polling 不执行
+`auth status --verify`；正常 poll 直接通过 `im +messages-search` 搜索并拉取
+消息。
 
 ### 4.2 钉钉
 
