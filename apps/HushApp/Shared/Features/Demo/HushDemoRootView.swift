@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct HushDemoRootView: View {
     @StateObject private var store: HushDemoStore
@@ -7,7 +10,11 @@ struct HushDemoRootView: View {
     @State private var isShowingSettings = false
     @State private var inboxRevealProgress: CGFloat = 0
     @State private var isRevealingInbox = false
-    @State private var inboxTransitionTask: Task<Void, Never>?
+    // The tide-revealed inbox stays mounted for the whole gesture, so `progress`
+    // can drive its reveal continuously instead of the view being inserted or
+    // removed mid-animation. Cleared only once a cancelled swipe has fully
+    // receded, or handed straight to the `.inbox` route on completion.
+    @State private var isSwipingInbox = false
     private let onSettings: (() -> Void)?
     private let onCompanion: (() -> Void)?
     private let suggestedQuestID: String?
@@ -62,8 +69,10 @@ struct HushDemoRootView: View {
                 .allowsHitTesting(!isRevealingInbox)
                 .transition(.opacity)
             } else if store.route == .inbox {
-                UnifiedInboxView(onClose: store.closeInbox)
-                    .transition(.opacity)
+                // The inbox is drawn by the shared tide layer below, so the same
+                // view and store carry unbroken from the transition into the
+                // interactive route — no second instance to fade in over it.
+                EmptyView()
             } else {
                 VStack(spacing: 0) {
                     topBar
@@ -86,6 +95,20 @@ struct HushDemoRootView: View {
                         : .opacity
                 )
             }
+
+            // One continuous inbox, brought out by the tide. It is present for
+            // the whole swipe (`isSwipingInbox`) and stays for the `.inbox`
+            // route, so `inboxRevealProgress` — the same driver as the wave —
+            // reveals its surface and rows in lock-step with the rising water.
+            // Once routed it reads a constant 1 (fully settled, interactive).
+            if store.route == .inbox || isSwipingInbox || isRevealingInbox {
+                UnifiedInboxView(
+                    onClose: store.closeInbox,
+                    revealProgress: store.route == .inbox ? 1 : inboxRevealProgress
+                )
+                .allowsHitTesting(store.route == .inbox)
+                .transition(.opacity)
+            }
         }
         #if os(macOS)
         .frame(
@@ -103,6 +126,7 @@ struct HushDemoRootView: View {
                 store.startSleepHandoff()
             }
         }
+        .task { await exportIdleFramesIfRequested() }
         .onReceive(
             NotificationCenter.default.publisher(
                 for: .hushSleepHandoffRequested
@@ -112,9 +136,6 @@ struct HushDemoRootView: View {
         }
         .onChange(of: suggestionEventID) { _, _ in
             store.presentRestSuggestion(questID: suggestedQuestID)
-        }
-        .onDisappear {
-            inboxTransitionTask?.cancel()
         }
         .sheet(isPresented: $isShowingSettings) {
             HushSettingsView(
@@ -132,6 +153,30 @@ struct HushDemoRootView: View {
                 }
             )
         }
+    }
+
+    @MainActor
+    private func exportIdleFramesIfRequested() async {
+        #if os(macOS)
+        guard let dir = ProcessInfo.processInfo
+            .environment["HUSH_EXPORT_IDLE"] else { return }
+        // Match the real window the user runs, not a small test canvas.
+        let size = CGSize(width: 930, height: 680)
+        for k in 0...17 {
+            let content = HushWaveBackground(
+                revealProgress: 0, debugForcedElapsed: Double(k)
+            ).frame(width: size.width, height: size.height)
+            let r = ImageRenderer(content: content)
+            r.proposedSize = ProposedViewSize(size); r.scale = 2
+            guard let img = r.nsImage, let tiff = img.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:])
+            else { continue }
+            try? png.write(to: URL(fileURLWithPath: dir)
+                .appendingPathComponent(String(format: "idle-%02d.png", k)))
+        }
+        NSApplication.shared.terminate(nil)
+        #endif
     }
 
     private var agentTaskText: String {
@@ -163,50 +208,63 @@ struct HushDemoRootView: View {
         return task.hasSuffix("。") ? task : "\(task)。"
     }
 
+    /// While the finger is down, the whole choreography — water, page, messages
+    /// — tracks the swipe distance directly (no animation, so it follows the
+    /// finger frame-for-frame). Mounting the inbox on the first movement lets it
+    /// begin surfacing as the water rises, rather than after the swipe ends.
     private func updateInboxSwipe(_ progress: CGFloat) {
         guard !isRevealingInbox else { return }
-        inboxTransitionTask?.cancel()
 
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
+            isSwipingInbox = true
             inboxRevealProgress = min(0.96, max(0, progress))
         }
     }
 
     private func finishInboxSwipe(_ shouldComplete: Bool) {
         guard !isRevealingInbox else { return }
-        inboxTransitionTask?.cancel()
 
+        // Cancelled: the water falls back and the surfacing messages recede with
+        // it, continuing from wherever the finger let go — never a jump-cut back
+        // to frame zero. Faster the less there is to undo.
         guard shouldComplete else {
+            let duration = 0.34 + Double(inboxRevealProgress) * 0.55
             withAnimation(
-                .timingCurve(0.22, 0.72, 0.28, 1, duration: 0.72)
+                .timingCurve(0.22, 0.72, 0.28, 1, duration: duration)
             ) {
                 inboxRevealProgress = 0
+            } completion: {
+                isSwipingInbox = false
             }
             return
         }
 
+        // Committed: continue from the current progress to the end. Duration
+        // scales with the distance left so a late release settles quickly and an
+        // early flick still gets a full, unhurried tide — the gesture's own
+        // reach standing in for its velocity, then easing out.
         isRevealingInbox = true
-        let duration = 1.35
+        let remaining = max(0, 1 - inboxRevealProgress)
+        let duration = 0.45 + Double(remaining) * 0.95
         withAnimation(
-            .timingCurve(0.3, 0.02, 0.12, 1, duration: duration)
+            .timingCurve(0.26, 0.03, 0.12, 1, duration: duration)
         ) {
             inboxRevealProgress = 1
-        }
-
-        inboxTransitionTask = Task { @MainActor in
-            try? await Task.sleep(
-                nanoseconds: UInt64(duration * 1_000_000_000)
-            )
-            guard !Task.isCancelled else { return }
-
-            store.openInbox()
+        } completion: {
+            // The reveal already shows the fully-settled inbox, so switching to
+            // the interactive route is a same-frame, animation-free swap: no
+            // fade, no page appearing "after" the tide. Progress resets to 0 for
+            // next time; the routed inbox reads a constant 1 and stays opaque,
+            // hiding the wave view as it rewinds behind it.
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
+                store.route = .inbox
                 inboxRevealProgress = 0
                 isRevealingInbox = false
+                isSwipingInbox = false
             }
         }
     }

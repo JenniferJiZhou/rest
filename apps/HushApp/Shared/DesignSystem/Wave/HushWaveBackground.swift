@@ -60,6 +60,7 @@ struct HushWaveBackground: View, Animatable {
     @State private var idleStartedAt = Date()
 
     var revealProgress: CGFloat = 0
+    var debugForcedElapsed: TimeInterval?
 
     var animatableData: CGFloat {
         get { revealProgress }

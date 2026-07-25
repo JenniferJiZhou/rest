@@ -5,44 +5,47 @@ using namespace metal;
 
 constant float HUSH_TAU = 6.28318530718;
 
-// The line plate's OWN wave, measured off hush-wave-keyframe-01.png: for every
-// column, the row of the brightest pixel, smoothed, mean-removed and normalised
-// to [-1, 1]. Half-amplitude is 0.1154 of image height; the profile changes
-// sign eight times across the width (spatial frequency n ~ 5).
+// The line plate's OWN wave, measured off hush-wave-keyframe-01.png.
 //
-// Driving the deformation with the artwork's own profile is what makes a peak
-// able to become a trough. A displacement field that does not change sign
-// across the width can only lift or lower the line as a whole — which is
-// exactly the rigid translation we must avoid.
-constant float HUSH_PROFILE[32] = {
-     0.4335,  0.3433,  0.1075, -0.2614, -0.6332, -0.7101, -0.2774,  0.1374,
-     0.2561,  0.1407,  0.0512,  0.1349,  0.2960,  0.2785, -0.1796, -0.7780,
-    -0.9986, -0.8040, -0.3439,  0.1672,  0.5086,  0.6163,  0.4511,  0.0693,
-    -0.0657,  0.0899,  0.3617,  0.4662,  0.3414,  0.0550, -0.0281,  0.0309
+// Per column the luminance-weighted centroid is taken (not the brightest
+// pixel: argmax hops between lines wherever they cross, and that noise shows
+// up as visible kinks once it drives a warp). The mean-removed profile is then
+// fitted with a half-range cosine series, which is orthogonal on [0,1]. Ten
+// terms reach 0.111 RMS while carrying only 0.7% of the raw profile's
+// roughness — the reconstruction is band-limited, so the field it drives
+// cannot crease the strokes.
+//
+// Extrema of the fit sit at x = 0.13, 0.37, 0.52, 0.66, 0.77, 0.87, matching
+// the humps actually drawn. Driving the deformation with the artwork's own
+// profile is what lets a crest become a trough: a field that does not change
+// sign across the width could only raise or lower the line as a whole, which
+// is precisely the rigid translation to avoid.
+constant float HUSH_PA[10] = {
+    -0.10940, +0.06590, +0.01073, -0.20969, +0.19923,
+    +0.40161, +0.12943, -0.15172, +0.29027, +0.08905
 };
 
-constant float HUSH_HALF_AMP = 0.1154;   // of plate height
+constant float HUSH_HALF_AMP = 0.0988;   // of plate height
 
 static float hushProfile(float x) {
-    float f = clamp(x, 0.0, 1.0) * 31.0;
-    int i = int(floor(f));
-    float g = fract(f);
-    g = g * g * (3.0 - 2.0 * g);          // smooth interpolation between samples
-    int a = clamp(i, 0, 31);
-    int b = clamp(i + 1, 0, 31);
-    return mix(HUSH_PROFILE[a], HUSH_PROFILE[b], g);
+    float u = clamp(x, 0.0, 1.0) * M_PI_F;
+    float s = 0.0;
+    for (int n = 1; n <= 10; n++) {
+        s += HUSH_PA[n - 1] * cos(float(n) * u);
+    }
+    return s;
 }
 
-// Low-frequency tension riding on top of the inversion. Spatial orders 3/4/6
-// roughly match the artwork's own hump count, so this changes local steepness
-// and curvature rather than sliding a shape sideways. Periods 11 / 17 / 23 s
-// are mutually incommensurate, so the combined motion never repeats exactly
-// and there is no loop point to jump at.
+// Low-frequency tension riding on top of the inversion, changing local
+// steepness rather than sliding a shape sideways. Orders are kept to 2/3/4:
+// anything higher reads as the strokes crinkling rather than flexing. Periods
+// 11 / 17 / 23 s are mutually incommensurate, so the combined motion never
+// repeats exactly and there is no loop point to jump at.
 static float hushTension(float x, float t, float lane) {
     float s = 0.0;
-    s += sin(3.0 * M_PI_F * x + 0.7) * cos(t * (HUSH_TAU / 11.0) + lane * 0.9) * 0.34;
-    s += sin(4.0 * M_PI_F * x - 1.2) * cos(t * (HUSH_TAU / 17.0) + 1.7 + lane * 0.6) * 0.26;
-    s += sin(6.0 * M_PI_F * x + 2.3) * cos(t * (HUSH_TAU / 23.0) + 0.4 - lane * 0.5) * 0.15;
+    s += sin(2.0 * M_PI_F * x + 0.7) * cos(t * (HUSH_TAU / 11.0) + lane * 0.9) * 0.34;
+    s += sin(3.0 * M_PI_F * x - 1.2) * cos(t * (HUSH_TAU / 17.0) + 1.7 + lane * 0.6) * 0.24;
+    s += sin(4.0 * M_PI_F * x + 2.3) * cos(t * (HUSH_TAU / 23.0) + 0.4 - lane * 0.5) * 0.12;
     return s;
 }
 
@@ -98,7 +101,7 @@ static float hushTension(float x, float t, float lane) {
     // opposite way for a positive y offset (verified by measuring rendered
     // frames, not by reading the docs), hence the negation.
     float dy = HUSH_HALF_AMP * hushProfile(x) * (s - 1.0)
-             + HUSH_HALF_AMP * hushTension(x, time, lane) * 0.95;
+             + HUSH_HALF_AMP * hushTension(x, time, lane) * 0.55;
 
     return float2(position.x, position.y - dy * h * amplitude);
 }

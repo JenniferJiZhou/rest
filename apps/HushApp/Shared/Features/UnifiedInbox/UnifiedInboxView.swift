@@ -113,12 +113,19 @@ final class UnifiedInboxDemoStore: ObservableObject {
 }
 
 struct UnifiedInboxView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var store = UnifiedInboxDemoStore()
     let onClose: () -> Void
 
+    /// Shared tide-transition driver, 0…1. At 1 (the default) the inbox is fully
+    /// settled and every reveal below is a no-op, so a directly-presented inbox
+    /// behaves exactly as before. Below 1 the reading surface and each row are
+    /// brought out by the tide front — see `HushTideTimeline`.
+    var revealProgress: CGFloat = 1
+
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            HushTidePageSurface(progress: revealProgress)
 
             if let item = store.selectedItem {
                 detail(item)
@@ -144,17 +151,49 @@ struct UnifiedInboxView: View {
     }
 
     private var inbox: some View {
-        VStack(spacing: 0) {
+        // Reveal order top → bottom: header, notice, picker, then each card.
+        // The tide front (derived from `revealProgress`) sweeps this order, and
+        // each row's index is its vertical slot, so a row is brought out exactly
+        // as the water passes where it will sit — with heavy overlap between
+        // neighbours so the whole list reads as one continuous stream.
+        let items = store.filteredItems
+        let revealCount = 3 + items.count
+
+        return VStack(spacing: 0) {
             belowSurfaceHeader
+                .hushTideReveal(
+                    index: 0,
+                    count: revealCount,
+                    progress: revealProgress,
+                    reduceMotion: reduceMotion
+                )
 
             ScrollView {
                 VStack(alignment: .leading, spacing: HushSpacing.lg) {
                     fixtureNotice
+                        .hushTideReveal(
+                            index: 1,
+                            count: revealCount,
+                            progress: revealProgress,
+                            reduceMotion: reduceMotion
+                        )
                     providerPicker
+                        .hushTideReveal(
+                            index: 2,
+                            count: revealCount,
+                            progress: revealProgress,
+                            reduceMotion: reduceMotion
+                        )
 
                     VStack(spacing: HushSpacing.sm) {
-                        ForEach(store.filteredItems) { item in
+                        ForEach(Array(items.enumerated()), id: \.element.id) { offset, item in
                             itemCard(item)
+                                .hushTideReveal(
+                                    index: 3 + offset,
+                                    count: revealCount,
+                                    progress: revealProgress,
+                                    reduceMotion: reduceMotion
+                                )
                         }
                     }
                 }
