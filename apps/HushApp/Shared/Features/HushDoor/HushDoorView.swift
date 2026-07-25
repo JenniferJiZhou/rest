@@ -155,6 +155,9 @@ struct HushDoorView: View {
                 }
             }
             .contentShape(Rectangle())
+            .accessibilityAction(named: Text("打开消息")) {
+                fireTrigger()
+            }
             #if !os(macOS)
             .gesture(inboxSwipeGesture)
             #endif

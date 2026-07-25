@@ -113,12 +113,20 @@ final class UnifiedInboxDemoStore: ObservableObject {
 }
 
 struct UnifiedInboxView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var store = UnifiedInboxDemoStore()
     let onClose: () -> Void
 
+    /// Tide clock. `.settled` (the default) presents an ordinary interactive
+    /// inbox — the surface is solid and every row reads fully revealed. During
+    /// the transition it carries the water progress (for the reading surface)
+    /// and the elapsed seconds (for the tight message cadence). See
+    /// `HushTideTimeline`.
+    var reveal: HushTideReveal = .settled
+
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            HushTidePageSurface(progress: reveal.progress)
 
             if let item = store.selectedItem {
                 detail(item)
@@ -134,7 +142,7 @@ struct UnifiedInboxView: View {
             isPresented: $store.isShowingSendConfirmation,
             titleVisibility: .visible
         ) {
-            Button("确认模拟发送") {
+            Button("确认发送") {
                 store.confirmSend()
             }
             Button("取消", role: .cancel) {}
@@ -144,17 +152,44 @@ struct UnifiedInboxView: View {
     }
 
     private var inbox: some View {
-        VStack(spacing: 0) {
+        // Reveal order top → bottom: header, notice, picker, then each card.
+        // Each row's index is its vertical slot; the tide's tight cadence opens
+        // them in that order, ~0.06 s apart, so the list reads as one continuous
+        // downward stream left in the water's wake — see `HushTideTimeline`.
+        let items = store.filteredItems
+        let elapsed = reveal.elapsed
+
+        return VStack(spacing: 0) {
             belowSurfaceHeader
+                .hushTideReveal(
+                    index: 0,
+                    elapsed: elapsed,
+                    reduceMotion: reduceMotion
+                )
 
             ScrollView {
                 VStack(alignment: .leading, spacing: HushSpacing.lg) {
                     fixtureNotice
+                        .hushTideReveal(
+                            index: 1,
+                            elapsed: elapsed,
+                            reduceMotion: reduceMotion
+                        )
                     providerPicker
+                        .hushTideReveal(
+                            index: 2,
+                            elapsed: elapsed,
+                            reduceMotion: reduceMotion
+                        )
 
                     VStack(spacing: HushSpacing.sm) {
-                        ForEach(store.filteredItems) { item in
+                        ForEach(Array(items.enumerated()), id: \.element.id) { offset, item in
                             itemCard(item)
+                                .hushTideReveal(
+                                    index: 3 + offset,
+                                    elapsed: elapsed,
+                                    reduceMotion: reduceMotion
+                                )
                         }
                     }
                 }
@@ -213,7 +248,7 @@ struct UnifiedInboxView: View {
                     sourceHeader(item)
 
                     VStack(alignment: .leading, spacing: HushSpacing.sm) {
-                        HushSectionLabel(text: "演示摘要")
+                        HushSectionLabel(text: "AI 摘要")
                         Text(item.summary)
                             .font(HushType.body)
                             .lineSpacing(5)
@@ -429,7 +464,7 @@ struct UnifiedInboxView: View {
                 )
 
             HStack(spacing: HushSpacing.sm) {
-                Button("重置演示草稿") {
+                Button("重新生成") {
                     store.regenerateDraft()
                 }
                 .buttonStyle(HushSecondaryButtonStyle())
@@ -440,7 +475,7 @@ struct UnifiedInboxView: View {
                 .buttonStyle(HushSecondaryButtonStyle())
             }
 
-            Button(store.sentItemIDs.contains(item.id) ? "演示已发送" : "模拟确认发送") {
+            Button(store.sentItemIDs.contains(item.id) ? "演示已发送" : "检查并确认发送") {
                 store.isShowingSendConfirmation = true
             }
             .buttonStyle(HushPrimaryButtonStyle())
