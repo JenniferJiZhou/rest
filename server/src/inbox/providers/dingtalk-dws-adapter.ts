@@ -121,9 +121,9 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
     if (!messages || typeof hasMore !== "boolean") {
       throw providerOutputError();
     }
-    const mappedMessages = messages
-      .map((message) => this.mapMessage(message, input.accountId))
-      .filter((mapped): mapped is NonNullable<typeof mapped> => mapped !== null);
+    const mappedMessages = messages.map((message) =>
+      this.mapMessage(message, input.accountId)
+    );
     const bindings = new Map<string, InboxParticipantBinding>();
     for (const mapped of mappedMessages) {
       if (mapped.binding) {
@@ -180,7 +180,7 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
   private mapMessage(
     message: DingTalkMessage,
     accountId: string
-  ): { item: InboxEvent; binding: InboxParticipantBinding | null } | null {
+  ): { item: InboxEvent; binding: InboxParticipantBinding | null } {
     const messageId = stringValue(message.messageId);
     const conversationId = stringValue(message.conversationId);
     const conversationType = conversationTypeValue(message.conversationType);
@@ -188,7 +188,7 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
       message.createdAt ?? message.createTime
     );
     if (!messageId || !conversationId || !receivedAt) {
-      return null;
+      throw providerOutputError();
     }
     if (!conversationType) {
       throw providerOutputError();

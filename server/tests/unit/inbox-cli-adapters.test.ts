@@ -201,6 +201,92 @@ describe("Inbox CLI adapters", () => {
     expect(JSON.stringify(pulled.items)).not.toContain("ding-user-1");
   });
 
+  it("rejects an incomplete flat DWS message before advancing its checkpoint", async () => {
+    const adapter = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          result: {
+            messages: [
+              {
+                messageId: "ding-message-incomplete",
+                conversationType: "direct",
+                senderId: "private_dingtalk_user",
+                senderName: "王同学",
+                text: "请确认接口交付时间",
+                createdAt: "2026-07-24T09:00:00+08:00"
+              }
+            ],
+            hasMore: true,
+            nextCursor: "20"
+          }
+        })
+      ])
+    );
+
+    let error: unknown;
+    try {
+      await adapter.pull({
+        accountId: "ding-account",
+        checkpoint: null,
+        limit: 20
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE",
+      details: { provider: "dingtalk", reason: "invalid_output" }
+    });
+    expect(JSON.stringify(error)).not.toContain("private_dingtalk_user");
+  });
+
+  it("rejects a grouped DWS message without its inherited conversation ID", async () => {
+    const adapter = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          result: {
+            conversationMessagesList: [
+              {
+                title: "产品讨论组",
+                conversationType: "group",
+                messages: [
+                  {
+                    messageId: "ding-message-incomplete",
+                    senderOpenDingTalkId: "private_dingtalk_user",
+                    senderName: "王同学",
+                    text: "请确认接口交付时间",
+                    createTime: "2026-07-24T09:00:00+08:00"
+                  }
+                ]
+              }
+            ],
+            hasMore: false
+          }
+        })
+      ])
+    );
+
+    let error: unknown;
+    try {
+      await adapter.pull({
+        accountId: "ding-account",
+        checkpoint: null,
+        limit: 20
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE",
+      details: { provider: "dingtalk", reason: "invalid_output" }
+    });
+    expect(JSON.stringify(error)).not.toContain("private_dingtalk_user");
+  });
+
   it("normalizes grouped DWS conversation batches and sends group mentions", async () => {
     const runner = new RecordingRunner([
       JSON.stringify({
