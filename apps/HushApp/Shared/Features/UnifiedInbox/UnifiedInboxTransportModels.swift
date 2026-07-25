@@ -69,7 +69,7 @@ enum InboxItemKindResponse: String, Codable, Sendable {
     case conversationDigest = "conversation_digest"
 }
 
-struct InboxCoverageResponse: Codable, Sendable {
+struct InboxCoverageResponse: Codable, Sendable, Equatable {
     let source: InboxCoverageSourceResponse
     let complete: Bool
     let note: String?
