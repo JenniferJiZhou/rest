@@ -3,6 +3,7 @@ import SwiftUI
 struct HushDemoRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var store: HushDemoStore
+    @StateObject private var inboxCoordinator: UnifiedInboxModeCoordinator
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
     @State private var isShowingSettings = false
@@ -50,6 +51,9 @@ struct HushDemoRootView: View {
                 initialQuestID: initialQuestID ?? suggestedQuestID,
                 initialGeneratedRestTask: suggestedGeneratedTask
             )
+        )
+        _inboxCoordinator = StateObject(
+            wrappedValue: UnifiedInboxModeCoordinator()
         )
     }
 
@@ -125,7 +129,8 @@ struct HushDemoRootView: View {
                 }
 
                 if store.route == .inbox || isRevealingInbox {
-                    UnifiedInboxView(
+                    UnifiedInboxConnectionView(
+                        coordinator: inboxCoordinator,
                         onClose: store.closeInbox,
                         reveal: store.route == .inbox
                             ? .settled

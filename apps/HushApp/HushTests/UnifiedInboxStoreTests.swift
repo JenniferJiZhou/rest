@@ -87,6 +87,9 @@ final class UnifiedInboxStoreTests: XCTestCase {
         XCTAssertEqual(model.sendState, .unknown)
         XCTAssertEqual(client.sendCalls.count, 1)
         XCTAssertFalse(client.sendCalls[0].idempotencyKey.isEmpty)
+        model.beginReview()
+        XCTAssertEqual(model.sendState, .unknown)
+        XCTAssertEqual(client.sendCalls.count, 1)
     }
 
     func testDraftConflictRefreshesAndRequiresFreshReview() async {
@@ -125,6 +128,18 @@ final class UnifiedInboxStoreTests: XCTestCase {
 
     func testEachExplicitSendActionUsesFreshIdempotencyKey() async {
         let client = configuredClient()
+        client.sendResult = .success(
+            .init(
+                value: .init(
+                    draftID: "private-draft",
+                    provider: .feishu,
+                    status: .failed,
+                    providerMessageID: nil,
+                    sentAt: nil
+                ),
+                origin: .real
+            )
+        )
         let model = UnifiedInboxViewModel(client: client)
         await model.load()
         let row = try! XCTUnwrap(model.items.first)

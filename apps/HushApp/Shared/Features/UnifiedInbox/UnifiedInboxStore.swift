@@ -218,6 +218,12 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
 
     func beginReview() {
         guard draft != nil else { return }
+        switch sendState {
+        case .idle, .failed:
+            break
+        default:
+            return
+        }
         invalidateConfirmation()
         sendState = .reviewing
     }

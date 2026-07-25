@@ -21,6 +21,9 @@
 		A50000000000000000000012 /* UnifiedInboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000009 /* UnifiedInboxStore.swift */; };
 		A50000000000000000000013 /* UnifiedInboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000009 /* UnifiedInboxStore.swift */; };
 		A50000000000000000000014 /* UnifiedInboxStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000010 /* UnifiedInboxStoreTests.swift */; };
+		A50000000000000000000015 /* UnifiedInboxConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000011 /* UnifiedInboxConnectionView.swift */; };
+		A50000000000000000000016 /* UnifiedInboxConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000011 /* UnifiedInboxConnectionView.swift */; };
+		A50000000000000000000017 /* UnifiedInboxModeCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000012 /* UnifiedInboxModeCoordinatorTests.swift */; };
 		A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* iOSApp/App/HushApp.swift */; };
 		A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* Shared/Core/HushProduct.swift */; };
 		A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */; };
@@ -162,6 +165,8 @@
 		B50000000000000000000008 /* UnifiedInboxAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxAPIClient.swift; sourceTree = SOURCE_ROOT; };
 		B50000000000000000000009 /* UnifiedInboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxStore.swift; sourceTree = SOURCE_ROOT; };
 		B50000000000000000000010 /* UnifiedInboxStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedInboxStoreTests.swift; sourceTree = "<group>"; };
+		B50000000000000000000011 /* UnifiedInboxConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxConnectionView.swift; sourceTree = SOURCE_ROOT; };
+		B50000000000000000000012 /* UnifiedInboxModeCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedInboxModeCoordinatorTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000001 /* iOSApp/App/HushApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/App/HushApp.swift; sourceTree = "<group>"; };
 		B00000000000000000000002 /* iOSApp/Hush.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iOSApp/Hush.entitlements; sourceTree = "<group>"; };
 		B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/App/HushMacApp.swift; sourceTree = "<group>"; };
@@ -355,6 +360,7 @@
 		C00000000000000000000008 /* HushTests */ = {
 			isa = PBXGroup;
 			children = (
+				B50000000000000000000012 /* UnifiedInboxModeCoordinatorTests.swift */,
 				B50000000000000000000010 /* UnifiedInboxStoreTests.swift */,
 				B50000000000000000000002 /* UnifiedInboxTransportModelsTests.swift */,
 				B50000000000000000000006 /* UnifiedInboxAPIClientTests.swift */,
@@ -393,6 +399,7 @@
 				B50000000000000000000007 /* UnifiedInboxConfiguration.swift */,
 				B50000000000000000000008 /* UnifiedInboxAPIClient.swift */,
 				B50000000000000000000009 /* UnifiedInboxStore.swift */,
+				B50000000000000000000011 /* UnifiedInboxConnectionView.swift */,
 				B10000000000000000000004 /* DayResetView.swift */,
 				B10000000000000000000005 /* HushDemoRootView.swift */,
 				B10000000000000000000006 /* HushDemoStandalone.swift */,
@@ -653,6 +660,7 @@
 				A50000000000000000000008 /* UnifiedInboxConfiguration.swift in Sources */,
 				A50000000000000000000010 /* UnifiedInboxAPIClient.swift in Sources */,
 				A50000000000000000000012 /* UnifiedInboxStore.swift in Sources */,
+				A50000000000000000000015 /* UnifiedInboxConnectionView.swift in Sources */,
 				A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */,
 				A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */,
 				A00000000000000000000009 /* iOSApp/Platform/FamilyControlsAuthorizationModel.swift in Sources */,
@@ -697,6 +705,7 @@
 				A50000000000000000000009 /* UnifiedInboxConfiguration.swift in Sources */,
 				A50000000000000000000011 /* UnifiedInboxAPIClient.swift in Sources */,
 				A50000000000000000000013 /* UnifiedInboxStore.swift in Sources */,
+				A50000000000000000000016 /* UnifiedInboxConnectionView.swift in Sources */,
 				A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */,
 				A00000000000000000000004 /* Shared/Core/HushProduct.swift in Sources */,
 				A00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift in Sources */,
@@ -750,6 +759,7 @@
 				A50000000000000000000003 /* UnifiedInboxTransportModelsTests.swift in Sources */,
 				A50000000000000000000007 /* UnifiedInboxAPIClientTests.swift in Sources */,
 				A50000000000000000000014 /* UnifiedInboxStoreTests.swift in Sources */,
+				A50000000000000000000017 /* UnifiedInboxModeCoordinatorTests.swift in Sources */,
 				A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */,
 				A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */,
 				A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */,
@@ -895,6 +905,8 @@
 				DEVELOPMENT_TEAM = K85XR4H88D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Hush;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Hush 连接你配置的局域网消息服务，用于同步飞书、钉钉和邮箱消息。";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -923,6 +935,8 @@
 				DEVELOPMENT_TEAM = K85XR4H88D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Hush;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Hush 连接你配置的局域网消息服务，用于同步飞书、钉钉和邮箱消息。";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

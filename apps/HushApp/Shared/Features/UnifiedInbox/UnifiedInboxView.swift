@@ -320,8 +320,10 @@ private struct UnifiedInboxRealView: View {
     @ViewBuilder
     private var sendControls: some View {
         switch model.sendState {
-        case .idle, .sent, .failed, .unknown:
+        case .idle, .failed:
             Button("检查发送") { model.beginReview() }
+        case .sent, .unknown:
+            EmptyView()
         case .reviewing:
             Button("获取确认") { Task { await model.requestConfirmation() } }
         case .confirming:
