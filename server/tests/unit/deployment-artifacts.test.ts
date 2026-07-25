@@ -92,6 +92,7 @@ describe("deployment artifacts", () => {
     expect(env.get("PUBLIC_BASE_URL")).toMatch(/^https:\/\//u);
     expect(env.get("HUSH_REST_DECISION_PROVIDER")).toBe("canned");
     expect(env.get("HUSH_DEMO_MODE")).toBe("false");
+    expect(environment).toContain("# PORT=3000");
     expect(env.has("PORT")).toBe(false);
     expect(env.has("HUSH_DEMO_TOKEN")).toBe(false);
     expect(env.has("CLAUDE_API_KEY")).toBe(false);
@@ -121,7 +122,9 @@ describe("deployment artifacts", () => {
       'CMD ["node", "dist/bootstrap.js"]'
     );
     expect(dockerfile).toContain("HEALTHCHECK");
-    expect(dockerfile).toContain("http://127.0.0.1:3000/v1/health");
+    expect(dockerfile).not.toContain("EXPOSE 3000");
+    expect(dockerfile).toContain("process.env.PORT ?? '3000'");
+    expect(dockerfile).not.toContain("http://127.0.0.1:3000/v1/health");
     expect(dockerignore).toContain(".env");
     expect(dockerignore).toContain(".git");
     expect(dockerignore).toContain("*.pem");
