@@ -31,6 +31,12 @@ describe("deployment artifacts", () => {
         };
       };
     };
+    const appToken = workflow.match(
+      /--env HUSH_APP_TOKEN=([^\s\\]+)/u
+    )?.[1];
+    const connectorToken = workflow.match(
+      /--env HUSH_CONNECTOR_TOKEN=([^\s\\]+)/u
+    )?.[1];
     const env = new Map(
       environment
         .trim()
@@ -54,6 +60,11 @@ describe("deployment artifacts", () => {
     expect(workflow).toContain("docker buildx imagetools create");
     expect(workflow).toContain("GITHUB_SHA");
     expect(workflow).toContain("http://127.0.0.1:3000/v1/health");
+    expect(appToken).toContain("ci-health-smoke");
+    expect(connectorToken).toContain("ci-health-smoke");
+    expect(appToken?.length).toBeGreaterThanOrEqual(32);
+    expect(connectorToken?.length).toBeGreaterThanOrEqual(32);
+    expect(appToken).not.toBe(connectorToken);
     expect(workflow).toContain("github.ref == 'refs/heads/main'");
     expect(workflow).toContain("workflow_dispatch");
     expect(workflow).toContain("inputs.publish");

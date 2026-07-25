@@ -88,6 +88,8 @@ jobs:
             --env TRUST_PROXY=true \
             --env HUSH_REST_DECISION_PROVIDER=canned \
             --env HUSH_DEMO_MODE=false \
+            --env HUSH_APP_TOKEN=ci-health-smoke-app-token-00000001 \
+            --env HUSH_CONNECTOR_TOKEN=ci-health-smoke-connector-token-00000002 \
             --env LOG_LEVEL=silent \
             "${{ steps.image.outputs.name }}:$GITHUB_SHA"
           for attempt in {1..20}; do
