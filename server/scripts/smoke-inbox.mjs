@@ -13,6 +13,7 @@ const stages = new Set([
   "send"
 ]);
 const errorCodePattern = /^[A-Z][A-Z0-9_]{0,80}$/;
+const publicIdKeys = new Set(["id", "draft_id", "target_id"]);
 
 class SmokeFailure extends Error {
   constructor(stage, status, code) {
@@ -76,6 +77,12 @@ function parseArguments(arguments_) {
   if (mode === "read" && itemId !== undefined) {
     throw new SmokeFailure("arguments", 0, "HUSH_SMOKE_ITEM_ID_UNEXPECTED");
   }
+  if (
+    itemId &&
+    itemId.split(/[\\/]/).some((segment) => segment === "." || segment === "..")
+  ) {
+    throw new SmokeFailure("arguments", 0, "HUSH_SMOKE_ITEM_ID_INVALID");
+  }
   return { provider, mode, itemId };
 }
 
@@ -83,7 +90,13 @@ function requiredBaseUrl() {
   const value = requiredEnvironment("HUSH_BASE_URL");
   try {
     const url = new URL(value);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
       throw new Error("unsupported protocol");
     }
     return url.toString().replace(/\/$/, "");
@@ -101,8 +114,7 @@ function requiredEnvironment(name) {
 }
 
 function createRequest(baseUrl, appToken, session) {
-  return async (stage, path, options = {}) => {
-    const requestId = randomUUID();
+  return async (stage, path, options = {}, requestId = randomUUID()) => {
     let response;
     try {
       response = await fetch(`${baseUrl}${path}`, {
@@ -137,9 +149,7 @@ async function validateRead(request, provider) {
   const syncStatus = await request("sync_status", "/v1/inbox/sync-status");
   if (
     !Array.isArray(syncStatus) ||
-    !syncStatus.some(
-      (entry) => isRecord(entry) && entry.provider === provider && entry.status === "ready"
-    )
+    !syncStatus.some((entry) => validReadySync(entry, provider))
   ) {
     throw new SmokeFailure("sync_status", 0, "HUSH_SMOKE_SYNC_NOT_READY");
   }
@@ -155,20 +165,11 @@ async function validateRead(request, provider) {
     throw new SmokeFailure("items", 0, "HUSH_SMOKE_PROVIDER_CARD_MISSING");
   }
   for (const card of cards) {
-    if (!hasConversationMetadata(card)) {
-      throw new SmokeFailure("items", 0, "HUSH_SMOKE_CONVERSATION_INVALID");
+    if (containsPrivateIdKey(card)) {
+      throw new SmokeFailure("items", 0, "HUSH_SMOKE_PRIVATE_ID_FIELD");
     }
-    if (typeof card.summary !== "string" || !card.summary.trim()) {
-      throw new SmokeFailure("items", 0, "HUSH_SMOKE_SUMMARY_MISSING");
-    }
-    if (typeof card.needs_reply !== "boolean") {
-      throw new SmokeFailure("items", 0, "HUSH_SMOKE_NEEDS_REPLY_INVALID");
-    }
-    if (
-      card.needs_reply &&
-      (typeof card.draft_id !== "string" || !card.draft_id.trim())
-    ) {
-      throw new SmokeFailure("items", 0, "HUSH_SMOKE_DRAFT_MISSING");
+    if (!validPublicCard(card)) {
+      throw new SmokeFailure("items", 0, "HUSH_SMOKE_CARD_INVALID");
     }
   }
 
@@ -194,7 +195,7 @@ async function sendDraft(request, provider, itemId) {
     "item",
     `/v1/inbox/items/${encodeURIComponent(itemId)}`
   );
-  if (!isRecord(item) || item.provider !== provider) {
+  if (!isRecord(item) || item.provider !== provider || item.id !== itemId) {
     throw new SmokeFailure("item", 0, "HUSH_SMOKE_PROVIDER_MISMATCH");
   }
   if (typeof item.draft_id !== "string" || !item.draft_id.trim()) {
@@ -205,21 +206,32 @@ async function sendDraft(request, provider, itemId) {
     "draft",
     `/v1/inbox/drafts/${encodeURIComponent(draftId)}`
   );
-  if (!isRecord(draft) || !Number.isInteger(draft.version) || draft.version < 1) {
+  if (
+    !isRecord(draft) ||
+    draft.id !== draftId ||
+    draft.inbox_item_id !== itemId ||
+    !Number.isInteger(draft.version) ||
+    draft.version < 1
+  ) {
     throw new SmokeFailure("draft", 0, "HUSH_SMOKE_DRAFT_VERSION_INVALID");
   }
+  const confirmationRequestId = randomUUID();
   const confirmation = await request(
     "confirmation",
     `/v1/inbox/drafts/${encodeURIComponent(draftId)}/confirmation`,
-    { method: "POST" }
+    { method: "POST" },
+    confirmationRequestId
   );
   if (
     !isRecord(confirmation) ||
     typeof confirmation.confirmation_token !== "string" ||
-    !confirmation.confirmation_token.trim()
+    !confirmation.confirmation_token.trim() ||
+    confirmation.confirmation_token.length < 16 ||
+    !futureIsoDate(confirmation.expires_at)
   ) {
     throw new SmokeFailure("confirmation", 0, "HUSH_SMOKE_CONFIRMATION_INVALID");
   }
+  const sendRequestId = randomUUID();
   const sent = await request(
     "send",
     `/v1/inbox/drafts/${encodeURIComponent(draftId)}:send`,
@@ -231,23 +243,114 @@ async function sendDraft(request, provider, itemId) {
       },
       body: JSON.stringify({
         schema_version: "1.0",
-        request_id: randomUUID(),
+        request_id: sendRequestId,
         expected_version: draft.version,
         confirmation_token: confirmation.confirmation_token
       })
-    }
+    },
+    sendRequestId
   );
-  if (!isRecord(sent) || sent.status !== "sent") {
+  if (
+    !isRecord(sent) ||
+    sent.draft_id !== draftId ||
+    sent.provider !== provider ||
+    sent.status !== "sent" ||
+    !nullableNonEmptyString(sent.provider_message_id) ||
+    !nullableIsoDate(sent.sent_at)
+  ) {
     throw new SmokeFailure("send", 0, "HUSH_SMOKE_SEND_NOT_CONFIRMED");
   }
 }
 
-function hasConversationMetadata(card) {
+function validReadySync(entry, provider) {
   return (
-    (card.conversation_type === "direct" || card.conversation_type === "group") &&
-    typeof card.conversation_name === "string" &&
-    Boolean(card.conversation_name.trim())
+    isRecord(entry) &&
+    entry.provider === provider &&
+    entry.status === "ready" &&
+    typeof entry.account_id === "string" &&
+    Boolean(entry.account_id.trim()) &&
+    nullableNonEmptyString(entry.checkpoint) &&
+    nullableIsoDate(entry.last_synced_at) &&
+    nullableNonEmptyString(entry.last_error) &&
+    validCoverage(entry.coverage)
   );
+}
+
+function validPublicCard(card) {
+  return (
+    isRecord(card) &&
+    nonEmptyString(card.id) &&
+    (card.item_kind === "message" || card.item_kind === "conversation_digest") &&
+    (card.conversation_type === "direct" || card.conversation_type === "group") &&
+    nonEmptyString(card.conversation_name) &&
+    Number.isInteger(card.revision) && card.revision >= 1 &&
+    Number.isInteger(card.message_count) && card.message_count >= 1 &&
+    isoDate(card.window_started_at) && isoDate(card.window_ended_at) &&
+    Date.parse(card.window_started_at) <= Date.parse(card.window_ended_at) &&
+    nonEmptyString(card.summary) &&
+    stringArray(card.important_points) &&
+    stringArray(card.todos) &&
+    ["urgent", "normal", "low", "uncertain"].includes(card.priority) &&
+    typeof card.needs_reply === "boolean" &&
+    validReplyTargets(card.reply_targets) &&
+    (card.draft_id === null || nonEmptyString(card.draft_id)) &&
+    ["pending", "ready", "failed"].includes(card.sync_status) &&
+    (!card.needs_reply || nonEmptyString(card.draft_id))
+  );
+}
+
+function validCoverage(value) {
+  return isRecord(value) &&
+    ["official_api", "imap", "browser_fallback"].includes(value.source) &&
+    typeof value.complete === "boolean" &&
+    nullableNonEmptyString(value.note);
+}
+
+function validReplyTargets(value) {
+  return Array.isArray(value) && value.every((target) =>
+    isRecord(target) &&
+    typeof target.target_id === "string" && /^participant_[a-zA-Z0-9_-]{8,64}$/.test(target.target_id) &&
+    nonEmptyString(target.display_name) && nonEmptyString(target.reason)
+  );
+}
+
+function containsPrivateIdKey(value) {
+  if (Array.isArray(value)) return value.some(containsPrivateIdKey);
+  if (!isRecord(value)) return false;
+  return Object.entries(value).some(([key, nested]) =>
+    privateIdKey(key) ||
+    containsPrivateIdKey(nested)
+  );
+}
+
+function privateIdKey(key) {
+  const normalized = key.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  return normalized === "sender_ref" ||
+    (normalized.endsWith("_id") && !publicIdKeys.has(normalized));
+}
+
+function stringArray(value) {
+  return Array.isArray(value) && value.every(nonEmptyString);
+}
+
+function nonEmptyString(value) {
+  return typeof value === "string" && Boolean(value.trim());
+}
+
+function nullableNonEmptyString(value) {
+  return value === null || nonEmptyString(value);
+}
+
+function isoDate(value) {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function nullableIsoDate(value) {
+  return value === null || isoDate(value);
+}
+
+function futureIsoDate(value) {
+  return isoDate(value) && Date.parse(value) > Date.now();
 }
 
 function hushErrorCode(body) {

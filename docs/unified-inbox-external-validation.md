@@ -8,7 +8,8 @@ shell history shared with others, or source control.
 The read command prints only validation counts and booleans. It does not print
 message text, summaries, drafts, names, account identifiers, conversation
 identifiers, or item identifiers. The send command is intentionally blocked
-unless `HUSH_SMOKE_ALLOW_SEND=true` is set for that one command.
+unless `HUSH_SMOKE_ALLOW_SEND=true` is set only for the guarded send command
+and removed immediately afterward.
 
 ## Designated Feishu computer
 
@@ -35,7 +36,11 @@ unless `HUSH_SMOKE_ALLOW_SEND=true` is set for that one command.
 
    ```powershell
    $env:HUSH_SMOKE_ALLOW_SEND = "true"
-   corepack pnpm smoke:inbox -- --provider feishu --mode send --item-id <item-id>
+   try {
+     corepack pnpm smoke:inbox -- --provider feishu --mode send --item-id <item-id>
+   } finally {
+     Remove-Item Env:HUSH_SMOKE_ALLOW_SEND -ErrorAction SilentlyContinue
+   }
    ```
 
 10. Confirm delivery in the real Feishu session.
@@ -67,7 +72,11 @@ unless `HUSH_SMOKE_ALLOW_SEND=true` is set for that one command.
 
    ```powershell
    $env:HUSH_SMOKE_ALLOW_SEND = "true"
-   corepack pnpm smoke:inbox -- --provider dingtalk --mode send --item-id <item-id>
+   try {
+     corepack pnpm smoke:inbox -- --provider dingtalk --mode send --item-id <item-id>
+   } finally {
+     Remove-Item Env:HUSH_SMOKE_ALLOW_SEND -ErrorAction SilentlyContinue
+   }
    ```
 
 10. Confirm delivery in the real DingTalk session.
