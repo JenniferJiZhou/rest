@@ -1,7 +1,4 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#endif
 
 struct HushDemoRootView: View {
     @StateObject private var store: HushDemoStore
@@ -126,7 +123,6 @@ struct HushDemoRootView: View {
                 store.startSleepHandoff()
             }
         }
-        .task { await exportIdleFramesIfRequested() }
         .onReceive(
             NotificationCenter.default.publisher(
                 for: .hushSleepHandoffRequested
@@ -153,30 +149,6 @@ struct HushDemoRootView: View {
                 }
             )
         }
-    }
-
-    @MainActor
-    private func exportIdleFramesIfRequested() async {
-        #if os(macOS)
-        guard let dir = ProcessInfo.processInfo
-            .environment["HUSH_EXPORT_IDLE"] else { return }
-        // Match the real window the user runs, not a small test canvas.
-        let size = CGSize(width: 930, height: 680)
-        for k in 0...17 {
-            let content = HushWaveBackground(
-                revealProgress: 0, debugForcedElapsed: Double(k)
-            ).frame(width: size.width, height: size.height)
-            let r = ImageRenderer(content: content)
-            r.proposedSize = ProposedViewSize(size); r.scale = 2
-            guard let img = r.nsImage, let tiff = img.tiffRepresentation,
-                  let rep = NSBitmapImageRep(data: tiff),
-                  let png = rep.representation(using: .png, properties: [:])
-            else { continue }
-            try? png.write(to: URL(fileURLWithPath: dir)
-                .appendingPathComponent(String(format: "idle-%02d.png", k)))
-        }
-        NSApplication.shared.terminate(nil)
-        #endif
     }
 
     private var agentTaskText: String {
