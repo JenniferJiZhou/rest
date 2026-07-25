@@ -75,6 +75,7 @@
 		A10000000000000000000042 /* safety-rules.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* safety-rules.json */; };
 		A10000000000000000000043 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
 		A10000000000000000000044 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
+		A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000024 /* HushTestTargetSmokeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -91,6 +92,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E00000000000000000000004;
 			remoteInfo = HushRestLiveActivity;
+		};
+		I00000000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E00000000000000000000001;
+			remoteInfo = Hush;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -155,10 +163,12 @@
 		B10000000000000000000020 /* bluebox-cards.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/bluebox-cards.json; sourceTree = "<group>"; };
 		B10000000000000000000021 /* safety-rules.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/safety-rules.json; sourceTree = "<group>"; };
 		B10000000000000000000022 /* UnifiedInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxView.swift; sourceTree = "<group>"; };
+		B00000000000000000000024 /* HushTestTargetSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushTestTargetSmokeTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000101 /* Hush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hush.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000102 /* HushMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HushMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000103 /* HushDeviceActivityMonitor.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushDeviceActivityMonitor.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000104 /* HushRestLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushRestLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000105 /* HushTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HushTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -190,6 +200,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D00000000000000000000402 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -201,6 +218,7 @@
 				C00000000000000000000005 /* MacMenuBar */,
 				C00000000000000000000006 /* DeviceActivityMonitorExt */,
 				C00000000000000000000007 /* RestLiveActivityWidget */,
+				C00000000000000000000008 /* HushTests */,
 				C10000000000000000000003 /* Content */,
 				C00000000000000000000002 /* Products */,
 			);
@@ -213,6 +231,7 @@
 				B00000000000000000000102 /* HushMac.app */,
 				B00000000000000000000103 /* HushDeviceActivityMonitor.appex */,
 				B00000000000000000000104 /* HushRestLiveActivity.appex */,
+				B00000000000000000000105 /* HushTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -275,6 +294,14 @@
 				B00000000000000000000009 /* RestLiveActivityWidget/Info.plist */,
 			);
 			name = RestLiveActivityWidget;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000008 /* HushTests */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000024 /* HushTestTargetSmokeTests.swift */,
+			);
+			path = HushTests;
 			sourceTree = "<group>";
 		};
 		C10000000000000000000001 /* DesignSystem */ = {
@@ -394,6 +421,24 @@
 			productReference = B00000000000000000000104 /* HushRestLiveActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		E00000000000000000000005 /* HushTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = G00000000000000000000503 /* Build configuration list for PBXNativeTarget "HushTests" */;
+			buildPhases = (
+				D00000000000000000000401 /* Sources */,
+				D00000000000000000000402 /* Frameworks */,
+				D00000000000000000000403 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				H00000000000000000000003 /* PBXTargetDependency */,
+			);
+			name = HushTests;
+			productName = HushTests;
+			productReference = B00000000000000000000105 /* HushTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -432,6 +477,10 @@
 					E00000000000000000000004 = {
 						CreatedOnToolsVersion = 16.0;
 					};
+					E00000000000000000000005 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = E00000000000000000000001;
+					};
 				};
 			};
 			buildConfigurationList = G00000000000000000000003 /* Build configuration list for PBXProject "Hush" */;
@@ -451,6 +500,7 @@
 				E00000000000000000000002 /* HushMac */,
 				E00000000000000000000003 /* HushDeviceActivityMonitor */,
 				E00000000000000000000004 /* HushRestLiveActivity */,
+				E00000000000000000000005 /* HushTests */,
 			);
 		};
 /* End PBXProject section */
@@ -488,6 +538,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D00000000000000000000303 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000403 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -581,6 +638,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D00000000000000000000401 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -593,6 +658,11 @@
 			isa = PBXTargetDependency;
 			target = E00000000000000000000004 /* HushRestLiveActivity */;
 			targetProxy = I00000000000000000000002 /* PBXContainerItemProxy */;
+		};
+		H00000000000000000000003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E00000000000000000000001 /* Hush */;
+			targetProxy = I00000000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -916,6 +986,48 @@
 			};
 			name = Release;
 		};
+		G00000000000000000000501 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hush.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hush";
+			};
+			name = Debug;
+		};
+		G00000000000000000000502 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hush.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hush";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -960,6 +1072,15 @@
 			buildConfigurations = (
 				G00000000000000000000401 /* Debug */,
 				G00000000000000000000402 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		G00000000000000000000503 /* Build configuration list for PBXNativeTarget "HushTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G00000000000000000000501 /* Debug */,
+				G00000000000000000000502 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
