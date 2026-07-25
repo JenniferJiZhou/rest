@@ -176,6 +176,8 @@ NODE_ENV=production
 HOST=0.0.0.0
 TRUST_PROXY=true
 PUBLIC_BASE_URL=https://hush-server-staging.preview.aliyun-zeabur.cn
+# HUSH_APP_TOKEN=<32-to-128-character-app-secret>
+# HUSH_CONNECTOR_TOKEN=<different-32-to-128-character-connector-secret>
 HUSH_REST_DECISION_PROVIDER=canned
 HUSH_DEMO_MODE=false
 LOG_LEVEL=info
@@ -183,6 +185,11 @@ LOG_LEVEL=info
 
 `PUBLIC_BASE_URL` must contain only the HTTPS origin. It must not contain an
 API path, query, fragment, username, password, or trailing application path.
+
+`HUSH_APP_TOKEN` and `HUSH_CONNECTOR_TOKEN` are required in production. Set
+them in Zeabur's secret/config store, not in source or the image. They must be
+distinct, randomly generated secrets of at least 32 characters; replace the
+commented placeholders without committing the resulting values.
 
 Zeabur may inject `PORT`, or an operator may set it explicitly. The image and
 its health probe follow the same runtime value without rebuilding; uncomment
