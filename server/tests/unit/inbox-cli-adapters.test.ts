@@ -441,6 +441,53 @@ describe("Inbox CLI adapters", () => {
     );
   });
 
+  it("preserves brace-prefixed text and ignores private structured fields", async () => {
+    const adapter = new LarkCliAdapter(
+      { executable: "/opt/lark-cli", accountId: "lark-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          items: [
+            {
+              message_id: "lark-brace-text",
+              chat_id: "lark-group-mentions",
+              chat_type: "group",
+              chat_name: "产品讨论组",
+              sender: { id: "ou_private_sender", name: "王同学" },
+              content: "{hello",
+              create_time: "1784854800000"
+            },
+            {
+              message_id: "lark-structured-extra",
+              chat_id: "lark-group-mentions",
+              chat_type: "group",
+              chat_name: "产品讨论组",
+              sender: { id: "ou_private_sender", name: "王同学" },
+              content: JSON.stringify({
+                text: "已确认",
+                message_type: "text",
+                private_metadata: "ou_private_metadata"
+              }),
+              create_time: "1784854800000"
+            }
+          ],
+          has_more: false
+        })
+      ])
+    );
+
+    const pulled = await adapter.pull({
+      accountId: "lark-account",
+      checkpoint: null,
+      limit: 20
+    });
+
+    expect(pulled.items.map((item) => item.content)).toEqual([
+      "{hello",
+      "已确认"
+    ]);
+    expect(JSON.stringify(pulled.items)).not.toContain("ou_private_metadata");
+  });
+
   it("rejects unsafe Feishu structured content without leaking mention IDs", async () => {
     const adapter = new LarkCliAdapter(
       { executable: "/opt/lark-cli", accountId: "lark-account" },

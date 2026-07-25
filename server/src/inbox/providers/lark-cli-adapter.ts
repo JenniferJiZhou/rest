@@ -383,7 +383,7 @@ function contentValue(content: unknown): string | null {
       try {
         return structuredContentValue(JSON.parse(trimmed));
       } catch {
-        return null;
+        return sanitizeFeishuMarkup(content);
       }
     }
     return sanitizeFeishuMarkup(content);
@@ -400,9 +400,6 @@ function structuredContentValue(content: unknown): string | null {
     return null;
   }
   const record = content as Record<string, unknown>;
-  if (!Object.keys(record).every((key) => key === "text" || key === "mentions")) {
-    return null;
-  }
   const text = stringValue(record.text);
   if (!text || !validMentions(record.mentions)) {
     return null;
