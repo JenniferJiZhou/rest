@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A50000000000000000000001 /* UnifiedInboxTransportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000001 /* UnifiedInboxTransportModels.swift */; };
+		A50000000000000000000002 /* UnifiedInboxTransportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000001 /* UnifiedInboxTransportModels.swift */; };
+		A50000000000000000000003 /* UnifiedInboxTransportModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000002 /* UnifiedInboxTransportModelsTests.swift */; };
+		A50000000000000000000004 /* inbox-item-enriched-demo.json in Resources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000003 /* inbox-item-enriched-demo.json */; };
+		A50000000000000000000005 /* inbox-group-digest-demo.json in Resources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000004 /* inbox-group-digest-demo.json */; };
+		A50000000000000000000006 /* inbox-draft-edited-demo.json in Resources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000005 /* inbox-draft-edited-demo.json */; };
 		A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* iOSApp/App/HushApp.swift */; };
 		A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* Shared/Core/HushProduct.swift */; };
 		A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */; };
@@ -138,6 +144,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B50000000000000000000001 /* UnifiedInboxTransportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxTransportModels.swift; sourceTree = SOURCE_ROOT; };
+		B50000000000000000000002 /* UnifiedInboxTransportModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedInboxTransportModelsTests.swift; sourceTree = "<group>"; };
+		B50000000000000000000003 /* inbox-item-enriched-demo.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../../contracts/fixtures/inbox-item-enriched-demo.json; sourceTree = "<group>"; };
+		B50000000000000000000004 /* inbox-group-digest-demo.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../../contracts/fixtures/inbox-group-digest-demo.json; sourceTree = "<group>"; };
+		B50000000000000000000005 /* inbox-draft-edited-demo.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../../contracts/fixtures/inbox-draft-edited-demo.json; sourceTree = "<group>"; };
 		B00000000000000000000001 /* iOSApp/App/HushApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/App/HushApp.swift; sourceTree = "<group>"; };
 		B00000000000000000000002 /* iOSApp/Hush.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iOSApp/Hush.entitlements; sourceTree = "<group>"; };
 		B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/App/HushMacApp.swift; sourceTree = "<group>"; };
@@ -331,6 +342,10 @@
 		C00000000000000000000008 /* HushTests */ = {
 			isa = PBXGroup;
 			children = (
+				B50000000000000000000002 /* UnifiedInboxTransportModelsTests.swift */,
+				B50000000000000000000003 /* inbox-item-enriched-demo.json */,
+				B50000000000000000000004 /* inbox-group-digest-demo.json */,
+				B50000000000000000000005 /* inbox-draft-edited-demo.json */,
 				B00000000000000000000024 /* HushTestTargetSmokeTests.swift */,
 				B00000000000000000000026 /* HushTideTimelineTests.swift */,
 				B00000000000000000000028 /* HushDoorTriggerTests.swift */,
@@ -359,6 +374,7 @@
 		C10000000000000000000002 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				B50000000000000000000001 /* UnifiedInboxTransportModels.swift */,
 				B10000000000000000000004 /* DayResetView.swift */,
 				B10000000000000000000005 /* HushDemoRootView.swift */,
 				B10000000000000000000006 /* HushDemoStandalone.swift */,
@@ -602,6 +618,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A50000000000000000000004 /* inbox-item-enriched-demo.json in Resources */,
+				A50000000000000000000005 /* inbox-group-digest-demo.json in Resources */,
+				A50000000000000000000006 /* inbox-draft-edited-demo.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -612,6 +631,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A50000000000000000000001 /* UnifiedInboxTransportModels.swift in Sources */,
 				A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */,
 				A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */,
 				A00000000000000000000009 /* iOSApp/Platform/FamilyControlsAuthorizationModel.swift in Sources */,
@@ -652,6 +672,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A50000000000000000000002 /* UnifiedInboxTransportModels.swift in Sources */,
 				A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */,
 				A00000000000000000000004 /* Shared/Core/HushProduct.swift in Sources */,
 				A00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift in Sources */,
@@ -702,6 +723,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A50000000000000000000003 /* UnifiedInboxTransportModelsTests.swift in Sources */,
 				A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */,
 				A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */,
 				A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */,
