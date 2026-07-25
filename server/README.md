@@ -138,10 +138,11 @@ HTTP. Set `TRUST_PROXY=true` only behind that trusted proxy. Production also
 requires an explicit public HTTPS `PUBLIC_BASE_URL`. Local defaults remain
 loopback-only with proxy trust disabled.
 
-The repository-root `render.yaml` and `Dockerfile` preserve runtime access to
-`content/rest-quests.json` and the Demo mail fixture. See
-`../docs/18_HTTPS_STAGING_AND_CLOUD_DEPLOYMENT.md`. No cloud resource or
-certificate is created by these files.
+The repository-root `Dockerfile` preserves runtime access to
+`content/rest-quests.json` and the Demo inbox fixtures. GitHub Actions builds
+an immutable GHCR image for a Zeabur Docker Image service. See
+`../docs/18_ZEABUR_STAGING_DEPLOYMENT.md`. No cloud resource or certificate is
+created by the checked-in files.
 
 ## Provider integration points
 

@@ -416,8 +416,10 @@ describe("Cloud Rest Decision HTTP vertical slice", () => {
 
     try {
       clientRequest.destroy();
-      await clientClosed.promise;
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await Promise.all([
+        clientClosed.promise,
+        provider.waitUntilAborted()
+      ]);
       expect(provider.signal?.aborted).toBe(true);
     } finally {
       provider.release();
@@ -578,6 +580,21 @@ class ControlledRestDecisionProvider
 
   waitUntilStarted(): Promise<void> {
     return this.started.promise;
+  }
+
+  async waitUntilAborted(): Promise<void> {
+    const signal = this.signal;
+    if (!signal) {
+      throw new Error("provider signal is not available");
+    }
+    if (signal.aborted) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      signal.addEventListener("abort", () => resolve(), {
+        once: true
+      });
+    });
   }
 
   release(): void {

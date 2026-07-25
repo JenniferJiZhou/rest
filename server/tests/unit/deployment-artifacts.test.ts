@@ -6,42 +6,81 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
 describe("deployment artifacts", () => {
-  it("defines a safe Render native Node staging service", () => {
-    const document = parse(
-      readFileSync(resolve(repositoryRoot, "render.yaml"), "utf8")
-    ) as {
-      services: Array<Record<string, unknown>>;
-    };
-    const service = document.services[0] as {
-      type: string;
-      runtime: string;
-      rootDir: string;
-      buildCommand: string;
-      startCommand: string;
-      healthCheckPath: string;
-      envVars: Array<{ key: string; value?: string; sync?: boolean }>;
+  it("defines a safe Zeabur OCI image pipeline", () => {
+    const workflow = readFileSync(
+      resolve(
+        repositoryRoot,
+        ".github/workflows/publish-staging-image.yml"
+      ),
+      "utf8"
+    );
+    const environment = readFileSync(
+      resolve(repositoryRoot, "deploy/zeabur.env.example"),
+      "utf8"
+    );
+    const document = parse(workflow) as {
+      jobs: {
+        build: {
+          permissions: Record<string, string>;
+          outputs: Record<string, string>;
+        };
+        publish: {
+          if: string;
+          needs: string;
+          permissions: Record<string, string>;
+        };
+      };
     };
     const env = new Map(
-      service.envVars.map((item) => [item.key, item])
+      environment
+        .trim()
+        .split("\n")
+        .map((line) => {
+          const separator = line.indexOf("=");
+          return [
+            line.slice(0, separator),
+            line.slice(separator + 1)
+          ] as const;
+        })
     );
 
-    expect(service).toMatchObject({
-      type: "web",
-      runtime: "node",
-      rootDir: ".",
-      healthCheckPath: "/v1/health",
-      startCommand: "cd server && pnpm start"
+    expect(workflow).toContain("ghcr.io/");
+    expect(workflow).toContain("hush-server-staging");
+    expect(workflow).toContain("docker/setup-buildx-action@");
+    expect(workflow).toContain("docker/build-push-action@");
+    expect(workflow).toContain("docker/login-action@");
+    expect(workflow).toContain("load: true");
+    expect(workflow).toContain("push: true");
+    expect(workflow).toContain("docker buildx imagetools create");
+    expect(workflow).toContain("GITHUB_SHA");
+    expect(workflow).toContain("http://127.0.0.1:3000/v1/health");
+    expect(workflow).toContain("github.ref == 'refs/heads/main'");
+    expect(workflow).toContain("workflow_dispatch");
+    expect(workflow).toContain("inputs.publish");
+    expect(workflow).not.toContain("CLAUDE_API_KEY");
+    expect(workflow).not.toContain("HUSH_DEMO_TOKEN");
+    expect(workflow.toLowerCase()).not.toContain("clawcloud");
+    expect(environment.toLowerCase()).not.toContain("clawcloud");
+    expect(document.jobs.build.permissions).toEqual({
+      contents: "read"
     });
-    expect(service.buildCommand).toContain("corepack enable");
-    expect(service.buildCommand).toContain("pnpm@9.15.9");
-    expect(service.buildCommand).toContain(
-      "pnpm install --frozen-lockfile"
+    expect(document.jobs.build.outputs.image_name).toContain(
+      "steps.image.outputs.name"
     );
-    expect(service.buildCommand).toContain("pnpm build");
-    expect(env.get("NODE_VERSION")?.value).toBe("20.19.5");
-    expect(env.get("HOST")?.value).toBe("0.0.0.0");
-    expect(env.get("TRUST_PROXY")?.value).toBe("true");
-    expect(env.get("PUBLIC_BASE_URL")?.sync).toBe(false);
+    expect(document.jobs.publish.needs).toBe("build");
+    expect(document.jobs.publish.if).toContain(
+      "github.event_name == 'push'"
+    );
+    expect(document.jobs.publish.permissions).toEqual({
+      contents: "read",
+      packages: "write"
+    });
+    expect(env.get("NODE_ENV")).toBe("production");
+    expect(env.get("HOST")).toBe("0.0.0.0");
+    expect(env.get("TRUST_PROXY")).toBe("true");
+    expect(env.get("PUBLIC_BASE_URL")).toMatch(/^https:\/\//u);
+    expect(env.get("HUSH_REST_DECISION_PROVIDER")).toBe("canned");
+    expect(env.get("HUSH_DEMO_MODE")).toBe("false");
     expect(env.has("PORT")).toBe(false);
     expect(env.has("HUSH_DEMO_TOKEN")).toBe(false);
     expect(env.has("CLAUDE_API_KEY")).toBe(false);
@@ -68,8 +107,16 @@ describe("deployment artifacts", () => {
       "contracts/fixtures/mail-items-demo.json"
     );
     expect(dockerfile).toContain(
+      "contracts/fixtures/unified-inbox-items.json"
+    );
+    expect(dockerignore).toContain(
+      "!contracts/fixtures/unified-inbox-items.json"
+    );
+    expect(dockerfile).toContain(
       'CMD ["node", "dist/bootstrap.js"]'
     );
+    expect(dockerfile).toContain("HEALTHCHECK");
+    expect(dockerfile).toContain("http://127.0.0.1:3000/v1/health");
     expect(dockerignore).toContain(".env");
     expect(dockerignore).toContain(".git");
     expect(dockerignore).toContain("*.pem");

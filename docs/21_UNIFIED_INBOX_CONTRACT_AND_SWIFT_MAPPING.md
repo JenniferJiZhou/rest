@@ -37,8 +37,8 @@ view.
 | POST | `/v1/inbox/drafts/{draftId}:send` | `SendRequestDTO` | `SendResponseDTO` |
 
 All routes reuse the existing HTTPS listener, Contract headers, proxy-aware
-security headers, body limit, and log redaction. No TLS or Render behavior is
-implemented in the Inbox feature.
+security headers, body limit, and log redaction. No TLS termination or
+cloud-platform behavior is implemented in the Inbox feature.
 
 ## JSON-to-Swift field mapping
 
