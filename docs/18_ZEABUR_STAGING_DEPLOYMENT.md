@@ -313,6 +313,8 @@ docker run --rm -p 3100:3100 \
   -e PORT=3100 \
   -e PUBLIC_BASE_URL=https://hush-staging.example.com \
   -e TRUST_PROXY=false \
+  -e HUSH_APP_TOKEN=local-app-token-000000000000000001 \
+  -e HUSH_CONNECTOR_TOKEN=local-connector-token-000000000001 \
   -e HUSH_REST_DECISION_PROVIDER=canned \
   -e HUSH_DEMO_MODE=false \
   hush-server:zeabur-staging

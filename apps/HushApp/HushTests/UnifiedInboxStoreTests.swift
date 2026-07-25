@@ -62,7 +62,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         await model.open(row.id)
         await model.acknowledgeSelected()
         await model.loadDraft()
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
         await model.requestConfirmation()
         XCTAssertEqual(model.sendState, .confirming)
         await model.updateDraft(content: "edited")
@@ -80,7 +80,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         let row = try! XCTUnwrap(model.items.first)
         await model.open(row.id)
         await model.loadDraft()
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
         await model.requestConfirmation()
         await model.sendConfirmedDraft()
 
@@ -88,7 +88,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         XCTAssertEqual(client.sendCalls.count, 1)
         XCTAssertFalse(client.sendCalls[0].idempotencyKey.isEmpty)
         await model.updateDraft(content: "must not unlock")
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
         XCTAssertEqual(model.sendState, .unknown)
         XCTAssertEqual(client.sendCalls.count, 1)
         XCTAssertTrue(client.draftUpdates.isEmpty)
@@ -118,7 +118,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         client.draftResult = .success(
             .init(value: Self.draft(version: 8), origin: .real)
         )
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
         await model.requestConfirmation()
 
         await model.updateDraft(content: "stale edit")
@@ -148,10 +148,10 @@ final class UnifiedInboxStoreTests: XCTestCase {
         await model.open(row.id)
         await model.loadDraft()
 
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
         await model.requestConfirmation()
         await model.sendConfirmedDraft()
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
         await model.requestConfirmation()
         await model.sendConfirmedDraft()
 
@@ -181,7 +181,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         let row = try! XCTUnwrap(model.items.first)
         await model.open(row.id)
         await model.loadDraft()
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
         await model.requestConfirmation()
         await model.sendConfirmedDraft()
 
@@ -195,7 +195,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         let row = try! XCTUnwrap(model.items.first)
         await model.open(row.id)
         await model.loadDraft()
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
         await model.requestConfirmation()
         await model.sendConfirmedDraft()
         XCTAssertEqual(model.sendState, .sent)
@@ -205,7 +205,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         model.closeItem()
         await model.open(row.id)
         await model.loadDraft()
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
 
         XCTAssertEqual(model.sendState, .sent)
         XCTAssertEqual(client.sendCalls.count, 1)
@@ -235,7 +235,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         let row = try! XCTUnwrap(model.items.first)
         await model.open(row.id)
         await model.loadDraft()
-        model.beginReview()
+        model.beginReview(displayedContent: model.draft!.content)
 
         let confirmationTask = Task { await model.requestConfirmation() }
         while !(await gate.isWaiting) { await Task.yield() }
@@ -244,7 +244,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
             .init(
                 value: .init(
                     confirmationToken: "stale-confirmation",
-                    expiresAt: "2026-07-25T01:00:00Z"
+                    expiresAt: "2099-07-25T01:00:00Z"
                 ),
                 origin: .real
             )
@@ -253,6 +253,46 @@ final class UnifiedInboxStoreTests: XCTestCase {
 
         XCTAssertEqual(model.sendState, .idle)
         XCTAssertEqual(model.draft?.version, 5)
+    }
+
+    func testUnsavedDisplayedTextCannotEnterReview() async {
+        let client = configuredClient()
+        let model = UnifiedInboxViewModel(client: client)
+        await model.load()
+        let row = try! XCTUnwrap(model.items.first)
+        await model.open(row.id)
+        await model.loadDraft()
+
+        model.beginReview(displayedContent: "unsaved local text")
+        await model.requestConfirmation()
+
+        XCTAssertEqual(model.sendState, .idle)
+        XCTAssertTrue(client.sendCalls.isEmpty)
+    }
+
+    func testExpiredConfirmationCannotSend() async {
+        let client = configuredClient()
+        client.confirmationResult = .success(
+            .init(
+                value: .init(
+                    confirmationToken: "expired-confirmation",
+                    expiresAt: "2000-01-01T00:00:00Z"
+                ),
+                origin: .real
+            )
+        )
+        let model = UnifiedInboxViewModel(client: client)
+        await model.load()
+        let row = try! XCTUnwrap(model.items.first)
+        await model.open(row.id)
+        await model.loadDraft()
+        model.beginReview(displayedContent: model.draft!.content)
+
+        await model.requestConfirmation()
+        await model.sendConfirmedDraft()
+
+        XCTAssertEqual(model.sendState, .failed("发送确认已过期，请重新检查。"))
+        XCTAssertTrue(client.sendCalls.isEmpty)
     }
 
     private func configuredClient() -> ScriptedInboxClient {
@@ -264,7 +304,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         client.ackResult = .success(.init(value: value, origin: .real))
         client.draftResult = .success(.init(value: Self.draft(version: 4), origin: .real))
         client.updateResult = .success(.init(value: Self.draft(version: 5), origin: .real))
-        client.confirmationResult = .success(.init(value: .init(confirmationToken: "confirmation-token", expiresAt: "2026-07-25T01:00:00Z"), origin: .real))
+        client.confirmationResult = .success(.init(value: .init(confirmationToken: "confirmation-token", expiresAt: "2099-07-25T01:00:00Z"), origin: .real))
         client.sendResult = .success(.init(value: .init(draftID: "private-draft", provider: .feishu, status: .sent, providerMessageID: nil, sentAt: "2026-07-25T00:00:00Z"), origin: .real))
         return client
     }

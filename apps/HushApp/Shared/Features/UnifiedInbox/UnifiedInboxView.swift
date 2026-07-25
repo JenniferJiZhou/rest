@@ -297,6 +297,7 @@ private struct UnifiedInboxRealView: View {
                         TextEditor(text: $draftText)
                             .frame(minHeight: 120)
                             .scrollContentBackground(.hidden)
+                            .disabled(editorLocked)
                         HStack {
                             Button("保存修改") {
                                 Task { await model.updateDraft(content: draftText) }
@@ -332,7 +333,9 @@ private struct UnifiedInboxRealView: View {
         Group {
             switch model.sendState {
             case .idle, .failed:
-                Button("检查发送") { model.beginReview() }
+                Button("检查发送") {
+                    model.beginReview(displayedContent: draftText)
+                }
             case .sent, .unknown:
                 EmptyView()
             case .reviewing:
@@ -344,7 +347,10 @@ private struct UnifiedInboxRealView: View {
             }
         }
         .frame(width: 112, height: 36)
-        .disabled(model.isMutationInFlight && model.sendState != .sending)
+        .disabled(
+            (model.isMutationInFlight && model.sendState != .sending)
+                || hasUnsavedDraftChanges
+        )
     }
 
     @ViewBuilder
@@ -377,6 +383,20 @@ private struct UnifiedInboxRealView: View {
         return model.origin == .real
             ? "checkmark.shield"
             : "exclamationmark.shield"
+    }
+
+    private var hasUnsavedDraftChanges: Bool {
+        guard let draft = model.draft else { return false }
+        return draftText != draft.content
+    }
+
+    private var editorLocked: Bool {
+        switch model.sendState {
+        case .reviewing, .confirming, .sending, .sent, .unknown:
+            return true
+        case .idle, .failed:
+            return model.isMutationInFlight
+        }
     }
 
     private func providerTitle(_ provider: InboxProviderResponse) -> String {

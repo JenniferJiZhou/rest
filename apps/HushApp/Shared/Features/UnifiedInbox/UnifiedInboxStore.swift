@@ -94,6 +94,7 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
     private var draftIDs: [UUID: String] = [:]
     private var selectedPresentationID: UUID?
     private var confirmationToken: String?
+    private var confirmationExpiresAt: Date?
     private var reviewGeneration = 0
     private var terminalSendStates: [String: UnifiedInboxSendState] = [:]
 
@@ -239,8 +240,11 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
         }
     }
 
-    func beginReview() {
-        guard draft != nil else { return }
+    func beginReview(displayedContent: String) {
+        guard
+            let draft,
+            displayedContent == draft.content
+        else { return }
         switch sendState {
         case .idle, .failed:
             break
@@ -271,7 +275,18 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
                 draft?.version == reviewedVersion,
                 sendState == .reviewing
             else { return }
+            guard
+                let expiresAt = ISO8601DateFormatter().date(
+                    from: response.value.expiresAt
+                ),
+                expiresAt > Date()
+            else {
+                invalidateConfirmation()
+                sendState = .failed("发送确认已过期，请重新检查。")
+                return
+            }
             confirmationToken = response.value.confirmationToken
+            confirmationExpiresAt = expiresAt
             sendState = .confirming
         } catch {
             sendState = .failed(Self.message(for: error))
@@ -284,9 +299,16 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
             let presentationID = selectedPresentationID,
             let draftID = draftIDs[presentationID],
             let version = draft?.version,
-            let token = confirmationToken
+            let token = confirmationToken,
+            let expiresAt = confirmationExpiresAt
         else { return }
+        guard expiresAt > Date() else {
+            invalidateConfirmation()
+            sendState = .failed("发送确认已过期，请重新检查。")
+            return
+        }
         confirmationToken = nil
+        confirmationExpiresAt = nil
         sendState = .sending
         do {
             let response = try await client.send(
@@ -382,6 +404,7 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
     private func invalidateConfirmation() {
         reviewGeneration += 1
         confirmationToken = nil
+        confirmationExpiresAt = nil
         if
             let presentationID = selectedPresentationID,
             let draftID = draftIDs[presentationID],
