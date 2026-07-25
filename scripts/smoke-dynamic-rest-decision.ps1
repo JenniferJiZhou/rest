@@ -50,7 +50,9 @@ if ($parsedBaseUrl.Scheme -notin @("http", "https")) {
 }
 
 Add-Type -AssemblyName System.Net.Http
-$client = [System.Net.Http.HttpClient]::new()
+$handler = [System.Net.Http.HttpClientHandler]::new()
+$handler.UseCookies = $false
+$client = [System.Net.Http.HttpClient]::new($handler)
 $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSeconds)
 $base = $BaseUrl.TrimEnd("/")
 
@@ -359,4 +361,5 @@ try {
 }
 finally {
     $client.Dispose()
+    $handler.Dispose()
 }
