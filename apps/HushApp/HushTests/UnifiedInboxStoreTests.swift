@@ -15,7 +15,7 @@ final class UnifiedInboxStoreTests: XCTestCase {
         await model.load()
 
         XCTAssertEqual(client.listCursors, [nil, "next"])
-        XCTAssertEqual(model.loadState, .failed("服务器返回了不一致的数据来源，已停止展示。"))
+        XCTAssertEqual(model.loadState, .failed("服务器未返回真实数据，已停止展示。"))
         XCTAssertEqual(model.mode, .real)
     }
 
@@ -33,6 +33,25 @@ final class UnifiedInboxStoreTests: XCTestCase {
         let unavailableModel = UnifiedInboxViewModel(client: unavailable)
         await unavailableModel.load()
         XCTAssertEqual(unavailableModel.loadState, .failed("消息渠道当前不可用。"))
+    }
+
+    func testRealStoreRejectsConsistentMockOrigin() async {
+        let client = ScriptedInboxClient()
+        client.statusResult = .success(
+            .init(value: [Self.status(.ready)], origin: .mock)
+        )
+        client.pages = [
+            .success(.init(value: .init(items: [], nextCursor: nil), origin: .mock))
+        ]
+        let model = UnifiedInboxViewModel(client: client)
+
+        await model.load()
+
+        XCTAssertEqual(
+            model.loadState,
+            .failed("服务器未返回真实数据，已停止展示。")
+        )
+        XCTAssertNil(model.origin)
     }
 
     func testMutationsUseDisplayedRevisionAndVersionAndEditInvalidatesConfirmation() async {
@@ -126,6 +145,75 @@ final class UnifiedInboxStoreTests: XCTestCase {
         )
     }
 
+    func testExplicitFailedSendIsNotReportedUnknown() async {
+        let client = configuredClient()
+        client.sendResult = .success(
+            .init(
+                value: .init(
+                    draftID: "private-draft",
+                    provider: .feishu,
+                    status: .failed,
+                    providerMessageID: nil,
+                    sentAt: nil
+                ),
+                origin: .real
+            )
+        )
+        let model = UnifiedInboxViewModel(client: client)
+        await model.load()
+        let row = try! XCTUnwrap(model.items.first)
+        await model.open(row.id)
+        await model.loadDraft()
+        model.beginReview()
+        await model.requestConfirmation()
+        await model.sendConfirmedDraft()
+
+        XCTAssertEqual(model.sendState, .failed("发送失败，请检查渠道状态后重试。"))
+    }
+
+    func testOpenRefreshesDetailFromServer() async {
+        let client = configuredClient()
+        client.itemResult = .success(
+            .init(value: Self.item(id: "private-item", revision: 11), origin: .real)
+        )
+        let model = UnifiedInboxViewModel(client: client)
+        await model.load()
+        let row = try! XCTUnwrap(model.items.first)
+
+        await model.open(row.id)
+
+        XCTAssertEqual(model.selectedItem?.revision, 11)
+    }
+
+    func testEditWhileConfirmationIsInFlightCannotReviveOldToken() async {
+        let client = configuredClient()
+        let gate = ConfirmationGate()
+        client.confirmationHandler = { try await gate.wait() }
+        let model = UnifiedInboxViewModel(client: client)
+        await model.load()
+        let row = try! XCTUnwrap(model.items.first)
+        await model.open(row.id)
+        await model.loadDraft()
+        model.beginReview()
+
+        let confirmationTask = Task { await model.requestConfirmation() }
+        while !(await gate.isWaiting) { await Task.yield() }
+        await model.updateDraft(content: "new content")
+        await gate.resume(
+            .init(
+                value: .init(
+                    confirmationToken: "stale-confirmation",
+                    expiresAt: "2026-07-25T01:00:00Z"
+                ),
+                origin: .real
+            )
+        )
+        await confirmationTask.value
+
+        XCTAssertEqual(model.sendState, .idle)
+        XCTAssertEqual(model.draft?.version, 5)
+    }
+
     private func configuredClient() -> ScriptedInboxClient {
         let client = ScriptedInboxClient()
         let value = Self.item(id: "private-item", revision: 7)
@@ -165,6 +253,7 @@ private final class ScriptedInboxClient: UnifiedInboxClient, @unchecked Sendable
     var draftResult: Result<UnifiedInboxResponse<InboxDraftResponse>, Error>!
     var updateResult: Result<UnifiedInboxResponse<InboxDraftResponse>, Error>!
     var confirmationResult: Result<UnifiedInboxResponse<InboxConfirmationResponse>, Error>!
+    var confirmationHandler: (() async throws -> UnifiedInboxResponse<InboxConfirmationResponse>)?
     var sendResult: Result<UnifiedInboxResponse<InboxSendResultResponse>, Error>!
     var listCursors: [String?] = []
     var acknowledgements: [Int] = []
@@ -177,6 +266,25 @@ private final class ScriptedInboxClient: UnifiedInboxClient, @unchecked Sendable
     func acknowledge(id: String, revision: Int) async throws -> UnifiedInboxResponse<InboxItemResponse> { acknowledgements.append(revision); return try ackResult.get() }
     func draft(id: String) async throws -> UnifiedInboxResponse<InboxDraftResponse> { try draftResult.get() }
     func updateDraft(id: String, content: String, version: Int) async throws -> UnifiedInboxResponse<InboxDraftResponse> { draftUpdates.append((content, version)); return try updateResult.get() }
-    func confirmation(draftID: String) async throws -> UnifiedInboxResponse<InboxConfirmationResponse> { try confirmationResult.get() }
+    func confirmation(draftID: String) async throws -> UnifiedInboxResponse<InboxConfirmationResponse> {
+        if let confirmationHandler { return try await confirmationHandler() }
+        return try confirmationResult.get()
+    }
     func send(draftID: String, version: Int, confirmationToken: String, idempotencyKey: String) async throws -> UnifiedInboxResponse<InboxSendResultResponse> { sendCalls.append((version, idempotencyKey)); return try sendResult.get() }
+}
+
+private actor ConfirmationGate {
+    typealias Response = UnifiedInboxResponse<InboxConfirmationResponse>
+    private var continuation: CheckedContinuation<Response, Error>?
+
+    var isWaiting: Bool { continuation != nil }
+
+    func wait() async throws -> Response {
+        try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+
+    func resume(_ response: Response) {
+        continuation?.resume(returning: response)
+        continuation = nil
+    }
 }

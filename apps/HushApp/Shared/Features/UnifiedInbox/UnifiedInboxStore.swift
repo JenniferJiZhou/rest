@@ -61,7 +61,7 @@ struct UnifiedInboxProviderReadiness: Equatable, Sendable {
     let provider: InboxProviderResponse
     let status: InboxSyncStateResponse
     let lastSyncedAt: String?
-    let lastError: String?
+    let hasError: Bool
     let coverage: InboxCoverageResponse
 }
 
@@ -90,6 +90,7 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
     private var draftIDs: [UUID: String] = [:]
     private var selectedPresentationID: UUID?
     private var confirmationToken: String?
+    private var reviewGeneration = 0
 
     init(client: any UnifiedInboxClient) {
         self.client = client
@@ -171,6 +172,7 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
             try accept(response.origin)
             replace(response.value, presentationID: presentationID)
         } catch UnifiedInboxAPIError.versionConflict {
+            invalidateConfirmation()
             await refreshSelectedItem(presentationID, transportID: transportID)
         } catch {
             loadState = .failed(Self.message(for: error))
@@ -216,7 +218,7 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
 
     func beginReview() {
         guard draft != nil else { return }
-        confirmationToken = nil
+        invalidateConfirmation()
         sendState = .reviewing
     }
 
@@ -224,11 +226,19 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
         guard
             sendState == .reviewing,
             let presentationID = selectedPresentationID,
-            let draftID = draftIDs[presentationID]
+            let draftID = draftIDs[presentationID],
+            let reviewedVersion = draft?.version
         else { return }
+        let generation = reviewGeneration
         do {
             let response = try await client.confirmation(draftID: draftID)
             try accept(response.origin)
+            guard
+                generation == reviewGeneration,
+                selectedPresentationID == presentationID,
+                draft?.version == reviewedVersion,
+                sendState == .reviewing
+            else { return }
             confirmationToken = response.value.confirmationToken
             sendState = .confirming
         } catch {
@@ -262,13 +272,17 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
         } catch UnifiedInboxAPIError.versionConflict {
             await refreshDraft(draftID)
         } catch UnifiedInboxAPIError.server(let response) {
-            sendState = .failed(response.error.message)
+            _ = response
+            sendState = .failed("服务器拒绝了发送请求。")
         } catch {
             sendState = .unknown
         }
     }
 
     private func accept(_ responseOrigin: UnifiedInboxDataOrigin) throws {
+        guard responseOrigin == .real else {
+            throw StoreError.nonRealOrigin
+        }
         if let origin, origin != responseOrigin {
             throw StoreError.mixedOrigins
         }
@@ -329,6 +343,7 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
     }
 
     private func invalidateConfirmation() {
+        reviewGeneration += 1
         confirmationToken = nil
         sendState = .idle
     }
@@ -382,22 +397,26 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
             provider: value.provider,
             status: value.status,
             lastSyncedAt: value.lastSyncedAt,
-            lastError: value.lastError,
+            hasError: value.lastError != nil,
             coverage: value.coverage
         )
     }
 
     private static func message(for error: Error) -> String {
-        if case UnifiedInboxAPIError.server(let response) = error {
-            return response.error.message
+        if case UnifiedInboxAPIError.server = error {
+            return "消息服务拒绝了请求。"
         }
         if case StoreError.mixedOrigins = error {
             return "服务器返回了不一致的数据来源，已停止展示。"
+        }
+        if case StoreError.nonRealOrigin = error {
+            return "服务器未返回真实数据，已停止展示。"
         }
         return "无法连接消息服务，请检查连接后重试。"
     }
 
     private enum StoreError: Error {
         case mixedOrigins
+        case nonRealOrigin
     }
 }
