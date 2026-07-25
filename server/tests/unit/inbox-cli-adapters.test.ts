@@ -122,7 +122,7 @@ describe("Inbox CLI adapters", () => {
     ]);
   });
 
-  it("uses dws chat message list-all and send commands", async () => {
+  it("keeps the flat DWS messages envelope compatible", async () => {
     const runner = new RecordingRunner([
       JSON.stringify({ authenticated: true }),
       JSON.stringify({
@@ -134,6 +134,7 @@ describe("Inbox CLI adapters", () => {
               conversationType: "p2p",
               conversationName: "钉钉私聊",
               senderId: "ding-user-1",
+              senderName: "钉钉用户",
               text: "钉钉消息",
               createdAt: "2026-07-24T09:00:00+08:00"
             }
@@ -141,8 +142,7 @@ describe("Inbox CLI adapters", () => {
           hasMore: true,
           nextCursor: "ding-page-2"
         }
-      }),
-      JSON.stringify({ messageId: "ding-sent-1" })
+      })
     ]);
     const adapter = new DingTalkDwsAdapter(
       {
@@ -159,9 +159,6 @@ describe("Inbox CLI adapters", () => {
       checkpoint: null,
       limit: 20
     });
-    await adapter.send(
-      sendInput("ding-account", "ding-chat-1")
-    );
 
     expect(runner.invocations[0]?.args).toEqual([
       "auth",
@@ -189,25 +186,194 @@ describe("Inbox CLI adapters", () => {
       start: "2026-07-23T01:00:00.000Z",
       end: "2026-07-24T01:00:00.000Z"
     });
-    expect(runner.invocations[2]).toEqual({
+    expect(pulled.items[0]).toMatchObject({
+      conversation_type: "direct",
+      conversation_name: "钉钉私聊",
+      sender: "钉钉用户",
+      sender_ref: expect.stringMatching(/^participant_/)
+    });
+    expect(pulled.participantBindings).toEqual([
+      expect.objectContaining({
+        providerParticipantId: "ding-user-1",
+        displayName: "钉钉用户"
+      })
+    ]);
+    expect(JSON.stringify(pulled.items)).not.toContain("ding-user-1");
+  });
+
+  it("normalizes grouped DWS conversation batches and sends group mentions", async () => {
+    const runner = new RecordingRunner([
+      JSON.stringify({
+        result: {
+          conversationMessagesList: [
+            {
+              title: "产品讨论组",
+              openConversationId: "ding-chat-demo",
+              conversationType: "group",
+              messages: [
+                {
+                  messageId: "ding-message-demo",
+                  senderOpenDingTalkId: "private_dingtalk_user",
+                  senderName: "王同学",
+                  text: "请确认接口交付时间",
+                  createTime: "2026-07-24T09:00:00+08:00"
+                }
+              ]
+            }
+          ],
+          hasMore: true,
+          nextCursor: "20"
+        }
+      }),
+      JSON.stringify({ messageId: "ding-sent-1" })
+    ]);
+    const adapter = new DingTalkDwsAdapter(
+      {
+        executable: "/opt/dws",
+        accountId: "ding-account",
+        now: () => new Date("2026-07-24T01:00:00.000Z")
+      },
+      runner
+    );
+
+    const pulled = await adapter.pull({
+      accountId: "ding-account",
+      checkpoint: null,
+      limit: 20
+    });
+    const participant = pulled.participantBindings[0]!;
+    await adapter.send({
+      ...sendInput("ding-account", "ding-chat-demo"),
+      conversationType: "group",
+      replyTo: null,
+      mentions: [
+        {
+          participantRef: participant.participantRef,
+          providerParticipantId: "private_dingtalk_user",
+          displayName: "王同学"
+        }
+      ]
+    });
+
+    expect(pulled.items[0]).toMatchObject({
+      provider: "dingtalk",
+      conversation_id: "ding-chat-demo",
+      conversation_type: "group",
+      conversation_name: "产品讨论组",
+      sender: "王同学",
+      sender_ref: expect.stringMatching(/^participant_/),
+      content: "请确认接口交付时间"
+    });
+    expect(pulled.participantBindings).toEqual([
+      expect.objectContaining({
+        provider: "dingtalk",
+        accountId: "ding-account",
+        conversationId: "ding-chat-demo",
+        participantRef: pulled.items[0]?.sender_ref,
+        providerParticipantId: "private_dingtalk_user",
+        displayName: "王同学"
+      })
+    ]);
+    expect(JSON.stringify(pulled.items)).not.toContain("private_dingtalk_user");
+    expect(JSON.parse(pulled.checkpoint)).toMatchObject({ cursor: "20" });
+    expect(runner.invocations[0]?.args).toEqual([
+      "chat",
+      "message",
+      "list-all",
+      "--start",
+      "2026-07-23 09:00:00",
+      "--end",
+      "2026-07-24 09:00:00",
+      "--limit",
+      "20",
+      "--cursor",
+      "0",
+      "--format",
+      "json"
+    ]);
+    expect(runner.invocations[1]).toEqual({
       executable: "/opt/dws",
       args: [
         "chat",
         "message",
         "send",
         "--group",
-        "ding-chat-1",
+        "ding-chat-demo",
         "--title",
         "Hush 回复",
         "--text",
-        "@-",
-        "--yes",
+        "<@private_dingtalk_user>\n用户确认后的回复",
+        "--at-open-dingtalk-ids",
+        "private_dingtalk_user",
+        "--uuid",
+        "send-key-1",
         "--format",
         "json"
       ],
-      input: "用户确认后的回复",
       ambiguousOnTimeout: true
     });
+  });
+
+  it("sends a direct DWS reply to the resolved private participant", async () => {
+    const runner = new RecordingRunner([
+      JSON.stringify({ messageId: "ding-direct-sent-1" })
+    ]);
+    const adapter = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      runner
+    );
+
+    await adapter.send({
+      ...sendInput("ding-account", "ding-direct-conversation"),
+      conversationType: "direct",
+      mentions: [
+        {
+          participantRef: "participant_private_dingtalk_user",
+          providerParticipantId: "private_dingtalk_user",
+          displayName: "王同学"
+        }
+      ]
+    });
+
+    expect(runner.invocations).toEqual([
+      {
+        executable: "/opt/dws",
+        args: [
+          "chat",
+          "message",
+          "send",
+          "--open-dingtalk-id",
+          "private_dingtalk_user",
+          "--text",
+          "用户确认后的回复",
+          "--uuid",
+          "send-key-1",
+          "--format",
+          "json"
+        ],
+        ambiguousOnTimeout: true
+      }
+    ]);
+  });
+
+  it("does not send a direct DWS reply without a resolved private participant", async () => {
+    const runner = new RecordingRunner([]);
+    const adapter = new DingTalkDwsAdapter(
+      { executable: "/opt/dws", accountId: "ding-account" },
+      runner
+    );
+
+    await expect(
+      adapter.send({
+        ...sendInput("ding-account", "ding-direct-conversation"),
+        conversationType: "direct",
+        mentions: []
+      })
+    ).rejects.toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE",
+      details: { provider: "dingtalk", reason: "participant_unavailable" }
+    });
+    expect(runner.invocations).toEqual([]);
   });
 
   it("rejects incomplete provider envelopes instead of advancing checkpoints", async () => {
@@ -609,7 +775,10 @@ describe("Inbox CLI adapters", () => {
     );
     await expect(
       dingtalk.pull({ accountId: "ding-account", checkpoint: null, limit: 20 })
-    ).resolves.toMatchObject({ items: [] });
+    ).rejects.toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE",
+      details: { provider: "dingtalk", reason: "invalid_output" }
+    });
   });
 
   it("does not expose provider user IDs as sender display names", async () => {
@@ -662,6 +831,7 @@ function sendInput(accountId: string, conversationId: string) {
     inboxItemId: "item-1",
     accountId,
     conversationId,
+    conversationType: "group" as const,
     providerMessageId: "message-1",
     replyTo: "sender-1",
     recipients: [accountId],

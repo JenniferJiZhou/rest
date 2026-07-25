@@ -381,6 +381,7 @@ export class InboxService {
               inboxItemId: item.id,
               accountId: item.account_id,
               conversationId: item.conversation_id,
+              conversationType: item.conversation_type,
               providerMessageId: item.provider_message_id,
               replyTo,
               recipients: item.recipients,

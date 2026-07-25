@@ -174,6 +174,7 @@ export interface InboxSendInput {
   inboxItemId: string;
   accountId: string;
   conversationId: string | null;
+  conversationType: "direct" | "group";
   providerMessageId: string;
   replyTo: string | null;
   recipients: string[];

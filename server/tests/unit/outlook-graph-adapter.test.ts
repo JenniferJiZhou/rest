@@ -128,6 +128,7 @@ function sendInput() {
     inboxItemId: "item-1",
     accountId: "hush@example.com",
     conversationId: "thread-1",
+    conversationType: "direct" as const,
     providerMessageId: "graph-message-1",
     replyTo: "sender@example.com",
     recipients: ["hush@example.com"],

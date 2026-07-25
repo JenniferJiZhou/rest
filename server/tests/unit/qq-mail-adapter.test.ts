@@ -125,6 +125,7 @@ function sendInput() {
     inboxItemId: "item-1",
     accountId: "123456@qq.com",
     conversationId: null,
+    conversationType: "direct" as const,
     providerMessageId: "qq-message-41",
     replyTo: "sender@example.com",
     recipients: ["123456@qq.com"],

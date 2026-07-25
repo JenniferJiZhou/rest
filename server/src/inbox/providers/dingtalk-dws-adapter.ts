@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { AppError } from "../../domain/errors.js";
 import type {
   InboxEvent,
@@ -24,11 +25,20 @@ interface DingTalkMessage {
   conversationType?: unknown;
   conversationName?: unknown;
   senderId?: unknown;
+  senderOpenDingTalkId?: unknown;
+  senderName?: unknown;
   sender?: unknown;
   text?: unknown;
   content?: unknown;
   createdAt?: unknown;
   createTime?: unknown;
+}
+
+interface DingTalkConversationMessages {
+  title?: unknown;
+  openConversationId?: unknown;
+  conversationType?: unknown;
+  messages?: unknown;
 }
 
 interface DingTalkCheckpoint {
@@ -107,17 +117,19 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
       typeof result.hasMore === "boolean"
         ? result.hasMore
         : result.has_more;
-    if (
-      !Array.isArray(result.messages) ||
-      typeof hasMore !== "boolean"
-    ) {
+    const messages = messagesValue(result);
+    if (!messages || typeof hasMore !== "boolean") {
       throw providerOutputError();
     }
-    const messages = result.messages as DingTalkMessage[];
-    const items = messages.flatMap((message) => {
-      const mapped = this.mapMessage(message, input.accountId);
-      return mapped ? [mapped] : [];
-    });
+    const mappedMessages = messages
+      .map((message) => this.mapMessage(message, input.accountId))
+      .filter((mapped): mapped is NonNullable<typeof mapped> => mapped !== null);
+    const bindings = new Map<string, InboxParticipantBinding>();
+    for (const mapped of mappedMessages) {
+      if (mapped.binding) {
+        bindings.set(mapped.binding.participantRef, mapped.binding);
+      }
+    }
     const nextCursor =
       stringValue(result.nextCursor) ??
       stringValue(result.next_cursor);
@@ -125,8 +137,8 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
       throw providerOutputError();
     }
     return {
-      items,
-      participantBindings: [],
+      items: mappedMessages.map(({ item }) => item),
+      participantBindings: [...bindings.values()],
       checkpoint:
         hasMore && nextCursor
           ? JSON.stringify({
@@ -146,21 +158,7 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
     const payload = parseObject(
       await this.runner.run({
         executable: this.config.executable,
-        args: [
-          "chat",
-          "message",
-          "send",
-          "--group",
-          input.conversationId,
-          "--title",
-          input.subject?.trim() || "Hush 回复",
-          "--text",
-          "@-",
-          "--yes",
-          "--format",
-          "json"
-        ],
-        input: input.content,
+        args: sendArgs(input),
         ambiguousOnTimeout: true
       })
     );
@@ -182,36 +180,56 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
   private mapMessage(
     message: DingTalkMessage,
     accountId: string
-  ): InboxEvent | null {
+  ): { item: InboxEvent; binding: InboxParticipantBinding | null } | null {
     const messageId = stringValue(message.messageId);
     const conversationId = stringValue(message.conversationId);
     const conversationType = conversationTypeValue(message.conversationType);
     const receivedAt = timestampValue(
       message.createdAt ?? message.createTime
     );
-    if (!messageId || !conversationId || !conversationType || !receivedAt) {
+    if (!messageId || !conversationId || !receivedAt) {
       return null;
     }
+    if (!conversationType) {
+      throw providerOutputError();
+    }
+    const sender = senderIdentity(message);
+    const participantRef = sender.id
+      ? participantReference(accountId, conversationId, sender.id)
+      : null;
     return {
-      provider: this.provider,
-      account_id: accountId,
-      conversation_id: conversationId,
-      conversation_type: conversationType,
-      conversation_name:
-        stringValue(message.conversationName) ??
-        (conversationType === "group" ? "钉钉群聊" : "钉钉会话"),
-      provider_message_id: messageId,
-      sender: senderValue(message.sender, message.senderId),
-      sender_ref: null,
-      recipients: [accountId],
-      subject: null,
-      content: contentValue(message.text ?? message.content),
-      received_at: receivedAt,
-      coverage: {
-        source: "official_api",
-        complete: false,
-        note: "可见范围受钉钉企业授权和当前用户会话权限限制"
-      }
+      item: {
+        provider: this.provider,
+        account_id: accountId,
+        conversation_id: conversationId,
+        conversation_type: conversationType,
+        conversation_name:
+          stringValue(message.conversationName) ??
+          (conversationType === "group" ? "钉钉群聊" : "钉钉会话"),
+        provider_message_id: messageId,
+        sender: sender.name,
+        sender_ref: participantRef,
+        recipients: [accountId],
+        subject: null,
+        content: contentValue(message.text ?? message.content),
+        received_at: receivedAt,
+        coverage: {
+          source: "official_api",
+          complete: false,
+          note: "可见范围受钉钉企业授权和当前用户会话权限限制"
+        }
+      },
+      binding:
+        participantRef && sender.id
+          ? {
+              provider: this.provider,
+              accountId,
+              conversationId,
+              participantRef,
+              providerParticipantId: sender.id,
+              displayName: sender.name
+            }
+          : null
     };
   }
 
@@ -283,36 +301,162 @@ function unwrap(
   return payload;
 }
 
+function messagesValue(
+  result: Record<string, unknown>
+): DingTalkMessage[] | null {
+  if (Array.isArray(result.conversationMessagesList)) {
+    const flattened: DingTalkMessage[] = [];
+    for (const value of result.conversationMessagesList) {
+      if (!isRecord(value) || !Array.isArray(value.messages)) {
+        return null;
+      }
+      const conversation = value as DingTalkConversationMessages;
+      for (const message of value.messages) {
+        if (!isRecord(message)) {
+          return null;
+        }
+        flattened.push({
+          ...(message as DingTalkMessage),
+          conversationId: conversation.openConversationId,
+          conversationName: conversation.title,
+          conversationType: conversation.conversationType
+        });
+      }
+    }
+    return flattened;
+  }
+  if (Array.isArray(result.messages)) {
+    return result.messages.every(isRecord)
+      ? (result.messages as DingTalkMessage[])
+      : null;
+  }
+  return null;
+}
+
+function sendArgs(input: InboxSendInput): string[] {
+  const uuid = input.idempotencyKey.slice(0, 64);
+  if (input.conversationType === "direct") {
+    const target = directTarget(input);
+    return [
+      "chat",
+      "message",
+      "send",
+      "--open-dingtalk-id",
+      target,
+      "--text",
+      input.content,
+      "--uuid",
+      uuid,
+      "--format",
+      "json"
+    ];
+  }
+  if (!input.conversationId) {
+    throw invalidTarget();
+  }
+  const targetIds = input.mentions.map((mention) => {
+    const id = stringValue(mention.providerParticipantId);
+    if (!id) {
+      throw providerParticipantUnavailable();
+    }
+    return id;
+  });
+  const text = targetIds.length
+    ? `${targetIds.map((id) => `<@${id}>`).join("\n")}\n${input.content}`
+    : input.content;
+  return [
+    "chat",
+    "message",
+    "send",
+    "--group",
+    input.conversationId,
+    "--title",
+    input.subject?.trim() || "Hush 回复",
+    "--text",
+    text,
+    ...(targetIds.length
+      ? ["--at-open-dingtalk-ids", targetIds.join(",")]
+      : []),
+    "--uuid",
+    uuid,
+    "--format",
+    "json"
+  ];
+}
+
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function senderValue(sender: unknown, _fallback: unknown): string {
-  if (typeof sender === "string" && sender.length > 0) {
-    return sender;
+function senderIdentity(message: DingTalkMessage): {
+  id: string | null;
+  name: string;
+} {
+  const fallbackId =
+    stringValue(message.senderOpenDingTalkId) ?? stringValue(message.senderId);
+  const fallbackName = stringValue(message.senderName);
+  if (isRecord(message.sender)) {
+    const id =
+      stringValue(message.sender.openDingTalkId) ??
+      stringValue(message.sender.open_dingtalk_id) ??
+      stringValue(message.sender.id) ??
+      fallbackId;
+    const name =
+      stringValue(message.sender.name) ??
+      stringValue(message.sender.nick) ??
+      stringValue(message.sender.displayName) ??
+      fallbackName;
+    return { id, name: name ?? "未知发送者" };
   }
-  if (typeof sender === "object" && sender !== null) {
-    const record = sender as Record<string, unknown>;
-    for (const key of ["name", "nick", "displayName"]) {
-      const value = stringValue(record[key]);
-      if (value) {
-        return value;
-      }
-    }
-  }
-  return "未知发送者";
+  return {
+    id: fallbackId,
+    name: stringValue(message.sender) ?? fallbackName ?? "未知发送者"
+  };
 }
 
 function conversationTypeValue(value: unknown): "direct" | "group" | null {
-  switch (stringValue(value)?.trim().toLowerCase()) {
+  switch (stringValue(value)?.trim().toLowerCase() ?? String(value)) {
     case "group":
+    case "2":
       return "group";
     case "p2p":
     case "direct":
+    case "1":
       return "direct";
     default:
       return null;
   }
+}
+
+function participantReference(
+  accountId: string,
+  conversationId: string,
+  providerParticipantId: string
+): string {
+  const digest = createHash("sha256")
+    .update(
+      ["dingtalk", accountId, conversationId, providerParticipantId].join(
+        "\u0000"
+      )
+    )
+    .digest("base64url")
+    .slice(0, 32);
+  return `participant_${digest}`;
+}
+
+function directTarget(input: InboxSendInput): string {
+  if (input.mentions.length !== 1) {
+    throw providerParticipantUnavailable();
+  }
+  const target = stringValue(input.mentions[0]?.providerParticipantId);
+  if (!target) {
+    throw providerParticipantUnavailable();
+  }
+  return target;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function contentValue(content: unknown): string {
@@ -359,6 +503,16 @@ function providerOutputError(): AppError {
     statusCode: 503,
     retryable: true,
     details: { provider: "dingtalk", reason: "invalid_output" }
+  });
+}
+
+function providerParticipantUnavailable(): AppError {
+  return new AppError({
+    code: "INBOX_PROVIDER_UNAVAILABLE",
+    message: "钉钉回复目标暂不可用。",
+    statusCode: 503,
+    retryable: false,
+    details: { provider: "dingtalk", reason: "participant_unavailable" }
   });
 }
 
