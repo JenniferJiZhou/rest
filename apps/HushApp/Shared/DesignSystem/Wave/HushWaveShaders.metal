@@ -49,13 +49,13 @@ static float hushProfile(float x) {
 // Low-frequency tension riding on top of the inversion, changing local
 // steepness rather than sliding a shape sideways. Orders are kept to 2/3/4:
 // anything higher reads as the strokes crinkling rather than flexing. Periods
-// 11 / 17 / 23 s are mutually incommensurate, so the combined motion never
+// 8 / 13 / 17 s share no common factor, so the combined motion never
 // repeats exactly and there is no loop point to jump at.
 static float hushTension(float x, float t, float lane) {
     float s = 0.0;
-    s += sin(2.0 * M_PI_F * x + 0.7) * cos(t * (HUSH_TAU / 11.0) + lane * 0.9) * 0.34;
-    s += sin(3.0 * M_PI_F * x - 1.2) * cos(t * (HUSH_TAU / 17.0) + 1.7 + lane * 0.6) * 0.24;
-    s += sin(4.0 * M_PI_F * x + 2.3) * cos(t * (HUSH_TAU / 23.0) + 0.4 - lane * 0.5) * 0.12;
+    s += sin(2.0 * M_PI_F * x + 0.7) * cos(t * (HUSH_TAU / 8.0) + lane * 0.9) * 0.34;
+    s += sin(3.0 * M_PI_F * x - 1.2) * cos(t * (HUSH_TAU / 13.0) + 1.7 + lane * 0.6) * 0.24;
+    s += sin(4.0 * M_PI_F * x + 2.3) * cos(t * (HUSH_TAU / 17.0) + 0.4 - lane * 0.5) * 0.12;
     return s;
 }
 
@@ -71,7 +71,7 @@ static float hushTension(float x, float t, float lane) {
 //     dy(x,t) = HALF_AMP * profile(x) * (s(x,t) - 1)      <- peak <-> trough
 //             + HALF_AMP * tension(x,t) * 0.95            <- local tension
 //
-//     s(x,t) = 0.25 + 0.75 * cos(2*pi*t/17 + 5.5x + lane)
+//     s(x,t) = 0.25 + 0.75 * cos(2*pi*t/13 + 6.5x + lane)
 //
 // Because the first term is proportional to profile(x), and profile(x) changes
 // sign across the width, neighbouring humps are always pushed in OPPOSITE
@@ -104,7 +104,7 @@ static float hushTension(float x, float t, float lane) {
     // change, which the design forbids.
     float lane = clamp(position.y / h, 0.0, 1.0) * 1.6;
 
-    float s = 0.25 + 0.75 * cos(time * (HUSH_TAU / 17.0) + x * 6.5 + lane * 0.5);
+    float s = 0.25 + 0.75 * cos(time * (HUSH_TAU / 13.0) + x * 6.5 + lane * 0.5);
 
     // `dy` is expressed in artwork terms: positive means "this part of the
     // curve should sit higher on screen". distortionEffect moves content the
