@@ -48,8 +48,26 @@ describe("server listener configuration", () => {
       MAIL_FETCH_TIMEOUT_MS: 10_000,
       DRAFT_CREATE_TIMEOUT_MS: 10_000,
       COMPLETION_SEND_TIMEOUT_MS: 5_000,
-      INBOX_POLL_INTERVAL_MS: 30_000
+      INBOX_POLL_INTERVAL_MS: 30_000,
+      INBOX_INITIAL_LOOKBACK_MINUTES: 60,
+      INBOX_SYNC_BATCH_LIMIT: 100
     });
+  });
+
+  it("provides safe Inbox intelligence and state defaults", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      LOG_LEVEL: "silent"
+    });
+
+    expect(config.INBOX_STEPFUN_BASE_URL).toBe(
+      "https://api.stepfun.com/step_plan/v1"
+    );
+    expect(config.INBOX_STEPFUN_MODEL).toBe("step-3.7-flash");
+    expect(config.INBOX_STEPFUN_API_KEY).toBeUndefined();
+    expect(config.INBOX_STATE_FILE).toBe(
+      ".data/unified-inbox-state.json"
+    );
   });
 
   it.each([
@@ -57,7 +75,9 @@ describe("server listener configuration", () => {
     ["MAIL_FETCH_TIMEOUT_MS", "-1"],
     ["DRAFT_CREATE_TIMEOUT_MS", "NaN"],
     ["COMPLETION_SEND_TIMEOUT_MS", "120001"],
-    ["INBOX_POLL_INTERVAL_MS", "99"]
+    ["INBOX_POLL_INTERVAL_MS", "99"],
+    ["INBOX_INITIAL_LOOKBACK_MINUTES", "0"],
+    ["INBOX_SYNC_BATCH_LIMIT", "0"]
   ])("rejects invalid %s=%s", (name, value) => {
     expect(() =>
       loadConfig({

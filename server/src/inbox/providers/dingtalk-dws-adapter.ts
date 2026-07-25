@@ -17,6 +17,7 @@ export interface DingTalkDwsConfig {
   accountId: string;
   now?: () => Date;
   timeZone?: string;
+  initialLookbackMinutes?: number;
 }
 
 interface DingTalkMessage {
@@ -83,7 +84,8 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
     this.assertAccount(input.accountId);
     const checkpoint = resolveCheckpoint(
       input.checkpoint,
-      this.config.now?.() ?? new Date()
+      this.config.now?.() ?? new Date(),
+      this.config.initialLookbackMinutes
     );
     const args = [
       "chat",
@@ -242,7 +244,8 @@ export class DingTalkDwsAdapter implements InboxSource, InboxSender {
 
 function resolveCheckpoint(
   value: string | null,
-  now: Date
+  now: Date,
+  initialLookbackMinutes = 24 * 60
 ): DingTalkCheckpoint {
   if (value) {
     try {
@@ -267,7 +270,10 @@ function resolveCheckpoint(
     }
   }
   return {
-    start: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+    start: new Date(
+      now.getTime() -
+        Math.max(1, Math.trunc(initialLookbackMinutes)) * 60 * 1000
+    ).toISOString(),
     end: now.toISOString()
   };
 }

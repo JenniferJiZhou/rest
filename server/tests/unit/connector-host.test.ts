@@ -4,6 +4,47 @@ import { InMemoryCheckpointStore } from "../../src/inbox/in-memory.js";
 import type { InboxSource } from "../../src/inbox/ports.js";
 
 describe("ConnectorHost", () => {
+  it.each([
+    { configured: 25, expected: 25 },
+    { configured: 250, expected: 100 }
+  ])(
+    "passes a configured batch limit capped at 100 ($configured -> $expected)",
+    async ({ configured, expected }) => {
+      const pull = vi.fn(async () => ({
+        checkpoint: "checkpoint-1",
+        items: [],
+        participantBindings: []
+      }));
+      const host = new ConnectorHost(
+        [
+          {
+            source: {
+              provider: "outlook",
+              dataOrigin: "mock",
+              health: async () => "ready",
+              pull
+            },
+            accountId: "outlook-account"
+          }
+        ],
+        { ingest: vi.fn().mockResolvedValue({}) },
+        new InMemoryCheckpointStore(),
+        { next: () => "connector-request-limit" },
+        30_000,
+        Date.now,
+        30_000,
+        configured
+      );
+
+      await host.runOnce();
+
+      expect(pull).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: expected }),
+        expect.any(Object)
+      );
+    }
+  );
+
   it("passes private participant bindings only through the local ingest call", async () => {
     const participantBindings = [
       {
@@ -78,6 +119,47 @@ describe("ConnectorHost", () => {
           status: "degraded"
         })
       ])
+    );
+  });
+
+  it("retains the old checkpoint and records only a sanitized failure when ingest rejects", async () => {
+    const checkpoints = new InMemoryCheckpointStore(
+      () => new Date("2026-07-24T01:00:00.000Z")
+    );
+    await checkpoints.put(
+      "outlook",
+      "outlook-account",
+      "old-checkpoint"
+    );
+    const ingest = vi
+      .fn()
+      .mockRejectedValue(
+        new Error("private message body and provider credential")
+      );
+    const host = new ConnectorHost(
+      [{ source: source("outlook"), accountId: "outlook-account" }],
+      { ingest },
+      checkpoints,
+      { next: () => "connector-request-ingest-failure" },
+      30_000
+    );
+
+    await host.runOnce();
+
+    expect(await checkpoints.get("outlook", "outlook-account")).toBe(
+      "old-checkpoint"
+    );
+    expect(await checkpoints.statuses()).toEqual([
+      expect.objectContaining({
+        provider: "outlook",
+        account_id: "outlook-account",
+        status: "degraded",
+        checkpoint: "old-checkpoint",
+        last_error: "provider_sync_failed"
+      })
+    ]);
+    expect(JSON.stringify(await checkpoints.statuses())).not.toMatch(
+      /private message|credential/u
     );
   });
 

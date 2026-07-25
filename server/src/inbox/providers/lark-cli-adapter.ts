@@ -16,6 +16,7 @@ export interface LarkCliConfig {
   executable: string;
   accountId: string;
   now?: () => Date;
+  initialLookbackMinutes?: number;
 }
 
 interface LarkMessage {
@@ -73,7 +74,8 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
     this.assertAccount(input.accountId);
     const checkpoint = resolveCheckpoint(
       input.checkpoint,
-      this.config.now?.() ?? new Date()
+      this.config.now?.() ?? new Date(),
+      this.config.initialLookbackMinutes
     );
     const args = [
       "im",
@@ -255,7 +257,8 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
 
 function resolveCheckpoint(
   value: string | null,
-  now: Date
+  now: Date,
+  initialLookbackMinutes = 24 * 60
 ): LarkCheckpoint {
   if (value) {
     try {
@@ -280,7 +283,10 @@ function resolveCheckpoint(
     }
   }
   return {
-    start: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+    start: new Date(
+      now.getTime() -
+        Math.max(1, Math.trunc(initialLookbackMinutes)) * 60 * 1000
+    ).toISOString(),
     end: now.toISOString()
   };
 }

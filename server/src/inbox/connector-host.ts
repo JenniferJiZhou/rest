@@ -16,6 +16,7 @@ export class ConnectorHost {
   private started = false;
   private generation = 0;
   private inFlight: Promise<void> | null = null;
+  private readonly batchLimit: number;
   private readonly failures = new Map<
     string,
     { count: number; retryAt: number }
@@ -28,8 +29,13 @@ export class ConnectorHost {
     private readonly ids: IdGenerator,
     private readonly pollIntervalMs: number,
     private readonly now: () => number = Date.now,
-    private readonly syncTimeoutMs = 30_000
-  ) {}
+    private readonly syncTimeoutMs = 30_000,
+    syncBatchLimit = 100
+  ) {
+    this.batchLimit = Number.isFinite(syncBatchLimit)
+      ? Math.min(Math.max(Math.trunc(syncBatchLimit), 1), 100)
+      : 100;
+  }
 
   async runOnce(): Promise<void> {
     if (this.inFlight) {
@@ -99,7 +105,7 @@ export class ConnectorHost {
           {
             accountId: account.accountId,
             checkpoint,
-            limit: 100
+            limit: this.batchLimit
           },
           { signal: controller.signal }
         ),

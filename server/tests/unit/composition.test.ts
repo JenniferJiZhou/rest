@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CannedAgentLLM } from "../../src/agent/canned-llm.js";
 import { buildServerDependencies } from "../../src/composition.js";
 import { loadConfig } from "../../src/config.js";
@@ -21,8 +24,21 @@ import {
   FixtureMailProvider,
   NoopHandoffCompletionSink
 } from "../../src/infra/provider-stubs.js";
+import {
+  FixtureInboxIntelligenceProvider
+} from "../../src/inbox/intelligence.js";
+import type { InboxSource } from "../../src/inbox/ports.js";
 
 describe("server dependency graph isolation", () => {
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await Promise.all(
+      temporaryDirectories.splice(0).map((directory) =>
+        rm(directory, { force: true, recursive: true })
+      )
+    );
+  });
+
   it("marks normal graphs with missing Claude as mock", () => {
     const dependencies = buildServerDependencies(config());
 
@@ -47,11 +63,21 @@ describe("server dependency graph isolation", () => {
     expect(graphOrigins(dependencies).restOrigin).toBe("mock");
   });
 
-  it("does not use Claude credentials for Inbox intelligence", async () => {
+  it("uses Fixture Inbox intelligence without an Inbox key in test", async () => {
+    const dependencies = buildServerDependencies(config());
+
+    await expect(dependencies.providerHealth()).resolves.toMatchObject({
+      inbox_intelligence: "ready"
+    });
+  });
+
+  it("does not use Claude credentials for production Inbox intelligence", async () => {
+    const stateFile = await temporaryStateFile();
     const dependencies = buildServerDependencies(
-      config({
+      productionConfig({
         CLAUDE_API_KEY: "not-used-for-inbox",
-        CLAUDE_MODEL: "not-used-for-inbox"
+        CLAUDE_MODEL: "not-used-for-inbox",
+        INBOX_STATE_FILE: stateFile
       })
     );
 
@@ -59,6 +85,109 @@ describe("server dependency graph isolation", () => {
       dependencies.providerHealth()
     ).resolves.toMatchObject({
       inbox_intelligence: "unavailable"
+    });
+  });
+
+  it("composes StepFun only from Inbox-specific production settings", async () => {
+    const stateFile = await temporaryStateFile();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  summary: "安全摘要",
+                  important_points: [],
+                  todos: [],
+                  priority: "normal",
+                  needs_reply: false,
+                  reply_targets: []
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const dependencies = buildServerDependencies(
+      productionConfig({
+        INBOX_STEPFUN_API_KEY: "inbox-only-test-key",
+        INBOX_STEPFUN_BASE_URL: "https://stepfun.example/v1/",
+        INBOX_STEPFUN_MODEL: "inbox-model",
+        INBOX_STATE_FILE: stateFile
+      })
+    );
+
+    await dependencies.inbox.ingest({
+      schema_version: "1.0",
+      request_id: "req_stepfun_composition",
+      checkpoint: "checkpoint-1",
+      events: [inboxEvent("stepfun-message")]
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://stepfun.example/v1/chat/completions",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: "Bearer inbox-only-test-key"
+        }),
+        body: expect.stringContaining('"model":"inbox-model"')
+      })
+    );
+  });
+
+  it("shares file-backed Inbox state across real composition restarts", async () => {
+    const stateFile = await temporaryStateFile();
+    const firstSource = source("persistent-message", "checkpoint-1");
+    const first = buildServerDependencies(
+      developmentConfig({ INBOX_STATE_FILE: stateFile }),
+      {
+        inboxIntelligence: new FixtureInboxIntelligenceProvider(),
+        inboxSources: [
+          { source: firstSource, accountId: "outlook-account" }
+        ]
+      }
+    );
+    await first.connectorHost.runOnce();
+
+    const resumedPull = vi.fn(async () => ({
+      checkpoint: "checkpoint-2",
+      items: [],
+      participantBindings: []
+    }));
+    const secondSource: InboxSource = {
+      provider: "outlook",
+      dataOrigin: "real",
+      health: async () => "ready",
+      pull: resumedPull
+    };
+    const second = buildServerDependencies(
+      developmentConfig({ INBOX_STATE_FILE: stateFile }),
+      {
+        inboxIntelligence: new FixtureInboxIntelligenceProvider(),
+        inboxSources: [
+          { source: secondSource, accountId: "outlook-account" }
+        ]
+      }
+    );
+    await second.connectorHost.runOnce();
+
+    expect(resumedPull).toHaveBeenCalledWith(
+      expect.objectContaining({ checkpoint: "checkpoint-1" }),
+      expect.any(Object)
+    );
+    await expect(
+      second.inbox.listItems({ limit: 20 })
+    ).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          provider_message_id: "persistent-message"
+        })
+      ]
     });
   });
 
@@ -157,6 +286,81 @@ function config(
     LOG_LEVEL: "silent",
     ...overrides
   });
+}
+
+function developmentConfig(
+  overrides: Record<string, string> = {}
+) {
+  return loadConfig({
+    NODE_ENV: "development",
+    PORT: "3001",
+    PUBLIC_BASE_URL: "http://localhost:3001",
+    LOG_LEVEL: "silent",
+    ...overrides
+  });
+}
+
+function productionConfig(
+  overrides: Record<string, string> = {}
+) {
+  return loadConfig({
+    NODE_ENV: "production",
+    PORT: "3001",
+    PUBLIC_BASE_URL: "https://hush.example.com",
+    HUSH_APP_TOKEN: "app-token-000000000000000000000000",
+    HUSH_CONNECTOR_TOKEN: "connector-token-00000000000000000000",
+    LOG_LEVEL: "silent",
+    ...overrides
+  });
+}
+
+const temporaryDirectories: string[] = [];
+
+async function temporaryStateFile(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "hush-composition-"));
+  temporaryDirectories.push(directory);
+  return join(directory, "private", "unified-inbox-state.json");
+}
+
+function source(
+  providerMessageId: string,
+  checkpoint: string
+): InboxSource {
+  return {
+    provider: "outlook",
+    dataOrigin: "real",
+    health: async () => "ready",
+    pull: async ({ accountId }) => ({
+      checkpoint,
+      participantBindings: [],
+      items: [inboxEvent(providerMessageId, accountId)]
+    })
+  };
+}
+
+function inboxEvent(
+  providerMessageId: string,
+  accountId = "outlook-account"
+) {
+  return {
+    provider: "outlook" as const,
+    account_id: accountId,
+    conversation_id: "conversation-1",
+    conversation_type: "direct" as const,
+    conversation_name: "项目会话",
+    provider_message_id: providerMessageId,
+    sender: "王同学",
+    sender_ref: null,
+    recipients: [],
+    subject: "项目确认",
+    content: "请查看项目更新。",
+    received_at: "2026-07-24T01:00:00.000Z",
+    coverage: {
+      source: "official_api" as const,
+      complete: true,
+      note: null
+    }
+  };
 }
 
 class RealAgent extends CannedAgentLLM {

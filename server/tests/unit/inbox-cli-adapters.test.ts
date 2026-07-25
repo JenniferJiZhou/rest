@@ -39,7 +39,8 @@ describe("Inbox CLI adapters", () => {
       {
         executable: "/opt/lark-cli",
         accountId: "lark-account",
-        now: () => new Date("2026-07-24T01:00:00.000Z")
+        now: () => new Date("2026-07-24T01:00:00.000Z"),
+        initialLookbackMinutes: 60
       },
       runner
     );
@@ -92,7 +93,7 @@ describe("Inbox CLI adapters", () => {
         "--query",
         "",
         "--start",
-        "2026-07-23T01:00:00.000Z",
+        "2026-07-24T00:00:00.000Z",
         "--end",
         "2026-07-24T01:00:00.000Z",
         "--page-size",
@@ -103,7 +104,7 @@ describe("Inbox CLI adapters", () => {
     });
     expect(JSON.parse(pulled.checkpoint)).toMatchObject({
       pageToken: "lark-page-2",
-      start: "2026-07-23T01:00:00.000Z",
+      start: "2026-07-24T00:00:00.000Z",
       end: "2026-07-24T01:00:00.000Z"
     });
     expect(runner.invocations[2]?.args).toEqual([
@@ -148,7 +149,8 @@ describe("Inbox CLI adapters", () => {
       {
         executable: "/opt/dws",
         accountId: "ding-account",
-        now: () => new Date("2026-07-24T01:00:00.000Z")
+        now: () => new Date("2026-07-24T01:00:00.000Z"),
+        initialLookbackMinutes: 60
       },
       runner
     );
@@ -171,7 +173,7 @@ describe("Inbox CLI adapters", () => {
       "message",
       "list-all",
       "--start",
-      "2026-07-23 09:00:00",
+      "2026-07-24 08:00:00",
       "--end",
       "2026-07-24 09:00:00",
       "--limit",
@@ -183,7 +185,7 @@ describe("Inbox CLI adapters", () => {
     ]);
     expect(JSON.parse(pulled.checkpoint)).toMatchObject({
       cursor: "ding-page-2",
-      start: "2026-07-23T01:00:00.000Z",
+      start: "2026-07-24T00:00:00.000Z",
       end: "2026-07-24T01:00:00.000Z"
     });
     expect(pulled.items[0]).toMatchObject({

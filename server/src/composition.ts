@@ -12,11 +12,6 @@ import { RestService } from "./application/rest/rest-service.js";
 import type { AppConfig } from "./config.js";
 import { FileRestContentRepository } from "./content/file-rest-content-repository.js";
 import {
-  InMemoryFeedbackRepository,
-  InMemoryHandoffJobRepository,
-  InMemoryIdempotencyStore
-} from "./infra/in-memory.js";
-import {
   type AgentLLM,
   type DataOrigin,
   type HandoffCompletionSink,
@@ -24,6 +19,11 @@ import {
   type MessagingChannel,
   type RestDecisionProvider
 } from "./domain/ports.js";
+import {
+  InMemoryFeedbackRepository,
+  InMemoryHandoffJobRepository,
+  InMemoryIdempotencyStore
+} from "./infra/in-memory.js";
 import {
   ConsoleMessagingChannel,
   FixtureMailProvider,
@@ -34,23 +34,27 @@ import {
 import { RandomIdGenerator, SystemClock } from "./infra/system.js";
 import { InMemoryConfirmationTokenStore } from "./inbox/confirmation.js";
 import {
+  ConnectorHost,
+  type ConnectorAccount
+} from "./inbox/connector-host.js";
+import { FileInboxStateBackend } from "./inbox/file-state-backend.js";
+import {
+  InboxSendIdempotencyStore,
   InMemoryCheckpointStore,
   InMemoryInboxDraftRepository,
+  InMemoryInboxParticipantDirectory,
   InMemoryInboxRepository
 } from "./inbox/in-memory.js";
 import {
   FixtureInboxIntelligenceProvider,
+  StepFunInboxIntelligenceProvider,
   UnavailableInboxIntelligenceProvider
 } from "./inbox/intelligence.js";
-import type {
-  InboxProvider,
-  InboxSendResult
-} from "./domain/contracts.js";
+import type { InboxProvider } from "./domain/contracts.js";
 import type {
   InboxIntelligenceProvider,
   InboxSender
 } from "./inbox/ports.js";
-import { ConnectorHost, type ConnectorAccount } from "./inbox/connector-host.js";
 import {
   DingTalkDwsAdapter,
   ExecFileCommandRunner,
@@ -60,6 +64,7 @@ import {
   QqMailAdapter,
   UnavailableInboxSender
 } from "./inbox/providers/index.js";
+import { InMemoryInboxStateBackend } from "./inbox/state-backend.js";
 
 export interface ServerCompositionOverrides {
   realAgent?: AgentLLM;
@@ -130,7 +135,17 @@ export function buildServerDependencies(
   const ids = new RandomIdGenerator();
   const realInboxIntelligence =
     overrides.inboxIntelligence ??
-    new UnavailableInboxIntelligenceProvider();
+    (config.INBOX_STEPFUN_API_KEY
+      ? new StepFunInboxIntelligenceProvider({
+          baseUrl: config.INBOX_STEPFUN_BASE_URL,
+          apiKey: config.INBOX_STEPFUN_API_KEY,
+          model: config.INBOX_STEPFUN_MODEL,
+          maxMessagesPerChunk: 100,
+          maxPromptCharacters: 60_000
+        })
+      : ["demo", "test"].includes(config.NODE_ENV)
+        ? new FixtureInboxIntelligenceProvider()
+        : new UnavailableInboxIntelligenceProvider());
   const demoInboxIntelligence =
     new FixtureInboxIntelligenceProvider();
   const commandRunner = new ExecFileCommandRunner();
@@ -142,7 +157,9 @@ export function buildServerDependencies(
       ? new LarkCliAdapter(
           {
             executable: config.LARK_CLI_PATH,
-            accountId: config.LARK_ACCOUNT_ID
+            accountId: config.LARK_ACCOUNT_ID,
+            initialLookbackMinutes:
+              config.INBOX_INITIAL_LOOKBACK_MINUTES
           },
           commandRunner
         )
@@ -163,7 +180,9 @@ export function buildServerDependencies(
       ? new DingTalkDwsAdapter(
           {
             executable: config.DWS_CLI_PATH,
-            accountId: config.DINGTALK_ACCOUNT_ID
+            accountId: config.DINGTALK_ACCOUNT_ID,
+            initialLookbackMinutes:
+              config.INBOX_INITIAL_LOOKBACK_MINUTES
           },
           commandRunner
         )
@@ -233,40 +252,58 @@ export function buildServerDependencies(
       new FixtureInboxSender(provider)
     ])
   );
+  const inboxBackend =
+    config.NODE_ENV === "test" || config.NODE_ENV === "demo"
+      ? new InMemoryInboxStateBackend()
+      : new FileInboxStateBackend(config.INBOX_STATE_FILE);
+  const demoInboxBackend = new InMemoryInboxStateBackend();
   const inboxCheckpoints = new InMemoryCheckpointStore(
-    clock.now.bind(clock)
+    clock.now.bind(clock),
+    inboxBackend
   );
   const demoInboxCheckpoints = new InMemoryCheckpointStore(
-    clock.now.bind(clock)
+    clock.now.bind(clock),
+    demoInboxBackend
+  );
+  const inboxParticipants = new InMemoryInboxParticipantDirectory(
+    inboxBackend
+  );
+  const demoInboxParticipants = new InMemoryInboxParticipantDirectory(
+    demoInboxBackend
   );
   const inbox = new InboxService(
-    new InMemoryInboxRepository(),
-    new InMemoryInboxDraftRepository(),
+    new InMemoryInboxRepository(inboxBackend),
+    new InMemoryInboxDraftRepository(inboxBackend),
     realInboxIntelligence,
     inboxSenders,
     new InMemoryConfirmationTokenStore(clock.now.bind(clock)),
-    new InMemoryIdempotencyStore<InboxSendResult>(),
+    new InboxSendIdempotencyStore(inboxBackend),
     inboxCheckpoints,
     clock,
-    ids
+    ids,
+    inboxParticipants
   );
   const demoInbox = new InboxService(
-    new InMemoryInboxRepository(),
-    new InMemoryInboxDraftRepository(),
+    new InMemoryInboxRepository(demoInboxBackend),
+    new InMemoryInboxDraftRepository(demoInboxBackend),
     demoInboxIntelligence,
     demoInboxSenders,
     new InMemoryConfirmationTokenStore(clock.now.bind(clock)),
-    new InMemoryIdempotencyStore<InboxSendResult>(),
+    new InboxSendIdempotencyStore(demoInboxBackend),
     demoInboxCheckpoints,
     clock,
-    ids
+    ids,
+    demoInboxParticipants
   );
   const connectorHost = new ConnectorHost(
     inboxSources,
     inbox,
     inboxCheckpoints,
     ids,
-    config.INBOX_POLL_INTERVAL_MS
+    config.INBOX_POLL_INTERVAL_MS,
+    Date.now,
+    30_000,
+    config.INBOX_SYNC_BATCH_LIMIT
   );
 
   return {

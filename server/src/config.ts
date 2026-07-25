@@ -70,6 +70,30 @@ const environmentSchema = z
       .min(1_000)
       .max(3_600_000)
       .default(30_000),
+    INBOX_STEPFUN_BASE_URL: z
+      .url()
+      .default("https://api.stepfun.com/step_plan/v1"),
+    INBOX_STEPFUN_MODEL: z
+      .string()
+      .trim()
+      .min(1)
+      .default("step-3.7-flash"),
+    INBOX_STEPFUN_API_KEY: optionalString,
+    INBOX_INITIAL_LOOKBACK_MINUTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(60),
+    INBOX_SYNC_BATCH_LIMIT: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(100),
+    INBOX_STATE_FILE: z
+      .string()
+      .trim()
+      .min(1)
+      .default(".data/unified-inbox-state.json"),
     LARK_CLI_PATH: optionalString,
     LARK_ACCOUNT_ID: optionalString,
     DWS_CLI_PATH: optionalString,
