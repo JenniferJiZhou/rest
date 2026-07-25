@@ -5,6 +5,8 @@ struct HushDemoRootView: View {
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
     @State private var isShowingSettings = false
+    @State private var isOfferingBreath = false
+    @State private var isBreathing = false
     @State private var isGeneratingRestTask = false
     @State private var companionMessage: String?
     @State private var openedSuggestionMessage: String?
@@ -64,8 +66,9 @@ struct HushDemoRootView: View {
                                     isShowingSettings = true
                                 }
                             },
-                            onOpenInbox: store.openInbox,
-                            onOpenCompanion: onCompanion
+                            onInboxSwipeTriggered: store.openInbox,
+                            onOpenCompanion: onCompanion,
+                            onBreathLongPress: offerBreath
                         )
                     }
                 }
@@ -106,6 +109,33 @@ struct HushDemoRootView: View {
         #else
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #endif
+        .overlay {
+            if isOfferingBreath {
+                ZStack {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture { isOfferingBreath = false }
+
+                    HushBreathInviteView(
+                        onAccept: {
+                            isOfferingBreath = false
+                            isBreathing = true
+                        },
+                        onDismiss: { isOfferingBreath = false }
+                    )
+                }
+                .transition(.opacity)
+            }
+        }
+        .overlay {
+            if isBreathing {
+                HushBreathTideView { isBreathing = false }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.28), value: isOfferingBreath)
+        .animation(.easeInOut(duration: 0.45), value: isBreathing)
         .preferredColorScheme(.dark)
         .task {
             if sleepSchedule.consumePendingRoute() {
@@ -183,6 +213,11 @@ struct HushDemoRootView: View {
                 }
             )
         }
+    }
+
+    private func offerBreath() {
+        guard !isBreathing else { return }
+        isOfferingBreath = true
     }
 
     private var agentTaskText: String {

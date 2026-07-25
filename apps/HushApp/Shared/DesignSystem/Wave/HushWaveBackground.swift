@@ -5,8 +5,14 @@ import AppKit
 import UIKit
 #endif
 
-struct HushWaveBackground: View {
+struct HushWaveBackground: View, Animatable {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var revealProgress: CGFloat = 0
+
+    var animatableData: CGFloat {
+        get { revealProgress }
+        set { revealProgress = newValue }
+    }
 
     var body: some View {
         ZStack {
@@ -14,6 +20,7 @@ struct HushWaveBackground: View {
 
             TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion)) { timeline in
                 Canvas { context, size in
+                    let reveal = min(1, max(0, revealProgress))
                     let elapsed = timeline.date.timeIntervalSinceReferenceDate
                     let phase = reduceMotion
                         ? 0.5
@@ -24,8 +31,11 @@ struct HushWaveBackground: View {
                     let breath = reduceMotion
                         ? 0.96
                         : 0.92 + sin(breathPhase - .pi / 2) * 0.08
-                    let centerY = size.height * 0.82 + sin(breathPhase) * 10
-                    let amplitude = min(118, size.height * 0.17) * breath
+                    let centerY = size.height * 0.82 * (1 - reveal)
+                        + sin(breathPhase) * 10 * (1 - reveal)
+                    let amplitude = min(118, size.height * 0.17)
+                        * breath
+                        * (1 - reveal * 0.55)
                     let path = wavePath(
                         size: size,
                         centerY: centerY,

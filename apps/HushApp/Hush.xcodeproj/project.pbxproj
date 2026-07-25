@@ -77,6 +77,7 @@
 		A10000000000000000000044 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
 		A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000024 /* HushTestTargetSmokeTests.swift */; };
 		A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000026 /* HushTideTimelineTests.swift */; };
+		A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000028 /* HushDoorTriggerTests.swift */; };
 		A20000000000000000000011 /* hush-companion-idle.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* hush-companion-idle.png */; };
 		A20000000000000000000012 /* hush-companion-idle.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* hush-companion-idle.png */; };
 		A20000000000000000000013 /* hush-companion-ocean-a.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* hush-companion-ocean-a.png */; };
@@ -89,6 +90,10 @@
 		A20000000000000000000020 /* hush-sleep-tide.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000010 /* hush-sleep-tide.png */; };
 		A40000000000000000000001 /* HushWaveShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000001 /* HushWaveShaders.metal */; };
 		A40000000000000000000002 /* HushWaveShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000001 /* HushWaveShaders.metal */; };
+		A30000000000000000000001 /* HushBreathTideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000001 /* HushBreathTideView.swift */; };
+		A30000000000000000000002 /* HushBreathTideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000001 /* HushBreathTideView.swift */; };
+		A30000000000000000000003 /* HushBreathShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000002 /* HushBreathShaders.metal */; };
+		A30000000000000000000004 /* HushBreathShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000002 /* HushBreathShaders.metal */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,12 +183,15 @@
 		B10000000000000000000022 /* UnifiedInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxView.swift; sourceTree = "<group>"; };
 		B00000000000000000000024 /* HushTestTargetSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushTestTargetSmokeTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000026 /* HushTideTimelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushTideTimelineTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000028 /* HushDoorTriggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushDoorTriggerTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000006 /* hush-companion-idle.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-idle.png; sourceTree = "<group>"; };
 		B20000000000000000000007 /* hush-companion-ocean-a.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-ocean-a.png; sourceTree = "<group>"; };
 		B20000000000000000000008 /* hush-companion-ocean-b.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-ocean-b.png; sourceTree = "<group>"; };
 		B20000000000000000000009 /* hush-companion-ocean-c.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-ocean-c.png; sourceTree = "<group>"; };
 		B20000000000000000000010 /* hush-sleep-tide.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-sleep-tide.png; sourceTree = "<group>"; };
 		B40000000000000000000001 /* HushWaveShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shared/DesignSystem/Wave/HushWaveShaders.metal; sourceTree = "<group>"; };
+		B30000000000000000000001 /* HushBreathTideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/BreathTide/HushBreathTideView.swift; sourceTree = "<group>"; };
+		B30000000000000000000002 /* HushBreathShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shared/Features/BreathTide/HushBreathShaders.metal; sourceTree = "<group>"; };
 		B00000000000000000000101 /* Hush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hush.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000102 /* HushMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HushMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000103 /* HushDeviceActivityMonitor.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushDeviceActivityMonitor.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -321,6 +329,7 @@
 			children = (
 				B00000000000000000000024 /* HushTestTargetSmokeTests.swift */,
 				B00000000000000000000026 /* HushTideTimelineTests.swift */,
+				B00000000000000000000028 /* HushDoorTriggerTests.swift */,
 			);
 			path = HushTests;
 			sourceTree = "<group>";
@@ -352,6 +361,8 @@
 				B10000000000000000000009 /* RestFeedbackView.swift */,
 				B10000000000000000000010 /* GuidedDriftView.swift */,
 				B10000000000000000000011 /* HushDoorView.swift */,
+				B30000000000000000000001 /* HushBreathTideView.swift */,
+				B30000000000000000000002 /* HushBreathShaders.metal */,
 				B10000000000000000000012 /* HushRestContent.swift */,
 				B10000000000000000000013 /* RestQuestView.swift */,
 				B10000000000000000000014 /* BlueResetView.swift */,
@@ -620,6 +631,8 @@
 				A10000000000000000000017 /* RestFeedbackView.swift in Sources */,
 				A10000000000000000000019 /* GuidedDriftView.swift in Sources */,
 				A10000000000000000000021 /* HushDoorView.swift in Sources */,
+				A30000000000000000000001 /* HushBreathTideView.swift in Sources */,
+				A30000000000000000000003 /* HushBreathShaders.metal in Sources */,
 				A10000000000000000000023 /* HushRestContent.swift in Sources */,
 				A10000000000000000000025 /* RestQuestView.swift in Sources */,
 				A10000000000000000000027 /* BlueResetView.swift in Sources */,
@@ -649,6 +662,8 @@
 				A10000000000000000000018 /* RestFeedbackView.swift in Sources */,
 				A10000000000000000000020 /* GuidedDriftView.swift in Sources */,
 				A10000000000000000000022 /* HushDoorView.swift in Sources */,
+				A30000000000000000000002 /* HushBreathTideView.swift in Sources */,
+				A30000000000000000000004 /* HushBreathShaders.metal in Sources */,
 				A10000000000000000000024 /* HushRestContent.swift in Sources */,
 				A10000000000000000000026 /* RestQuestView.swift in Sources */,
 				A10000000000000000000028 /* BlueResetView.swift in Sources */,
@@ -683,6 +698,7 @@
 			files = (
 				A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */,
 				A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */,
+				A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
