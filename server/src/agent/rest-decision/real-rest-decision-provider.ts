@@ -16,20 +16,14 @@ import {
   buildRestDecisionOutputJsonSchema,
   parseRestDecisionModelOutput
 } from "./rest-decision-output.js";
-
-export interface RestDecisionModelRequest {
-  model: string;
-  system: string;
-  input: string;
-  outputSchema: Record<string, unknown>;
-}
-
-export interface RestDecisionModelClient {
-  complete(
-    request: RestDecisionModelRequest,
-    options?: ProviderCallOptions
-  ): Promise<string>;
-}
+import type {
+  RestDecisionModelClient,
+  RestDecisionModelRequest
+} from "./rest-decision-model-client.js";
+export type {
+  RestDecisionModelClient,
+  RestDecisionModelRequest
+} from "./rest-decision-model-client.js";
 
 interface AnthropicRestDecisionApi {
   messages: {

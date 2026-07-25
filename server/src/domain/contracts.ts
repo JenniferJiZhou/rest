@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const CONTRACT_VERSION = "1.0" as const;
+export const DYNAMIC_REST_CONTRACT_VERSION = "1.1" as const;
 export const CONTENT_VERSION = "1.0.0" as const;
 
 const schemaVersion = z.literal(CONTRACT_VERSION);
@@ -387,9 +388,17 @@ export const restSuggestionActionSchema = z.enum([
   "dismiss"
 ]);
 
-export const restSuggestionSchema = z
+export const generatedRestTaskSchema = z
   .object({
-    schema_version: schemaVersion,
+    title: z.string(),
+    duration_seconds: z.number().int(),
+    steps: z.array(z.string())
+  })
+  .strict();
+
+export const restSuggestionV1Schema = z
+  .object({
+    schema_version: z.literal(CONTRACT_VERSION),
     request_id: requestId,
     should_offer_rest: z.boolean(),
     reason_code: restSuggestionReasonCodeSchema,
@@ -398,6 +407,42 @@ export const restSuggestionSchema = z
     actions: z.array(restSuggestionActionSchema)
   })
   .strict();
+
+export const restSuggestionV1_1Schema = z
+  .object({
+    schema_version: z.literal(DYNAMIC_REST_CONTRACT_VERSION),
+    request_id: requestId,
+    should_offer_rest: z.boolean(),
+    reason_code: restSuggestionReasonCodeSchema,
+    message: z.string(),
+    generated_task: generatedRestTaskSchema.nullable(),
+    default_quest_id: z.null(),
+    actions: z.array(
+      z.enum(["start_rest_session", "remind_later", "dismiss"])
+    )
+  })
+  .strict()
+  .superRefine((suggestion, context) => {
+    if (suggestion.should_offer_rest && suggestion.generated_task === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["generated_task"],
+        message: "generated_task must be an object when rest is offered"
+      });
+    }
+    if (!suggestion.should_offer_rest && suggestion.generated_task !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["generated_task"],
+        message: "generated_task must be null when rest is not offered"
+      });
+    }
+  });
+
+export const restSuggestionSchema = z.union([
+  restSuggestionV1Schema,
+  restSuggestionV1_1Schema
+]);
 
 export const fatigueCheckInSchema = z
   .object({
@@ -627,7 +672,10 @@ export const errorCodeSchema = z.enum([
 
 export const errorResponseSchema = z
   .object({
-    schema_version: schemaVersion,
+    schema_version: z.enum([
+      CONTRACT_VERSION,
+      DYNAMIC_REST_CONTRACT_VERSION
+    ]),
     request_id: requestId,
     error: z
       .object({

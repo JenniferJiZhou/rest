@@ -398,3 +398,10 @@ Provider PR 必须：
 7. 给出环境变量和本地复现方式；
 8. 列出尚未接线部分；
 9. 请求 W1 进行最终 Composition Root 接线。
+
+## 10. Contract 1.1 动态 Rest Decision 例外
+
+`recommend` 和 Contract 1.0 继续遵守上表。Contract 1.1
+`rest/evaluate` 是经批准的独立动态任务路径：使用 provider-neutral
+`RestDecisionProvider`、专用 Prompt/Schema Router 和 StepFun Adapter，不读取
+Quest Repository。完整边界见 `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`。

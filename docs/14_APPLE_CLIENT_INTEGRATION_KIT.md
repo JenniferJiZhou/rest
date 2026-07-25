@@ -1,5 +1,18 @@
 # Apple Client Integration Kit
 
+## Contract 1.1 Rest Decision addendum
+
+Only `POST /v1/rest/evaluate` supports 1.1. The upgraded DeviceActivity,
+Mac App, and Mac website clients send `X-Contract-Version: 1.1`, wait up to
+35 seconds, decode `generated_task`, and never resolve `default_quest_id`.
+`false` may carry a non-empty companion message but creates no notification,
+task, Shield, or Lockdown. `true` requires a generated task and Apple retains
+all presentation and device-control authority.
+
+The remaining examples in this kit are Contract 1.0 unless explicitly
+labelled otherwise. The complete 1.1 mapping and M1 checklist are in
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`.
+
 Status: Contract v1 (`1.0`) frozen.  
 Audience: M1/M2 Apple client developers and W1 integration owner.
 

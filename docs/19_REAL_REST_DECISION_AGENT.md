@@ -1,5 +1,10 @@
 # Real Rest Decision Agent
 
+> 本文记录 Contract 1.0 的 legacy Real Provider 和固定 Quest Guard。
+> Contract 1.1 使用独立的 StepFun Provider、Prompt、Schema 与执行器，见
+> `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`。1.1 不复用本文的 Quest
+> allowlist、cooldown 旁路或语义内容 Guard。
+
 Status: implementation ready for credentialed staging evaluation  
 Owner: W1 / P2  
 Prompt version: `rest-decision-v1.0`

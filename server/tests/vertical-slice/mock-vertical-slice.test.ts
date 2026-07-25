@@ -106,7 +106,10 @@ describe("W1-04 Mock Vertical Slice", () => {
     expect(health.statusCode).toBe(200);
     expect(health.json()).toEqual({
       status: "ok",
-      contract_version: "1.0"
+      contract_version: "1.0",
+      providers: {
+        rest_decision: "ready"
+      }
     });
 
     const evaluateId = "req_vertical_evaluate";

@@ -1,8 +1,62 @@
 # Apple Rest Decision HTTPS Handoff
 
-Status: Canned/Mock HTTPS staging is deployed and the three checkpoint shapes
-pass remote smoke tests. Apple iPhone/Mac device verification remains manual.
+## Contract 1.1 handoff
+
+The upgraded iOS DeviceActivity, Mac App, and Mac website clients now request
+`X-Contract-Version: 1.1` and use a 35-second timeout. They decode
+`generated_task` directly and do not query a local Quest using
+`default_quest_id`.
+
+- `true`: requires a task object; Apple may notify, and opening the
+  notification shows the wave home, message, title, ordered steps, and timer.
+  This path never automatically applies Shield or Lockdown.
+- `false`: accepts the companion `message`, does not notify, does not open a
+  task, and does not change Shield, Lockdown, or the next checkpoint.
+- error/timeout/malformed response: ends generating, keeps the page usable,
+  and does not fall back to a fixed Quest.
+
+The existing 1.0 handoff below remains valid for legacy clients. The canonical
+1.1 runbook is `docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md`.
+
+Contract 1.1 status: W1 local automated/static verification is complete.
+Credentialed StepFun staging, Contract 1.1 remote smoke, Apple builds, and
+iPhone/Mac device verification remain external. The deployment statements in
+the legacy 1.0 sections below describe the earlier 1.0 handoff and are not
+evidence that 1.1 has been deployed.
 Owner: W1 / P2 -> Apple Owner
+
+## Contract 1.1 M1/M2 build and device acceptance
+
+Run from the repository root on macOS:
+
+```bash
+xcodebuild -project apps/HushApp/Hush.xcodeproj \
+  -scheme HushMac -configuration Debug \
+  -destination 'platform=macOS' build
+xcodebuild -project apps/HushApp/Hush.xcodeproj \
+  -scheme Hush -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' build
+xcodebuild -project apps/HushApp/Hush.xcodeproj \
+  -scheme HushDeviceActivityMonitor -configuration Debug \
+  -destination 'generic/platform=iOS' build
+```
+
+M1 owns the iOS App/Extension and shared UI verification; M2 owns the Mac App
+and Mac Website verification. For each applicable surface, test true, false,
+503, timeout, and malformed response:
+
+| Result | Pass criterion |
+|---|---|
+| true | notification opens generated title, ordered steps, and timer initialized from `duration_seconds`; remind later/dismiss work |
+| false | companion appears without notification, task navigation, Shield, or Lockdown |
+| 503/timeout/malformed | generating ends and no fixed Quest fallback or notification appears |
+| all results | checkpoint cadence and monitoring limits remain unchanged |
+
+Any Debug build failure, stuck generating state, fixed Quest lookup/fallback,
+message-driven false notification, automatic Shield/Lockdown, reordered
+steps, wrong timer, or checkpoint change fails acceptance. See
+`docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md` for the full matrix and HTTPS
+smoke.
 
 ## Runtime matrix
 
@@ -29,7 +83,7 @@ Estimated iOS continuous usage must not be described as exact foreground
 time. No raw App identity, full URL, URL path/query, search term, or page
 title is available to the Provider.
 
-## HTTP behavior
+## Contract 1.0 HTTP behavior
 
 | Result | Apple behavior |
 |---|---|
@@ -60,7 +114,7 @@ checkpoint.
   rejects a non-null user label;
 - do not perform eTLD+1 or registrable-domain merging.
 
-## HTTPS client contract
+## Contract 1.0 HTTPS client contract
 
 Apple configures the platform-provided root HTTPS Base URL:
 
@@ -281,7 +335,7 @@ Content-Type, `X-Request-ID`, `X-Contract-Version`,
 type. It exits non-zero on mismatch or timeout and does not print the Demo
 Token or complete user Payload.
 
-## Apple handoff
+## Contract 1.0 Apple handoff
 
 The Apple Owner must:
 

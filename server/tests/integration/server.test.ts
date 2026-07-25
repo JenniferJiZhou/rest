@@ -34,7 +34,7 @@ describe("Hush API", () => {
     await server.close();
   });
 
-  it("reports lightweight process health without exposing providers or secrets", async () => {
+  it("reports provider-neutral Rest Decision configuration health without secrets", async () => {
     const response = await server.inject({
       method: "GET",
       url: "/v1/health"
@@ -43,7 +43,10 @@ describe("Hush API", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       status: "ok",
-      contract_version: "1.0"
+      contract_version: "1.0",
+      providers: {
+        rest_decision: "ready"
+      }
     });
   });
 

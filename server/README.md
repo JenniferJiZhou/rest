@@ -43,13 +43,17 @@ external callback URL construction; the existing W1 routes do not use it to
 change listener or response behavior.
 
 `GET /v1/health` does not require client headers or call any Provider. It is
-a lightweight process liveness endpoint. All other W1 routes require:
+a lightweight process liveness endpoint and exposes only provider-neutral
+configuration readiness. All other W1 routes require:
 
 ```text
 X-Request-ID
 X-Client-Version
 X-Contract-Version: 1.0
 ```
+
+`POST /v1/rest/evaluate` additionally accepts `X-Contract-Version: 1.1`.
+Every other route remains 1.0-only.
 
 The body `request_id` must equal `X-Request-ID`. Mutating idempotent routes also
 require an `Idempotency-Key` of 8–128 Unicode characters after trimming, with
@@ -78,9 +82,10 @@ expose a stable development port.
 - Without both `CLAUDE_API_KEY` and `CLAUDE_MODEL`, Agent calls use
   `CannedAgentLLM`. Canned output is Mock data; it is not real Claude output.
 - `HUSH_REST_DECISION_PROVIDER` independently selects `real`, `canned`, or
-  `unavailable` for `POST /v1/rest/evaluate`. Real mode uses
-  `REST_DECISION_MODEL` (falling back to `CLAUDE_MODEL`), `CLAUDE_API_KEY`,
-  and `CLAUDE_BASE_URL`. Missing Real configuration selects the explicit
+  `unavailable` for `POST /v1/rest/evaluate`. Contract 1.0 Real uses the
+  legacy Claude/fixed-Quest configuration. Contract 1.1 Real uses
+  `STEPFUN_API_KEY`, `STEPFUN_BASE_URL`, explicit `STEPFUN_MODEL`, and
+  `STEPFUN_TIMEOUT_MS`. Incomplete Real configuration selects the explicit
   Unavailable Provider; it never silently falls back to Canned.
 - Demo Rest Decision always uses its own Canned Provider and never calls the
   model API. A successful Real Rest Decision response is marked
@@ -101,14 +106,16 @@ expose a stable development port.
 Provider calls are bounded by validated environment settings:
 
 ```text
-REST_DECISION_TIMEOUT_MS=3500
+REST_DECISION_TIMEOUT_MS=3500        # Contract 1.0 legacy
+STEPFUN_TIMEOUT_MS=30000             # Contract 1.1 transport
 LLM_TIMEOUT_MS=15000
 MAIL_FETCH_TIMEOUT_MS=10000
 DRAFT_CREATE_TIMEOUT_MS=10000
 COMPLETION_SEND_TIMEOUT_MS=5000
 ```
 
-Rest Decision accepts 500–4500 milliseconds. The other timeouts accept an
+Legacy Rest Decision accepts 500–4500 milliseconds. StepFun accepts
+500–120000 milliseconds and defaults to 30000. The other timeouts accept an
 integer from 100 through 120000 milliseconds. Handoff
 cancellation aborts the active Agent, Mail, Draft, or Completion call.
 Rest Decision timeout and HTTP client disconnect also abort the active model
@@ -163,13 +170,20 @@ The Gmail adapter must honor `DraftRequest.dedupeKey`. It must never send mail;
 
 ## Real Rest Decision
 
-The Real Provider uses the versioned `rest-decision-v1.0` System Prompt,
-strict JSON input, Anthropic JSON Schema structured output, fixed reason and
-Quest allowlists, and the server Output Guard. It has no tools and cannot
-control Shield, notifications, actions, request IDs, or checkpoints.
+Contract 1.0 uses the versioned `rest-decision-v1.0` System Prompt,
+Anthropic structured output, fixed reason/Quest allowlists, and the legacy
+Output Guard.
 
-See `../docs/19_REAL_REST_DECISION_AGENT.md` for configuration, failure
-behavior, staging handoff, prompt-version policy, and manual evaluation.
+Contract 1.1 uses the independent `dynamic-rest-decision-v1.1` Prompt,
+StepFun Responses API strict JSON Schema, and a provider-neutral dynamic
+execution path. It does not send allowed Quest IDs, read the Quest Repository,
+apply the 15-minute cooldown bypass, or use the 3500 ms legacy deadline.
+The server injects actions and always returns `default_quest_id=null`.
+Neither version gives the model tools or control over Shield, notifications,
+request IDs, or checkpoints.
+
+See `../docs/19_REAL_REST_DECISION_AGENT.md` for Contract 1.0 and
+`../docs/22_DYNAMIC_REST_TASK_CONTRACT_1_1.md` for Contract 1.1.
 
 ## Unified Inbox Mock Vertical Slice
 

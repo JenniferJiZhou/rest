@@ -51,7 +51,9 @@ Hush Backend
 
 - 将自然语言疲惫描述映射为可解释分类。
 - 最多生成一个能改变推荐结果的 follow-up。
-- 从固定 Rest Quest 库中选择 `quest_id`。
+- 为 Contract 1.0 和 manual rest 从固定 Rest Quest 库中选择 `quest_id`。
+- 为 Contract 1.1 Mode A 校验 StepFun 的结构化 `generated_task`，不查询
+  Quest Repository。
 - Gmail OAuth、读取未读、创建草稿。
 - 创建与运行 Handoff Job。
 - 整理用户主动交接的 open loops。
@@ -59,6 +61,10 @@ Hush Backend
 - Photon 入站路由与主动消息。
 - LLM 输出的 Schema 校验。
 - Real/Mock/Cached 来源标记。
+
+Contract 1.1 的模型只决定是否建议休息、陪伴/引导文案和一次性任务内容。
+服务端仍拥有 request ID、Contract 版本、actions、HTTP 状态与幂等；Apple
+仍拥有通知、Shield、Lockdown、页面跳转和 checkpoint。
 
 ## 4. 核心 Swift 协议
 

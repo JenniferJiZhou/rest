@@ -34,6 +34,15 @@ const environmentSchema = z
       .min(500)
       .max(4_500)
       .default(3_500),
+    STEPFUN_API_KEY: z.string().trim().min(1).optional(),
+    STEPFUN_BASE_URL: z.url().default("https://api.stepfun.com/v1"),
+    STEPFUN_MODEL: z.string().trim().min(1).optional(),
+    STEPFUN_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .max(120_000)
+      .default(30_000),
     LLM_TIMEOUT_MS: z.coerce
       .number()
       .int()

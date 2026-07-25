@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import {
-  RealRestDecisionProvider,
-  type RestDecisionModelClient,
-  type RestDecisionModelRequest
-} from "../../src/agent/rest-decision/real-rest-decision-provider.js";
+  DynamicRestDecisionProvider
+} from "../../src/agent/rest-decision/dynamic-rest-decision-provider.js";
+import type {
+  RestDecisionModelClient,
+  RestDecisionModelRequest
+} from "../../src/agent/rest-decision/rest-decision-model-client.js";
 import { createServer } from "../../src/api/create-server.js";
 import { buildServerDependencies } from "../../src/composition.js";
 import { loadConfig } from "../../src/config.js";
-import { FileRestContentRepository } from "../../src/content/file-rest-content-repository.js";
 
 const servers: FastifyInstance[] = [];
 
@@ -19,7 +20,6 @@ describe("Real Rest Decision TCP vertical slice", () => {
 
   it("runs iOS, Mac App, and Mac website through the bounded Real Provider", async () => {
     const model = new RecordingModelClient();
-    const content = new FileRestContentRepository();
     const server = createServer(
       buildServerDependencies(
         loadConfig({
@@ -27,11 +27,10 @@ describe("Real Rest Decision TCP vertical slice", () => {
           LOG_LEVEL: "silent"
         }),
         {
-          normalRestDecisionProvider:
-            new RealRestDecisionProvider(
+          normalDynamicRestDecisionProvider:
+            new DynamicRestDecisionProvider(
               model,
-              "claude-test-model",
-              content
+              "step-3.7-flash"
             )
         }
       )
@@ -70,7 +69,7 @@ describe("Real Rest Decision TCP vertical slice", () => {
             "content-type": "application/json",
             "x-request-id": fixture.requestId,
             "x-client-version": "1.0.0-vertical",
-            "x-contract-version": "1.0"
+            "x-contract-version": "1.1"
           },
           body: JSON.stringify(fixture.payload)
         }
@@ -82,17 +81,18 @@ describe("Real Rest Decision TCP vertical slice", () => {
         "real"
       );
       expect(body).toMatchObject({
-        schema_version: "1.0",
+        schema_version: "1.1",
         request_id: fixture.requestId,
         should_offer_rest: false,
-        message: "",
+        message: "先照着现在的节奏继续，我在这里陪你。",
+        generated_task: null,
         default_quest_id: null,
-        actions: ["dismiss"]
+        actions: []
       });
       const modelInput = JSON.parse(
         model.requests.at(-1)!.input
       );
-      expect(modelInput.decisionContext.targetType).toBe(
+      expect(modelInput.behavior.targetType).toBe(
         fixture.expectedTarget
       );
       expect(modelInput).not.toHaveProperty("requestId");
@@ -112,8 +112,8 @@ class RecordingModelClient implements RestDecisionModelClient {
     return JSON.stringify({
       shouldOfferRest: false,
       reasonCode: "insufficient_signal",
-      message: "",
-      defaultQuestId: null
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generatedTask: null
     });
   }
 }

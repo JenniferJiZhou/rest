@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.1",
+  "request_id": "req_dynamic_offer",
+  "should_offer_rest": true,
+  "reason_code": "long_continuous_use",
+  "message": "现在可以暂时把注意力从屏幕上移开。",
+  "generated_task": {
+    "title": "一分钟桌边重置",
+    "duration_seconds": 60,
+    "steps": [
+      "暂时让双手离开键盘",
+      "看向比屏幕更远的位置",
+      "肩膀放松后再回来"
+    ]
+  },
+  "default_quest_id": null,
+  "actions": [
+    "start_rest_session",
+    "remind_later",
+    "dismiss"
+  ]
+}

@@ -171,13 +171,29 @@ export interface RestDecisionCandidate {
   defaultQuestId?: string | null;
 }
 
-export interface RestDecisionProvider {
+export interface GeneratedRestTaskCandidate {
+  title: string;
+  durationSeconds: number;
+  steps: string[];
+}
+
+export interface DynamicRestDecisionCandidate {
+  shouldOfferRest: boolean;
+  reasonCode: RestSuggestion["reason_code"];
+  message: string;
+  generatedTask: GeneratedRestTaskCandidate | null;
+}
+
+export interface RestDecisionProvider<
+  Candidate = RestDecisionCandidate
+> {
   readonly dataOrigin?: DataOrigin;
+  readonly configurationHealth?: ProviderHealth;
   health(): Promise<ProviderHealth>;
   decide(
     context: RestDecisionContext,
     options?: ProviderCallOptions
-  ): Promise<RestDecisionCandidate>;
+  ): Promise<Candidate>;
 }
 
 export interface HandoffAgentInput {

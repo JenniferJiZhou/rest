@@ -1,5 +1,8 @@
 import type { ErrorCode, ErrorResponse } from "./contracts.js";
-import { CONTRACT_VERSION } from "./contracts.js";
+import {
+  CONTRACT_VERSION,
+  DYNAMIC_REST_CONTRACT_VERSION
+} from "./contracts.js";
 
 export class AppError extends Error {
   readonly code: ErrorCode;
@@ -29,10 +32,13 @@ export class AppError extends Error {
 
 export function toErrorResponse(
   error: AppError,
-  requestId: string
+  requestId: string,
+  contractVersion:
+    | typeof CONTRACT_VERSION
+    | typeof DYNAMIC_REST_CONTRACT_VERSION = CONTRACT_VERSION
 ): ErrorResponse {
   return {
-    schema_version: CONTRACT_VERSION,
+    schema_version: contractVersion,
     request_id: requestId,
     error: {
       code: error.code,

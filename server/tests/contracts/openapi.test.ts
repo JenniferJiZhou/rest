@@ -41,13 +41,19 @@ describe("OpenAPI contract", () => {
 
     for (const [path, method] of operations) {
       const responses = document.paths[path]![method]!.responses;
+      const expectedError =
+        path === "/v1/rest/evaluate"
+          ? "#/components/responses/RestEvaluationError"
+          : "#/components/responses/Error";
       expect(responses["409"]).toEqual({
-        $ref: "#/components/responses/Error"
+        $ref: expectedError
       });
       for (const response of Object.values(responses)) {
         const definition =
           "$ref" in response
-            ? document.components.responses.Error
+            ? document.components.responses[
+                response.$ref!.split("/").at(-1)!
+              ]!
             : response;
         expect(definition.headers).toMatchObject({
           "X-Request-ID": expect.any(Object),
@@ -66,8 +72,30 @@ describe("OpenAPI contract", () => {
     expect(
       document.paths["/v1/rest/evaluate"]!.post!.responses["503"]
     ).toEqual({
-      $ref: "#/components/responses/Error"
+      $ref: "#/components/responses/RestEvaluationError"
     });
+  });
+
+  it("negotiates Contract 1.0 and 1.1 only for Rest evaluate", () => {
+    const document = parse(
+      readFileSync(openApiPath, "utf8")
+    ) as OpenApiDocument;
+    const evaluate = document.paths["/v1/rest/evaluate"]!.post!;
+    const contractParameter = evaluate.parameters?.find(
+      (parameter) =>
+        "$ref" in parameter &&
+        parameter.$ref ===
+          "#/components/parameters/RestEvaluationContractVersion"
+    );
+
+    expect(contractParameter).toBeDefined();
+    expect(
+      document.components.parameters.RestEvaluationContractVersion!
+        .schema.enum
+    ).toEqual(["1.0", "1.1"]);
+    expect(
+      document.components.parameters.ContractVersion!.schema.const
+    ).toBe("1.0");
   });
 
   it("declares the seven Unified Inbox operations with shared protocol responses", () => {
@@ -127,12 +155,17 @@ interface OpenApiDocument {
       string,
       {
         operationId?: string;
+        parameters?: Array<{ $ref?: string }>;
         responses: Record<string, OpenApiResponse>;
       }
     >
   >;
   components: {
-    responses: { Error: OpenApiResponse };
+    parameters: Record<
+      string,
+      { schema: { const?: string; enum?: string[] } }
+    >;
+    responses: Record<string, OpenApiResponse>;
   };
 }
 

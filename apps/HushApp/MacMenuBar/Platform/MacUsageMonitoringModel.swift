@@ -84,13 +84,13 @@ final class MacUsageMonitoringModel: ObservableObject {
         let requestID: String
         let shouldOfferRest: Bool
         let message: String
-        let defaultQuestID: String?
+        let generatedTask: GeneratedRestTask?
 
         enum CodingKeys: String, CodingKey {
             case requestID = "request_id"
             case shouldOfferRest = "should_offer_rest"
             case message
-            case defaultQuestID = "default_quest_id"
+            case generatedTask = "generated_task"
         }
     }
 
@@ -681,6 +681,10 @@ final class MacUsageMonitoringModel: ObservableObject {
             ? "已到 5 分钟检查点，正在请求 Agent…"
             : "正在发送测试检查点…"
         isSendingAgentRequest = true
+        NotificationCenter.default.post(
+            name: .hushRestTaskGenerationStarted,
+            object: nil
+        )
 
         let endpoint = baseURL
             .appendingPathComponent("v1")
@@ -688,7 +692,7 @@ final class MacUsageMonitoringModel: ObservableObject {
             .appendingPathComponent("evaluate")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 5
+        request.timeoutInterval = 35
         request.httpBody = body
         request.setValue(
             "application/json",
@@ -696,9 +700,16 @@ final class MacUsageMonitoringModel: ObservableObject {
         )
         request.setValue(requestID, forHTTPHeaderField: "X-Request-ID")
         request.setValue("1.0.0", forHTTPHeaderField: "X-Client-Version")
-        request.setValue("1.0", forHTTPHeaderField: "X-Contract-Version")
+        request.setValue("1.1", forHTTPHeaderField: "X-Contract-Version")
 
         Task {
+            defer {
+                isSendingAgentRequest = false
+                NotificationCenter.default.post(
+                    name: .hushRestTaskGenerationFinished,
+                    object: nil
+                )
+            }
             do {
                 let (data, response) = try await URLSession.shared.data(
                     for: request
@@ -709,7 +720,6 @@ final class MacUsageMonitoringModel: ObservableObject {
                 guard (200..<300).contains(httpResponse.statusCode) else {
                     agentStatusMessage =
                         "Agent 返回 HTTP \(httpResponse.statusCode)。"
-                    isSendingAgentRequest = false
                     return
                 }
 
@@ -719,26 +729,35 @@ final class MacUsageMonitoringModel: ObservableObject {
                 )
                 guard suggestion.requestID == requestID else {
                     agentStatusMessage = "Agent 响应的 request_id 不匹配。"
-                    isSendingAgentRequest = false
+                    return
+                }
+                guard suggestion.shouldOfferRest
+                    == (suggestion.generatedTask != nil)
+                else {
+                    agentStatusMessage = "Agent 响应格式不正确。"
                     return
                 }
 
                 agentStatusMessage = suggestion.shouldOfferRest
                     ? "Agent 建议休息：\(suggestion.message)"
                     : "Agent 建议继续：\(suggestion.message)"
-                if suggestion.shouldOfferRest {
+                if suggestion.shouldOfferRest,
+                   let generatedTask = suggestion.generatedTask
+                {
                     HushMacRestNotificationController.shared
                         .sendRestSuggestion(
                             message: suggestion.message,
-                            questID: suggestion.defaultQuestID,
+                            generatedTask: generatedTask,
                             requestID: suggestion.requestID
                         )
+                } else {
+                    HushMacRestNotificationController.shared
+                        .updateCompanionMessage(suggestion.message)
                 }
             } catch {
                 agentStatusMessage =
-                    "Agent 请求失败：\(error.localizedDescription)"
+                    "暂时无法生成休息建议；你可以继续使用 Hush。"
             }
-            isSendingAgentRequest = false
         }
     }
 

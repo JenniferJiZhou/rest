@@ -5,6 +5,24 @@ struct RestQuestView: View {
     let canSwap: Bool
     let onSwap: () -> Void
     let onStart: () -> Void
+    let onRemindLater: (() -> Void)?
+    let onDismiss: (() -> Void)?
+
+    init(
+        quest: HushQuestContent,
+        canSwap: Bool,
+        onSwap: @escaping () -> Void,
+        onStart: @escaping () -> Void,
+        onRemindLater: (() -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil
+    ) {
+        self.quest = quest
+        self.canSwap = canSwap
+        self.onSwap = onSwap
+        self.onStart = onStart
+        self.onRemindLater = onRemindLater
+        self.onDismiss = onDismiss
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: HushSpacing.lg) {
@@ -78,6 +96,15 @@ struct RestQuestView: View {
                 }
                 .buttonStyle(HushSecondaryButtonStyle())
                 .disabled(!canSwap)
+
+                if let onRemindLater, let onDismiss {
+                    HStack(spacing: HushSpacing.sm) {
+                        Button("稍后提醒", action: onRemindLater)
+                            .buttonStyle(HushSecondaryButtonStyle())
+                        Button("关闭", action: onDismiss)
+                            .buttonStyle(HushSecondaryButtonStyle())
+                    }
+                }
             }
 
         }

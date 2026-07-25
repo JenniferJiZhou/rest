@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.1",
+  "request_id": "req_dynamic_companion",
+  "should_offer_rest": false,
+  "reason_code": "insufficient_signal",
+  "message": "先照着现在的节奏继续，我在这里陪你。",
+  "generated_task": null,
+  "default_quest_id": null,
+  "actions": []
+}

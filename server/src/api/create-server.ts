@@ -13,6 +13,7 @@ import { ZodError } from "zod";
 import type { AppConfig } from "../config.js";
 import {
   CONTRACT_VERSION,
+  DYNAMIC_REST_CONTRACT_VERSION,
   fatigueCheckInSchema,
   handoffStartRequestSchema,
   restFeedbackSchema,
@@ -30,6 +31,7 @@ import type {
 import type { HandoffService } from "../application/handoff/handoff-service.js";
 import type { UnifiedInboxService } from "../application/inbox/unified-inbox-service.js";
 import type { RestService } from "../application/rest/rest-service.js";
+import type { RestEvaluationContractVersion } from "../application/rest/rest-service.js";
 import {
   unifiedInboxAcknowledgeRequestSchema,
   unifiedInboxConfirmationRequestSchema,
@@ -48,6 +50,8 @@ import {
 export interface ServerDependencies {
   config: AppConfig;
   restDecisionOrigin: DataOrigin;
+  legacyRestDecisionOrigin: DataOrigin;
+  restDecisionHealth: ProviderHealth;
   restOrigin: DataOrigin;
   handoffOrigin: DataOrigin;
   demoRestOrigin: DataOrigin;
@@ -66,6 +70,7 @@ export interface ServerDependencies {
 interface RequestContext {
   requestId: string;
   origin: DataOrigin;
+  contractVersion: RestEvaluationContractVersion;
   rest: RestService;
   handoff: HandoffService;
   inbox: UnifiedInboxService;
@@ -184,12 +189,14 @@ export function createServer(
           ? "handoff"
           : request.url.startsWith("/v1/rest/evaluate")
             ? "rest_decision"
-            : "rest"
+            : "rest",
+      responseContractVersion(request)
     );
-    setResponseHeaders(reply, requestId, origin);
+    const contractVersion = responseContractVersion(request);
+    setResponseHeaders(reply, requestId, origin, contractVersion);
     void reply
       .status(appError.statusCode)
-      .send(toErrorResponse(appError, requestId));
+      .send(toErrorResponse(appError, requestId, contractVersion));
   });
 
   server.get("/v1/health", async (request, reply) => {
@@ -199,10 +206,13 @@ export function createServer(
       dependencies.handoffOrigin === "real"
         ? "real"
         : "mock";
-    setResponseHeaders(reply, requestId, origin);
+    setResponseHeaders(reply, requestId, origin, CONTRACT_VERSION);
     return {
       status: "ok",
-      contract_version: CONTRACT_VERSION
+      contract_version: CONTRACT_VERSION,
+      providers: {
+        rest_decision: dependencies.restDecisionHealth
+      }
     };
   });
 
@@ -219,7 +229,10 @@ export function createServer(
       return await context.rest.evaluate(
         request.body,
         context.requestId,
-        { signal: cancellation.signal }
+        {
+          signal: cancellation.signal,
+          contractVersion: context.contractVersion
+        }
       );
     } finally {
       cancellation.dispose();
@@ -510,7 +523,11 @@ function requestContext(
   const requestId = requiredHeader(request, "x-request-id");
   requiredHeader(request, "x-client-version");
   const contractVersion = requiredHeader(request, "x-contract-version");
-  if (contractVersion !== CONTRACT_VERSION) {
+  const supportedContractVersions =
+    graph === "rest_decision"
+      ? [CONTRACT_VERSION, DYNAMIC_REST_CONTRACT_VERSION]
+      : [CONTRACT_VERSION];
+  if (!supportedContractVersions.includes(contractVersion as never)) {
     throw new AppError({
       code: "CONTRACT_VERSION_UNSUPPORTED",
       message: "客户端契约版本不受支持。",
@@ -518,7 +535,7 @@ function requestContext(
       retryable: false,
       details: {
         requested: contractVersion,
-        supported: CONTRACT_VERSION
+        supported: supportedContractVersions
       }
     });
   }
@@ -554,11 +571,24 @@ function requestContext(
     });
   }
 
-  const origin = graphOrigin(dependencies, demo, graph);
-  setResponseHeaders(reply, requestId, origin);
+  const negotiatedContractVersion =
+    contractVersion as RestEvaluationContractVersion;
+  const origin = graphOrigin(
+    dependencies,
+    demo,
+    graph,
+    negotiatedContractVersion
+  );
+  setResponseHeaders(
+    reply,
+    requestId,
+    origin,
+    negotiatedContractVersion
+  );
   return {
     requestId,
     origin,
+    contractVersion: negotiatedContractVersion,
     rest: demo ? dependencies.demoRest : dependencies.rest,
     handoff: demo ? dependencies.demoHandoff : dependencies.handoff,
     inbox: demo ? dependencies.demoInbox : dependencies.inbox
@@ -568,7 +598,8 @@ function requestContext(
 function graphOrigin(
   dependencies: ServerDependencies,
   demo: boolean,
-  graph: GraphKind
+  graph: GraphKind,
+  contractVersion: RestEvaluationContractVersion = CONTRACT_VERSION
 ): DataOrigin {
   if (demo) {
     if (graph === "inbox") {
@@ -579,7 +610,9 @@ function graphOrigin(
       : dependencies.demoHandoffOrigin;
   }
   if (graph === "rest_decision") {
-    return dependencies.restDecisionOrigin;
+    return contractVersion === DYNAMIC_REST_CONTRACT_VERSION
+      ? dependencies.restDecisionOrigin
+      : dependencies.legacyRestDecisionOrigin;
   }
   if (graph === "inbox") {
     return dependencies.inboxOrigin;
@@ -663,11 +696,22 @@ function header(request: FastifyRequest, name: string): string | null {
 function setResponseHeaders(
   reply: FastifyReply,
   requestId: string,
-  origin: DataOrigin
+  origin: DataOrigin,
+  contractVersion: RestEvaluationContractVersion
 ): void {
   reply.header("X-Request-ID", requestId);
-  reply.header("X-Contract-Version", CONTRACT_VERSION);
+  reply.header("X-Contract-Version", contractVersion);
   reply.header("X-Hush-Data-Origin", origin);
+}
+
+function responseContractVersion(
+  request: FastifyRequest
+): RestEvaluationContractVersion {
+  return request.url.startsWith("/v1/rest/evaluate") &&
+    header(request, "x-contract-version") ===
+      DYNAMIC_REST_CONTRACT_VERSION
+    ? DYNAMIC_REST_CONTRACT_VERSION
+    : CONTRACT_VERSION;
 }
 
 function requestCancellation(

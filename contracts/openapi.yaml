@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: Hush API
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Contract for Hush Apple clients, Agent backend, Gmail handoff, and Photon adapter.
-    Quest steps are canonical in the fixed content library; the backend primarily returns quest_id.
+    Contract 1.0 keeps canonical fixed Quest content. Contract 1.1 Rest
+    evaluate can return a StepFun-generated structured rest task.
 servers:
   - url: http://localhost:3000
     description: Local protocol smoke; HTTPS staging pending
@@ -59,7 +60,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"
-        - $ref: "#/components/parameters/ContractVersion"
+        - $ref: "#/components/parameters/RestEvaluationContractVersion"
         - $ref: "#/components/parameters/DemoToken"
       requestBody:
         required: true
@@ -74,7 +75,7 @@ paths:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
             X-Contract-Version:
-              $ref: "#/components/headers/ContractVersion"
+              $ref: "#/components/headers/RestEvaluationContractVersion"
             X-Hush-Data-Origin:
               $ref: "#/components/headers/DataOrigin"
           content:
@@ -82,11 +83,11 @@ paths:
               schema:
                 $ref: "./schemas/rest-suggestion.schema.json"
         "400":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/RestEvaluationError"
         "409":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/RestEvaluationError"
         "503":
-          $ref: "#/components/responses/Error"
+          $ref: "#/components/responses/RestEvaluationError"
 
   /v1/rest/check-in:
     post:
@@ -711,6 +712,16 @@ components:
       schema:
         type: string
         const: "1.0"
+    RestEvaluationContractVersion:
+      name: X-Contract-Version
+      in: header
+      required: true
+      description: >
+        Rest evaluate supports legacy fixed-Quest Contract 1.0 and dynamic
+        generated-task Contract 1.1.
+      schema:
+        type: string
+        enum: ["1.0", "1.1"]
     DemoToken:
       name: X-Hush-Demo-Token
       in: header
@@ -737,12 +748,29 @@ components:
       schema:
         type: string
         const: "1.0"
+    RestEvaluationContractVersion:
+      schema:
+        type: string
+        enum: ["1.0", "1.1"]
     DataOrigin:
       schema:
         type: string
         enum: [real, mock, cached]
 
   responses:
+    RestEvaluationError:
+      description: Rest evaluation error
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        X-Contract-Version:
+          $ref: "#/components/headers/RestEvaluationContractVersion"
+        X-Hush-Data-Origin:
+          $ref: "#/components/headers/DataOrigin"
+      content:
+        application/json:
+          schema:
+            $ref: "./schemas/error-response.schema.json"
     Error:
       description: Error
       headers:

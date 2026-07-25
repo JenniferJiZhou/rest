@@ -1,5 +1,55 @@
 import Foundation
 
+struct GeneratedRestTask: Codable, Equatable, Sendable {
+    let title: String
+    let durationSeconds: Int
+    let steps: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case durationSeconds = "duration_seconds"
+        case steps
+    }
+
+    var questContent: HushQuestContent {
+        HushQuestContent(
+            id: "generated-rest-task",
+            contentVersion: "dynamic-rest-decision-v1.1",
+            title: title,
+            fatigueTypes: [],
+            durationSeconds: durationSeconds,
+            energyRequired: "unknown",
+            locationTags: [],
+            timeTags: [],
+            steps: steps,
+            requiresScreen: false,
+            safetyNote: nil,
+            anchorCompatible: false
+        )
+    }
+}
+
+struct HushDynamicRestSuggestion: Equatable, Sendable {
+    let requestID: String
+    let message: String
+    let generatedTask: GeneratedRestTask
+}
+
+extension Notification.Name {
+    static let hushDynamicRestSuggestionOpened = Notification.Name(
+        "hush.dynamic-rest-suggestion-opened"
+    )
+    static let hushRestTaskGenerationStarted = Notification.Name(
+        "hush.rest-task-generation-started"
+    )
+    static let hushRestTaskGenerationFinished = Notification.Name(
+        "hush.rest-task-generation-finished"
+    )
+    static let hushCompanionMessageUpdated = Notification.Name(
+        "hush.companion-message-updated"
+    )
+}
+
 struct HushQuestContent: Codable, Equatable, Identifiable {
     let id: String
     let contentVersion: String

@@ -1,11 +1,14 @@
 import {
   CONTENT_VERSION,
+  CONTRACT_VERSION,
+  DYNAMIC_REST_CONTRACT_VERSION,
   fatigueCheckInSchema,
   fatigueReflectionSchema,
   restFeedbackSchema,
   restQuestRecommendationSchema,
   restRecommendationRequestSchema,
-  restSuggestionSchema,
+  restSuggestionV1Schema,
+  restSuggestionV1_1Schema,
   usageSummarySchema,
   type FatigueCheckIn,
   type FatigueReflection,
@@ -13,12 +16,14 @@ import {
   type RestQuest,
   type RestQuestRecommendation,
   type RestRecommendationRequest,
-  type RestSuggestion
+  type RestSuggestion,
+  type UsageSummary
 } from "../../domain/contracts.js";
 import { AppError } from "../../domain/errors.js";
 import { canonicalRequestHash } from "../../domain/request-hash.js";
 import type {
   AgentLLM,
+  DynamicRestDecisionCandidate,
   FeedbackRepository,
   IdempotencyStore,
   ProviderCallOptions,
@@ -26,15 +31,29 @@ import type {
   RestDecisionProvider
 } from "../../domain/ports.js";
 import { withProviderTimeout } from "../../infra/provider-call.js";
+import { DynamicRestDecisionExecutor } from "./dynamic-rest-decision-execution.js";
 import { RestDecisionExecutor } from "./rest-decision-execution.js";
 
 export interface RestServiceOptions {
   llmTimeoutMs?: number;
   restDecisionTimeoutMs?: number;
+  dynamicRestDecisionTimeoutMs?: number;
+  dynamicDecisionProvider?: RestDecisionProvider<DynamicRestDecisionCandidate>;
 }
+
+export interface RestEvaluationOptions extends ProviderCallOptions {
+  contractVersion?: RestEvaluationContractVersion;
+}
+
+export type RestEvaluationContractVersion =
+  | typeof CONTRACT_VERSION
+  | typeof DYNAMIC_REST_CONTRACT_VERSION;
 
 export class RestService {
   private readonly decisionExecutor: RestDecisionExecutor;
+  private readonly dynamicDecisionExecutor:
+    | DynamicRestDecisionExecutor
+    | null;
 
   constructor(
     private readonly agent: AgentLLM,
@@ -51,13 +70,23 @@ export class RestService {
         ? {}
         : { timeoutMs: options.restDecisionTimeoutMs }
     );
+    this.dynamicDecisionExecutor = options.dynamicDecisionProvider
+      ? new DynamicRestDecisionExecutor(
+          options.dynamicDecisionProvider,
+          options.dynamicRestDecisionTimeoutMs === undefined
+            ? {}
+            : { timeoutMs: options.dynamicRestDecisionTimeoutMs }
+        )
+      : null;
   }
 
   async evaluate(
     input: unknown,
     verifiedRequestId: string,
-    options?: ProviderCallOptions
+    options?: RestEvaluationOptions
   ): Promise<RestSuggestion> {
+    const contractVersion =
+      options?.contractVersion ?? CONTRACT_VERSION;
     const request = usageSummarySchema.parse(input);
     if (request.request_id !== verifiedRequestId) {
       throw new AppError({
@@ -69,15 +98,22 @@ export class RestService {
     }
     await this.idempotency.deleteExpired(new Date().toISOString());
     const claim = await this.idempotency.claimOrGet({
-      key: `rest:evaluate:${verifiedRequestId}`,
+      key: `rest:evaluate:${contractVersion}:${verifiedRequestId}`,
       requestHash: canonicalRequestHash(request),
       ttlSeconds: 24 * 60 * 60,
       create: async () => {
-        const result = await this.decisionExecutor.execute(
-          request,
-          verifiedRequestId,
-          options
-        );
+        const result =
+          contractVersion === DYNAMIC_REST_CONTRACT_VERSION
+            ? await this.executeDynamicDecision(
+                request,
+                verifiedRequestId,
+                options
+              )
+            : await this.decisionExecutor.execute(
+                request,
+                verifiedRequestId,
+                options
+              );
         if (result.kind === "responded") {
           return result.response;
         }
@@ -93,7 +129,9 @@ export class RestService {
         details: { reason: "REQUEST_ID_REUSED" }
       });
     }
-    return restSuggestionSchema.parse(claim.value);
+    return contractVersion === DYNAMIC_REST_CONTRACT_VERSION
+      ? restSuggestionV1_1Schema.parse(claim.value)
+      : restSuggestionV1Schema.parse(claim.value);
   }
 
   async checkIn(input: FatigueCheckIn): Promise<FatigueReflection> {
@@ -236,6 +274,29 @@ export class RestService {
       fallback: "LOCAL_RULES",
       details: { reason: "timeout", operation }
     });
+  }
+
+  private async executeDynamicDecision(
+    request: UsageSummary,
+    verifiedRequestId: string,
+    options?: RestEvaluationOptions
+  ) {
+    if (this.dynamicDecisionExecutor === null) {
+      throw new AppError({
+        code: "INTERNAL_ERROR",
+        message: "休息建议服务暂时不可用。",
+        statusCode: 503,
+        retryable: true,
+        details: {
+          reason: "REST_DECISION_PROVIDER_UNAVAILABLE"
+        }
+      });
+    }
+    return this.dynamicDecisionExecutor.execute(
+      request,
+      verifiedRequestId,
+      options
+    );
   }
 
 }

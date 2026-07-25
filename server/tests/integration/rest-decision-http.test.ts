@@ -2,15 +2,19 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { request as httpRequest } from "node:http";
 import {
+  CannedDynamicRestDecisionProvider,
   CannedRestDecisionProvider,
+  UnavailableDynamicRestDecisionProvider,
   UnavailableRestDecisionProvider
 } from "../../src/agent/rest-decision-providers.js";
 import { RealRestDecisionProvider } from "../../src/agent/rest-decision/real-rest-decision-provider.js";
+import { DynamicRestDecisionProvider } from "../../src/agent/rest-decision/dynamic-rest-decision-provider.js";
 import { createServer } from "../../src/api/create-server.js";
 import { buildServerDependencies } from "../../src/composition.js";
 import { loadConfig } from "../../src/config.js";
 import { FileRestContentRepository } from "../../src/content/file-rest-content-repository.js";
 import type {
+  DynamicRestDecisionCandidate,
   ProviderCallOptions,
   ProviderHealth,
   RestDecisionCandidate,
@@ -26,6 +30,11 @@ const headers = (requestId: string, demo = false) => ({
   "x-client-version": "1.0.0-test",
   "x-contract-version": "1.0",
   ...(demo ? { "x-hush-demo-token": "demo-secret" } : {})
+});
+
+const dynamicHeaders = (requestId: string, demo = false) => ({
+  ...headers(requestId, demo),
+  "x-contract-version": "1.1"
 });
 
 const iosUsage = (
@@ -53,6 +62,185 @@ const iosUsage = (
 describe("Cloud Rest Decision HTTP vertical slice", () => {
   afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => server.close()));
+  });
+
+  it("negotiates Contract 1.1 and returns a generated task from the dynamic graph", async () => {
+    const provider = new FixedDynamicProvider({
+      shouldOfferRest: true,
+      reasonCode: "long_continuous_use",
+      message: "现在可以暂时把注意力从屏幕上移开。",
+      generatedTask: {
+        title: "一分钟桌边重置",
+        durationSeconds: 60,
+        steps: ["双手离开键盘", "看向远处", "放松肩膀"]
+      }
+    });
+    const server = await createTestServer({
+      normalDynamicRestDecisionProvider: provider
+    });
+    const requestId = "req_http_dynamic_offer";
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: dynamicHeaders(requestId),
+      payload: iosUsage(requestId, {
+        minutes_since_last_rest: 5
+      })
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers).toMatchObject({
+      "x-contract-version": "1.1",
+      "x-hush-data-origin": "real"
+    });
+    expect(response.json()).toMatchObject({
+      schema_version: "1.1",
+      request_id: requestId,
+      should_offer_rest: true,
+      generated_task: {
+        title: "一分钟桌边重置",
+        duration_seconds: 60,
+        steps: ["双手离开键盘", "看向远处", "放松肩膀"]
+      },
+      default_quest_id: null
+    });
+    expect(provider.calls).toBe(1);
+  });
+
+  it("returns a non-empty Contract 1.1 companion message without opening a task", async () => {
+    const provider = new FixedDynamicProvider({
+      shouldOfferRest: false,
+      reasonCode: "insufficient_signal",
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generatedTask: null
+    });
+    const server = await createTestServer({
+      normalDynamicRestDecisionProvider: provider
+    });
+    const requestId = "req_http_dynamic_companion";
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: dynamicHeaders(requestId),
+      payload: iosUsage(requestId)
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      schema_version: "1.1",
+      request_id: requestId,
+      should_offer_rest: false,
+      reason_code: "insufficient_signal",
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generated_task: null,
+      default_quest_id: null,
+      actions: []
+    });
+  });
+
+  it("returns a versioned 503 without a fixed Quest when dynamic Provider is unavailable", async () => {
+    const server = await createTestServer({
+      normalDynamicRestDecisionProvider:
+        new UnavailableDynamicRestDecisionProvider()
+    });
+    const requestId = "req_http_dynamic_unavailable";
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: dynamicHeaders(requestId),
+      payload: iosUsage(requestId)
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.headers).toMatchObject({
+      "x-contract-version": "1.1",
+      "x-hush-data-origin": "mock"
+    });
+    expect(response.json()).toMatchObject({
+      schema_version: "1.1",
+      request_id: requestId,
+      error: {
+        code: "INTERNAL_ERROR",
+        retryable: true,
+        fallback: null
+      }
+    });
+    expect(response.json()).not.toHaveProperty("default_quest_id");
+  });
+
+  it("does not cache a failed dynamic decision as a successful response", async () => {
+    const provider = new RecoveringDynamicProvider();
+    const server = await createTestServer({
+      normalDynamicRestDecisionProvider: provider
+    });
+    const requestId = "req_http_dynamic_retry";
+    const request = {
+      method: "POST" as const,
+      url: "/v1/rest/evaluate",
+      headers: dynamicHeaders(requestId),
+      payload: iosUsage(requestId)
+    };
+
+    const failed = await server.inject(request);
+    const retry = await server.inject(request);
+
+    expect(failed.statusCode).toBe(503);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toMatchObject({
+      schema_version: "1.1",
+      should_offer_rest: false,
+      generated_task: null
+    });
+    expect(provider.calls).toBe(2);
+  });
+
+  it("removes legacy fixed-Quest fallback metadata from dynamic model errors", async () => {
+    const server = await createTestServer({
+      normalDynamicRestDecisionProvider:
+        new DynamicRestDecisionProvider(
+          {
+            complete: async () => "not-json"
+          },
+          "step-3.7-flash"
+        )
+    });
+    const requestId = "req_http_dynamic_invalid_output";
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: dynamicHeaders(requestId),
+      payload: iosUsage(requestId)
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      schema_version: "1.1",
+      error: {
+        code: "LLM_INVALID_OUTPUT",
+        fallback: null
+      }
+    });
+  });
+
+  it("keeps Canned Contract 1.1 in the isolated mock graph", async () => {
+    const server = await createTestServer({
+      normalDynamicRestDecisionProvider:
+        new CannedDynamicRestDecisionProvider()
+    });
+    const requestId = "req_http_dynamic_canned";
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/rest/evaluate",
+      headers: dynamicHeaders(requestId),
+      payload: iosUsage(requestId)
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["x-hush-data-origin"]).toBe("mock");
+    expect(response.json()).toMatchObject({
+      schema_version: "1.1",
+      default_quest_id: null
+    });
   });
 
   it.each([
@@ -426,6 +614,47 @@ describe("Cloud Rest Decision HTTP vertical slice", () => {
     }
   });
 
+  it("propagates a disconnected Contract 1.1 client to StepFun boundary", async () => {
+    const provider = new ControlledDynamicRestDecisionProvider();
+    const server = await createTestServer({
+      normalDynamicRestDecisionProvider: provider
+    });
+    await server.listen({ host: "127.0.0.1", port: 0 });
+    const address = server.server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("test server did not expose a TCP address");
+    }
+    const requestId = "req_http_dynamic_abort";
+    const clientClosed = deferred<void>();
+    const clientRequest = httpRequest(
+      {
+        method: "POST",
+        hostname: "127.0.0.1",
+        port: address.port,
+        path: "/v1/rest/evaluate",
+        headers: {
+          ...dynamicHeaders(requestId),
+          "content-type": "application/json",
+          connection: "close"
+        }
+      }
+    );
+    clientRequest.on("error", () => clientClosed.resolve());
+    clientRequest.end(JSON.stringify(iosUsage(requestId)));
+    await provider.waitUntilStarted();
+
+    try {
+      clientRequest.destroy();
+      await Promise.all([
+        clientClosed.promise,
+        provider.waitUntilAborted()
+      ]);
+      expect(provider.signal?.aborted).toBe(true);
+    } finally {
+      provider.release();
+    }
+  });
+
   it("returns 503 for model timeout classification", async () => {
     const provider = new RealRestDecisionProvider(
       {
@@ -599,6 +828,101 @@ class ControlledRestDecisionProvider
 
   release(): void {
     this.gate.resolve();
+  }
+}
+
+class FixedDynamicProvider
+  implements RestDecisionProvider<DynamicRestDecisionCandidate>
+{
+  readonly dataOrigin = "real" as const;
+  calls = 0;
+
+  constructor(
+    private readonly candidate: DynamicRestDecisionCandidate
+  ) {}
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async decide(): Promise<DynamicRestDecisionCandidate> {
+    this.calls += 1;
+    return structuredClone(this.candidate);
+  }
+}
+
+class ControlledDynamicRestDecisionProvider
+  implements RestDecisionProvider<DynamicRestDecisionCandidate>
+{
+  readonly dataOrigin = "real" as const;
+  private readonly started = deferred<void>();
+  private readonly gate = deferred<void>();
+  signal: AbortSignal | undefined;
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async decide(
+    _context: RestDecisionContext,
+    options?: ProviderCallOptions
+  ): Promise<DynamicRestDecisionCandidate> {
+    this.signal = options?.signal;
+    this.started.resolve();
+    await this.gate.promise;
+    return {
+      shouldOfferRest: false,
+      reasonCode: "insufficient_signal",
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generatedTask: null
+    };
+  }
+
+  waitUntilStarted(): Promise<void> {
+    return this.started.promise;
+  }
+
+  async waitUntilAborted(): Promise<void> {
+    const signal = this.signal;
+    if (!signal) {
+      throw new Error("provider signal is not available");
+    }
+    if (signal.aborted) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      signal.addEventListener("abort", () => resolve(), {
+        once: true
+      });
+    });
+  }
+
+  release(): void {
+    this.gate.resolve();
+  }
+}
+
+class RecoveringDynamicProvider
+  implements RestDecisionProvider<DynamicRestDecisionCandidate>
+{
+  readonly dataOrigin = "real" as const;
+  calls = 0;
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async decide(): Promise<DynamicRestDecisionCandidate> {
+    this.calls += 1;
+    if (this.calls === 1) {
+      throw new Error("temporary StepFun failure");
+    }
+    return {
+      shouldOfferRest: false,
+      reasonCode: "insufficient_signal",
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generatedTask: null
+    };
   }
 }
 

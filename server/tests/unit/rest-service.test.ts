@@ -7,6 +7,12 @@ import {
   InMemoryFeedbackRepository,
   InMemoryIdempotencyStore
 } from "../../src/infra/in-memory.js";
+import type {
+  DynamicRestDecisionCandidate,
+  ProviderHealth,
+  RestDecisionContext,
+  RestDecisionProvider
+} from "../../src/domain/ports.js";
 
 const createService = (): RestService => {
   const content = new FileRestContentRepository();
@@ -73,6 +79,56 @@ describe("RestService", () => {
 
     expect(result.should_offer_rest).toBe(false);
     expect(result.reason_code).toBe("cooldown");
+  });
+
+  it("routes Contract 1.1 evaluate through the dynamic executor", async () => {
+    const content = new FileRestContentRepository();
+    const dynamicProvider = new FixedDynamicProvider({
+      shouldOfferRest: false,
+      reasonCode: "insufficient_signal",
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generatedTask: null
+    });
+    const service = new RestService(
+      new CannedAgentLLM(),
+      content,
+      new InMemoryFeedbackRepository(),
+      new InMemoryIdempotencyStore<unknown>(),
+      new CannedRestDecisionProvider(content),
+      { dynamicDecisionProvider: dynamicProvider }
+    );
+
+    const result = await service.evaluate(
+      {
+        schema_version: "1.0",
+        request_id: "req_dynamic_service",
+        measured_at: "2026-07-25T04:00:00Z",
+        platform: "ios",
+        trigger_source: "device_activity_threshold",
+        user_provided_context_label: "写作",
+        daily_app_usage_minutes: 35,
+        estimated_continuous_app_usage_minutes: 5,
+        continuous_usage_is_estimated: true,
+        app_switches_last_10_minutes: null,
+        local_hour: 14,
+        minutes_since_last_rest: 5,
+        self_reported_energy: null,
+        recent_feedback: [],
+        raw_app_names_included: false
+      },
+      "req_dynamic_service",
+      { contractVersion: "1.1" }
+    );
+
+    expect(result).toMatchObject({
+      schema_version: "1.1",
+      should_offer_rest: false,
+      message: "先照着现在的节奏继续，我在这里陪你。",
+      generated_task: null,
+      default_quest_id: null,
+      actions: []
+    });
+    expect(dynamicProvider.calls).toBe(1);
   });
 
   it("only returns a quest from the fixed content library", async () => {
@@ -189,3 +245,25 @@ describe("RestService", () => {
     expect(repository.all()).toHaveLength(1);
   });
 });
+
+class FixedDynamicProvider
+  implements RestDecisionProvider<DynamicRestDecisionCandidate>
+{
+  readonly dataOrigin = "mock" as const;
+  calls = 0;
+
+  constructor(
+    private readonly candidate: DynamicRestDecisionCandidate
+  ) {}
+
+  async health(): Promise<ProviderHealth> {
+    return "ready";
+  }
+
+  async decide(
+    _context: RestDecisionContext
+  ): Promise<DynamicRestDecisionCandidate> {
+    this.calls += 1;
+    return structuredClone(this.candidate);
+  }
+}
