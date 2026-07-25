@@ -18,6 +18,15 @@
 
 </div>
 
+<div align="center">
+  <table>
+    <tr>
+      <td><img src="Hush/1.png" alt="Hush Screenshot 1" width="400"/></td>
+      <td><img src="Hush/2.png" alt="Hush Screenshot 2" width="400"/></td>
+    </tr>
+  </table>
+</div>
+
 ---
 
 ## 项目概览
