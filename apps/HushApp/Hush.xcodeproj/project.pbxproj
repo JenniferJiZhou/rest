@@ -79,6 +79,7 @@
 		A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000026 /* HushTideTimelineTests.swift */; };
 		A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000028 /* HushDoorTriggerTests.swift */; };
 		A00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift */; };
+		A00000000000000000000030 /* HushSleepExitPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000030 /* HushSleepExitPolicyTests.swift */; };
 		A20000000000000000000011 /* hush-companion-idle.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* hush-companion-idle.png */; };
 		A20000000000000000000012 /* hush-companion-idle.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* hush-companion-idle.png */; };
 		A20000000000000000000013 /* hush-companion-ocean-a.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* hush-companion-ocean-a.png */; };
@@ -186,6 +187,7 @@
 		B00000000000000000000026 /* HushTideTimelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushTideTimelineTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000028 /* HushDoorTriggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushDoorTriggerTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushDemoStoreDynamicRestTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000030 /* HushSleepExitPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushSleepExitPolicyTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000006 /* hush-companion-idle.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-idle.png; sourceTree = "<group>"; };
 		B20000000000000000000007 /* hush-companion-ocean-a.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-ocean-a.png; sourceTree = "<group>"; };
 		B20000000000000000000008 /* hush-companion-ocean-b.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-ocean-b.png; sourceTree = "<group>"; };
@@ -333,6 +335,7 @@
 				B00000000000000000000026 /* HushTideTimelineTests.swift */,
 				B00000000000000000000028 /* HushDoorTriggerTests.swift */,
 				B00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift */,
+				B00000000000000000000030 /* HushSleepExitPolicyTests.swift */,
 			);
 			path = HushTests;
 			sourceTree = "<group>";
@@ -703,6 +706,7 @@
 				A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */,
 				A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */,
 				A00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift in Sources */,
+				A00000000000000000000030 /* HushSleepExitPolicyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

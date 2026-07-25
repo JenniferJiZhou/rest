@@ -29,3 +29,25 @@ Post-merge required verification:
 ## Concerns
 
 No blocking concerns. Per the speed constraint, verification was limited to the required automated tests and platform builds; no optional manual screenshot pass was run.
+
+## Fix Round 1
+
+### Implementation
+
+- Restored the frozen Inbox Sample wording: `演示摘要`, `重置演示草稿`, and `模拟确认发送`; retained the Fixture-only disclosure.
+- Moved the Sleep exit gesture from the whole handoff view to the completed branch and added `HushSleepExitPolicy`, which rejects all questionnaire-state drags.
+- Added a semantic `今晚先到这里` button on the final `晚安` treatment that calls `onFinish`.
+- Added a 0.2-second Reduce Motion completion duration and removed exit translation under Reduce Motion while preserving the ordinary 1.35-second gesture animation.
+- Added focused pure policy tests for questionnaire rejection, completed-state eligibility, and Reduce Motion duration.
+
+### Commands And Results
+
+- RED: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project apps/HushApp/Hush.xcodeproj -scheme Hush -destination 'platform=iOS Simulator,id=81BCDB5F-EA77-4398-ADA3-693501DF83BB' -derivedDataPath /tmp/HushVisualTask1Tests -only-testing:HushTests/HushSleepExitPolicyTests test` -> expected FAIL because `HushSleepExitPolicy` did not exist.
+- GREEN: the same focused command -> PASS, 3 tests and 0 failures.
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project apps/HushApp/Hush.xcodeproj -scheme Hush -destination 'platform=iOS Simulator,id=81BCDB5F-EA77-4398-ADA3-693501DF83BB' -derivedDataPath /tmp/HushVisualTask1Tests test` -> PASS, 7 tests and 0 failures.
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -quiet -project apps/HushApp/Hush.xcodeproj -scheme Hush -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/HushVisualBaselineIOS CODE_SIGNING_ALLOWED=NO build` -> PASS.
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -quiet -project apps/HushApp/Hush.xcodeproj -scheme HushMac -destination 'platform=macOS,arch=arm64' -derivedDataPath /tmp/HushVisualBaselineMac CODE_SIGNING_ALLOWED=NO build` -> PASS.
+
+### Concerns
+
+No blocking concerns. No optional probes or manual visual checks were run.

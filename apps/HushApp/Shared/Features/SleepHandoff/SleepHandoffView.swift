@@ -12,6 +12,24 @@ extension Notification.Name {
     )
 }
 
+enum HushSleepExitPolicy {
+    static func isEligible(
+        isComplete: Bool,
+        startLocation: CGPoint,
+        translation: CGSize,
+        containerSize: CGSize
+    ) -> Bool {
+        isComplete
+            && startLocation.y > containerSize.height * 0.6
+            && translation.height < 0
+            && abs(translation.height) > abs(translation.width) * 1.3
+    }
+
+    static func completionDuration(reduceMotion: Bool) -> TimeInterval {
+        reduceMotion ? 0.2 : 1.35
+    }
+}
+
 @MainActor
 final class HushSleepScheduleController: ObservableObject {
     static let shared = HushSleepScheduleController()
@@ -218,6 +236,7 @@ struct SleepHandoffView: View {
                 if isComplete {
                     completion(size: size)
                         .transition(.opacity)
+                        .simultaneousGesture(exitGesture(in: size))
                 } else {
                     question
                         .id(step)
@@ -234,10 +253,13 @@ struct SleepHandoffView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // The whole page rides the exit swipe upward and fades, so the
             // gesture reads as lifting the night away rather than a page pop.
-            .offset(y: -exitProgress * size.height * 0.42)
+            .offset(
+                y: reduceMotion
+                    ? 0
+                    : -exitProgress * size.height * 0.42
+            )
             .opacity(1 - Double(min(exitProgress * 1.25, 1)))
             .contentShape(Rectangle())
-            .simultaneousGesture(exitGesture(in: size))
             .animation(.easeInOut(duration: 0.36), value: step)
             .animation(.easeInOut(duration: 0.5), value: isComplete)
         }
@@ -428,20 +450,37 @@ struct SleepHandoffView: View {
 
             // 3) Sign-off — bottom-right corner, sitting on the tide, bold, and
             //    staying alongside the resting task. Not a button.
-            goodnight
+            Button(action: onFinish) {
+                goodnight
+            }
+                .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(.trailing, 26)
                 .padding(.bottom, size.height * 0.055)
                 .opacity(isGoodnightVisible ? 1 : 0)
                 .offset(y: reduceMotion ? 0 : (isGoodnightVisible ? 0 : 14))
+                .accessibilityLabel("今晚先到这里")
+                .accessibilityHidden(!isGoodnightVisible)
         }
         .task {
             await runCompletionSequence()
         }
-        .animation(.easeOut(duration: 0.85), value: isClosingLineVisible)
-        .animation(.easeOut(duration: 0.85), value: isBedtimeTaskVisible)
-        .animation(.easeInOut(duration: 1.35), value: isRecapLeaving)
-        .animation(.easeOut(duration: 1.1), value: isGoodnightVisible)
+        .animation(
+            .easeOut(duration: reduceMotion ? 0.2 : 0.85),
+            value: isClosingLineVisible
+        )
+        .animation(
+            .easeOut(duration: reduceMotion ? 0.2 : 0.85),
+            value: isBedtimeTaskVisible
+        )
+        .animation(
+            .easeInOut(duration: reduceMotion ? 0.2 : 1.35),
+            value: isRecapLeaving
+        )
+        .animation(
+            .easeOut(duration: reduceMotion ? 0.2 : 1.1),
+            value: isGoodnightVisible
+        )
     }
 
     private var cinematicRecap: some View {
@@ -578,13 +617,25 @@ struct SleepHandoffView: View {
     private func exitGesture(in size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 16)
             .onChanged { value in
-                guard isExitEligible(value, in: size) else { return }
+                guard HushSleepExitPolicy.isEligible(
+                    isComplete: isComplete,
+                    startLocation: value.startLocation,
+                    translation: value.translation,
+                    containerSize: size
+                ) else {
+                    return
+                }
                 dismissKeyboard()
                 let rise = -value.translation.height
                 exitProgress = min(1, max(0, rise / (size.height * 0.55)))
             }
             .onEnded { value in
-                guard isExitEligible(value, in: size) else {
+                guard HushSleepExitPolicy.isEligible(
+                    isComplete: isComplete,
+                    startLocation: value.startLocation,
+                    translation: value.translation,
+                    containerSize: size
+                ) else {
                     if exitProgress > 0 {
                         withAnimation(.easeOut(duration: 0.7)) { exitProgress = 0 }
                     }
@@ -592,15 +643,26 @@ struct SleepHandoffView: View {
                 }
                 let threshold = size.height * 0.25
                 if -value.translation.height >= threshold {
-                    // Above threshold: complete slowly and calmly, then hand back
-                    // to the existing finish/route-clearing behaviour.
-                    withAnimation(
-                        .timingCurve(0.26, 0.03, 0.2, 1, duration: 1.35)
-                    ) {
+                    let duration = HushSleepExitPolicy.completionDuration(
+                        reduceMotion: reduceMotion
+                    )
+                    let animation = reduceMotion
+                        ? Animation.easeOut(duration: duration)
+                        : Animation.timingCurve(
+                            0.26,
+                            0.03,
+                            0.2,
+                            1,
+                            duration: duration
+                        )
+                    withAnimation(animation) {
                         exitProgress = 1
                     }
                     Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 1_320_000_000)
+                        let delay = reduceMotion ? duration : 1.32
+                        try? await Task.sleep(
+                            nanoseconds: UInt64(delay * 1_000_000_000)
+                        )
                         onFinish()
                     }
                 } else {
@@ -608,15 +670,6 @@ struct SleepHandoffView: View {
                     withAnimation(.easeOut(duration: 0.7)) { exitProgress = 0 }
                 }
             }
-    }
-
-    private func isExitEligible(
-        _ value: DragGesture.Value,
-        in size: CGSize
-    ) -> Bool {
-        value.startLocation.y > size.height * 0.6
-            && value.translation.height < 0
-            && abs(value.translation.height) > abs(value.translation.width) * 1.3
     }
 
     private func dismissKeyboard() {
@@ -643,7 +696,7 @@ struct SleepHandoffView: View {
             // Simple opacity crossfades, no travel, brief waits — the content is
             // shown, not performed, and the user is never held by a long play.
             visibleRecapCount = recapEntries.count
-            guard await wait(milliseconds: 1_000) else { return }
+            guard await wait(milliseconds: 200) else { return }
             isRecapLeaving = true
             isClosingLineVisible = true
             isBedtimeTaskVisible = true
