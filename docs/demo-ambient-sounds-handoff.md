@@ -4,11 +4,12 @@ Owner: M2 / P4 -> M1 / P1
 
 ## P4 delivery
 
-The Hush Door now exposes a small speaker menu with four local ambient loops:
+The Hush Door now exposes a small speaker menu with five local ambient loops:
 
 - white noise;
 - pink noise;
 - brown noise;
+- ocean waves;
 - light rain.
 
 Playback is off by default and begins only after a user action. The selected
@@ -31,6 +32,7 @@ Hush Xcode project:
 content/ambient-sounds/white-noise.mp3
 content/ambient-sounds/pink-noise.mp3
 content/ambient-sounds/brown-noise.mp3
+content/ambient-sounds/ocean-waves.mp3
 content/ambient-sounds/rain.mp3
 ```
 
@@ -48,13 +50,14 @@ HushDeviceActivityMonitor
 HushRestLiveActivity
 ```
 
-Confirm all four files appear in **Build Phases -> Copy Bundle Resources** for
+Confirm all five files appear in **Build Phases -> Copy Bundle Resources** for
 both App targets. Keep the final bundled resource names unchanged:
 
 ```text
 white-noise.mp3
 pink-noise.mp3
 brown-noise.mp3
+ocean-waves.mp3
 rain.mp3
 ```
 

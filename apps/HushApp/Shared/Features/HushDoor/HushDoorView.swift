@@ -5,6 +5,7 @@ enum HushAmbientSound: String, CaseIterable, Identifiable {
     case whiteNoise
     case pinkNoise
     case brownNoise
+    case oceanWaves
     case rain
 
     var id: String { rawValue }
@@ -17,6 +18,8 @@ enum HushAmbientSound: String, CaseIterable, Identifiable {
             "粉红噪音"
         case .brownNoise:
             "棕色噪音"
+        case .oceanWaves:
+            "海浪"
         case .rain:
             "轻雨"
         }
@@ -30,6 +33,8 @@ enum HushAmbientSound: String, CaseIterable, Identifiable {
             "pink-noise"
         case .brownNoise:
             "brown-noise"
+        case .oceanWaves:
+            "ocean-waves"
         case .rain:
             "rain"
         }
@@ -95,7 +100,7 @@ final class HushAmbientAudioModel: ObservableObject {
     init() {
         selectedSound = HushAmbientSound(
             rawValue: defaults.string(forKey: Self.soundKey) ?? ""
-        ) ?? .brownNoise
+        ) ?? .oceanWaves
         volume = HushAmbientVolume(
             rawValue: defaults.string(forKey: Self.volumeKey) ?? ""
         ) ?? .balanced
