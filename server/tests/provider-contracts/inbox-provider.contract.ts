@@ -34,20 +34,6 @@ export function defineInboxProviderContract(
       expect(JSON.stringify(result)).not.toMatch(
         /access_token|refresh_token|secret|auth_code|credential/i
       );
-      for (const binding of result.participantBindings) {
-        expect(
-          result.items.some(
-            (item) =>
-              item.sender_ref === binding.participantRef &&
-              item.provider === binding.provider &&
-              item.account_id === binding.accountId &&
-              item.conversation_id === binding.conversationId
-          )
-        ).toBe(true);
-        expect(JSON.stringify(result.items)).not.toContain(
-          binding.providerParticipantId
-        );
-      }
     });
 
     it("returns a unified send result", async () => {

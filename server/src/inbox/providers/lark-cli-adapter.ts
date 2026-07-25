@@ -197,6 +197,7 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
       conversationType
     );
     const sender = senderIdentity(message.sender, message.sender_id);
+    const content = contentValue(message.content);
     const receivedAt = timestampValue(message.create_time);
     if (
       !messageId ||
@@ -204,6 +205,7 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
       !conversationType ||
       !conversationName ||
       !sender ||
+      !content ||
       !receivedAt
     ) {
       throw providerOutputError();
@@ -225,7 +227,7 @@ export class LarkCliAdapter implements InboxSource, InboxSender {
         sender_ref: participantRef,
         recipients: [accountId],
         subject: null,
-        content: contentValue(message.content),
+        content,
         received_at: receivedAt,
         coverage: {
           source: "official_api",
@@ -374,17 +376,82 @@ function conversationTypeValue(value: unknown): "direct" | "group" | null {
   }
 }
 
-function contentValue(content: unknown): string {
+function contentValue(content: unknown): string | null {
   if (typeof content === "string") {
-    return content;
+    const trimmed = content.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        return structuredContentValue(JSON.parse(trimmed));
+      } catch {
+        return null;
+      }
+    }
+    return sanitizeFeishuMarkup(content);
   }
-  if (typeof content === "object" && content !== null) {
-    const text = stringValue(
-      (content as Record<string, unknown>).text
-    );
-    return text ?? JSON.stringify(content);
+  return structuredContentValue(content);
+}
+
+function structuredContentValue(content: unknown): string | null {
+  if (
+    typeof content !== "object" ||
+    content === null ||
+    Array.isArray(content)
+  ) {
+    return null;
   }
-  return "";
+  const record = content as Record<string, unknown>;
+  if (!Object.keys(record).every((key) => key === "text" || key === "mentions")) {
+    return null;
+  }
+  const text = stringValue(record.text);
+  if (!text || !validMentions(record.mentions)) {
+    return null;
+  }
+  return sanitizeFeishuMarkup(text);
+}
+
+function validMentions(value: unknown): boolean {
+  if (value === undefined) {
+    return true;
+  }
+  return (
+    Array.isArray(value) &&
+    value.every((mention) => {
+      if (
+        typeof mention !== "object" ||
+        mention === null ||
+        Array.isArray(mention)
+      ) {
+        return false;
+      }
+      const record = mention as Record<string, unknown>;
+      if (
+        !Object.keys(record).every((key) =>
+          ["id", "open_id", "user_id", "name", "display_name"].includes(key)
+        )
+      ) {
+        return false;
+      }
+      const identifier =
+        stringValue(record.user_id) ??
+        stringValue(record.open_id) ??
+        stringValue(record.id);
+      const displayName =
+        stringValue(record.name) ?? stringValue(record.display_name);
+      return Boolean(identifier && displayName);
+    })
+  );
+}
+
+function sanitizeFeishuMarkup(value: string): string | null {
+  const sanitized = value.replace(
+    /<at\b[^>]*>([^<]*)<\/at>/gi,
+    "$1"
+  );
+  if (/<\/?at\b/i.test(sanitized)) {
+    return null;
+  }
+  return stringValue(sanitized);
 }
 
 function timestampValue(value: unknown): string | null {

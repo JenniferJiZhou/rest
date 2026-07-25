@@ -379,6 +379,113 @@ describe("Inbox CLI adapters", () => {
     ).toMatchObject({ sender: null, content: null });
   });
 
+  it("renders Feishu mention content without public provider IDs", async () => {
+    const runner = new RecordingRunner([
+      JSON.stringify({
+        items: [
+          {
+            message_id: "lark-mention-markup",
+            chat_id: "lark-group-mentions",
+            chat_type: "group",
+            chat_name: "产品讨论组",
+            sender: {
+              id: "ou_private_sender",
+              name: "王同学"
+            },
+            content:
+              '<at user_id="ou_private_markup">李同学</at> 请确认接口交付时间',
+            create_time: "1784854800000"
+          },
+          {
+            message_id: "lark-mention-structured",
+            chat_id: "lark-group-mentions",
+            chat_type: "group",
+            chat_name: "产品讨论组",
+            sender: {
+              id: "ou_private_sender",
+              name: "王同学"
+            },
+            content: JSON.stringify({
+              text: '<at user_id="ou_private_structured">陈同学</at> 已确认',
+              mentions: [
+                {
+                  user_id: "ou_private_structured",
+                  name: "陈同学"
+                }
+              ]
+            }),
+            create_time: "1784854800000"
+          }
+        ],
+        has_more: false
+      })
+    ]);
+    const adapter = new LarkCliAdapter(
+      { executable: "/opt/lark-cli", accountId: "lark-account" },
+      runner
+    );
+
+    const pulled = await adapter.pull({
+      accountId: "lark-account",
+      checkpoint: null,
+      limit: 20
+    });
+
+    expect(pulled.items.map((item) => item.content)).toEqual([
+      "李同学 请确认接口交付时间",
+      "陈同学 已确认"
+    ]);
+    expect(JSON.stringify(pulled.items)).not.toContain("ou_private_markup");
+    expect(JSON.stringify(pulled.items)).not.toContain(
+      "ou_private_structured"
+    );
+  });
+
+  it("rejects unsafe Feishu structured content without leaking mention IDs", async () => {
+    const adapter = new LarkCliAdapter(
+      { executable: "/opt/lark-cli", accountId: "lark-account" },
+      new RecordingRunner([
+        JSON.stringify({
+          items: [
+            {
+              message_id: "lark-mention-incomplete",
+              chat_id: "lark-group-mentions",
+              chat_type: "group",
+              chat_name: "产品讨论组",
+              sender: {
+                id: "ou_private_sender",
+                name: "王同学"
+              },
+              content: {
+                text: "请确认接口交付时间",
+                mentions: [{ user_id: "ou_private_incomplete" }]
+              },
+              create_time: "1784854800000"
+            }
+          ],
+          has_more: false
+        })
+      ])
+    );
+
+    let error: unknown;
+    try {
+      await adapter.pull({
+        accountId: "lark-account",
+        checkpoint: null,
+        limit: 20
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toMatchObject({
+      code: "INBOX_PROVIDER_UNAVAILABLE",
+      details: { provider: "feishu", reason: "invalid_output" }
+    });
+    expect(JSON.stringify(error)).not.toContain("ou_private_incomplete");
+  });
+
   it("rejects incomplete Feishu envelopes without leaking private IDs", async () => {
     const lark = new LarkCliAdapter(
       { executable: "/opt/lark-cli", accountId: "lark-account" },

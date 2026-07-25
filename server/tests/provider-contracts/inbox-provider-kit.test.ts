@@ -23,8 +23,8 @@ for (const provider of [
   );
 }
 
-describe("Fixture participant privacy", () => {
-  it("keeps provider participant IDs in private bindings only", async () => {
+describe("Fixture Feishu participant privacy", () => {
+  it("keeps Feishu participant IDs in a private binding behind a hashed reference", async () => {
     const source = new FixtureInboxSource("feishu");
     const result = await source.pull({
       accountId: "feishu-account",
@@ -32,7 +32,13 @@ describe("Fixture participant privacy", () => {
       limit: 20
     });
 
-    expect(result.participantBindings).toHaveLength(1);
+    expect(result.participantBindings).toEqual([
+      expect.objectContaining({
+        participantRef: expect.stringMatching(
+          /^participant_[a-zA-Z0-9_-]{32}$/
+        )
+      })
+    ]);
     expect(result.items[0]?.sender_ref).toBe(
       result.participantBindings[0]?.participantRef
     );

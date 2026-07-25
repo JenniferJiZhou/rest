@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { AppError } from "../../domain/errors.js";
 import type {
   InboxEvent,
@@ -29,34 +30,17 @@ export class FixtureInboxSource implements InboxSource {
     checkpoint: string;
     participantBindings: InboxParticipantBinding[];
   }> {
-    const participantRef = `participant_fixture_${this.provider}`;
-    const providerParticipantId =
-      `fixture-${this.provider}-participant-private`;
+    const binding =
+      this.provider === "feishu" && input.limit >= 1
+        ? feishuFixtureBinding(input.accountId)
+        : null;
     return {
       checkpoint: input.checkpoint ?? `${this.provider}-fixture-1`,
-      participantBindings:
-        input.limit < 1
-          ? []
-          : [
-              {
-                provider: this.provider,
-                accountId: input.accountId,
-                conversationId: `${this.provider}-fixture-conversation`,
-                participantRef,
-                providerParticipantId,
-                displayName: `${this.provider} 演示发送者`
-              }
-            ],
+      participantBindings: binding ? [binding] : [],
       items:
         input.limit < 1
           ? []
-          : [
-              fixtureEvent(
-                this.provider,
-                input.accountId,
-                participantRef
-              )
-            ]
+          : [fixtureEvent(this.provider, input.accountId, binding)]
     };
   }
 }
@@ -114,7 +98,7 @@ export class UnavailableInboxSender implements InboxSender {
 function fixtureEvent(
   provider: InboxProvider,
   accountId: string,
-  participantRef: string
+  binding: InboxParticipantBinding | null
 ): InboxEvent {
   return {
     provider,
@@ -123,8 +107,8 @@ function fixtureEvent(
     conversation_type: "direct",
     conversation_name: `${provider} 演示会话`,
     provider_message_id: `${provider}-fixture-message`,
-    sender: `${provider} 演示发送者`,
-    sender_ref: participantRef,
+    sender: binding?.displayName ?? `${provider}-sender@example.com`,
+    sender_ref: binding?.participantRef ?? null,
     recipients: [accountId],
     subject: `${provider} 演示消息`,
     content: "请确认演示安排并回复。",
@@ -134,6 +118,27 @@ function fixtureEvent(
       complete: true,
       note: null
     }
+  };
+}
+
+function feishuFixtureBinding(accountId: string): InboxParticipantBinding {
+  const conversationId = "feishu-fixture-conversation";
+  const providerParticipantId = "fixture-feishu-participant-private";
+  const digest = createHash("sha256")
+    .update(
+      ["feishu", accountId, conversationId, providerParticipantId].join(
+        "\u0000"
+      )
+    )
+    .digest("base64url")
+    .slice(0, 32);
+  return {
+    provider: "feishu",
+    accountId,
+    conversationId,
+    participantRef: `participant_${digest}`,
+    providerParticipantId,
+    displayName: "feishu 演示发送者"
   };
 }
 
