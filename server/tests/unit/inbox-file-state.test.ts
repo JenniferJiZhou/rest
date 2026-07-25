@@ -200,6 +200,57 @@ describe("FileInboxStateBackend", () => {
     expect((await firstRepository.list({ limit: 20 })).items).toHaveLength(2);
   });
 
+  it("reconciles a renamed state and poisons later mutations when directory sync fails", async () => {
+    const stateFile = await temporaryStateFile();
+    const initialBackend = await FileInboxStateBackend.open(stateFile);
+    await new InMemoryInboxRepository(initialBackend).upsert(
+      directEvent("message-before-fault")
+    );
+    const syncParentDirectory = vi.fn(async () => {
+      throw new Error("private fault details");
+    });
+    const faultedBackend = new FileInboxStateBackend(stateFile, {
+      syncParentDirectory
+    });
+    const repository = new InMemoryInboxRepository(faultedBackend);
+
+    await expect(
+      repository.upsert(directEvent("message-renamed-before-fault"))
+    ).rejects.toThrow(
+      "Unable to persist Inbox state safely. Restart Hush before retrying."
+    );
+    expect(
+      (await repository.list({ limit: 20 })).items.map(
+        (item) => item.provider_message_id
+      )
+    ).toEqual([
+      "message-before-fault",
+      "message-renamed-before-fault"
+    ]);
+
+    await expect(
+      repository.upsert(directEvent("message-after-fault"))
+    ).rejects.toThrow(
+      "Unable to persist Inbox state safely. Restart Hush before retrying."
+    );
+    expect(syncParentDirectory).toHaveBeenCalledTimes(1);
+    await expect(
+      repository.upsert(directEvent("message-another-attempt"))
+    ).rejects.not.toThrow(/private fault details/u);
+
+    const reopened = new InMemoryInboxRepository(
+      await FileInboxStateBackend.open(stateFile)
+    );
+    expect(
+      (await reopened.list({ limit: 20 })).items.map(
+        (item) => item.provider_message_id
+      )
+    ).toEqual([
+      "message-before-fault",
+      "message-renamed-before-fault"
+    ]);
+  });
+
   it("keeps in-flight sends in memory and persists only a completed result", async () => {
     const stateFile = await temporaryStateFile();
     const backend = await FileInboxStateBackend.open(stateFile);
@@ -287,6 +338,12 @@ describe("FileInboxStateBackend", () => {
     const stateFile = join(directory, "unified-inbox-state.json");
     const malformedContents = '{"state_version":1,"secret":"do-not-expose"';
     await writeFile(stateFile, malformedContents, { mode: 0o600 });
+    if (process.platform !== "win32") {
+      await chmod(directory, 0o755);
+      await chmod(stateFile, 0o644);
+    }
+    const originalDirectoryMode = (await stat(directory)).mode & 0o777;
+    const originalFileMode = (await stat(stateFile)).mode & 0o777;
 
     await expect(FileInboxStateBackend.open(stateFile)).rejects.toThrow(
       "Invalid Inbox state configuration. Preserve the state file for manual recovery."
@@ -297,13 +354,33 @@ describe("FileInboxStateBackend", () => {
     await expect(FileInboxStateBackend.open(stateFile)).rejects.not.toThrow(
       /do-not-expose/u
     );
+    expect((await stat(directory)).mode & 0o777).toBe(
+      originalDirectoryMode
+    );
+    expect((await stat(stateFile)).mode & 0o777).toBe(originalFileMode);
   });
 
   it.skipIf(process.platform === "win32")(
-    "uses restrictive directory and replacement file permissions",
+    "restricts only a dedicated parent it creates",
     async () => {
       const stateFile = await temporaryStateFile();
-      await mkdir(dirname(stateFile), { recursive: true });
+      const backend = await FileInboxStateBackend.open(stateFile);
+
+      await new InMemoryInboxRepository(backend).upsert(
+        directEvent("permission-message")
+      );
+
+      expect((await stat(stateFile)).mode & 0o777).toBe(0o600);
+      expect((await stat(dirname(stateFile))).mode & 0o777).toBe(0o700);
+    }
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "does not tighten an existing parent when normalizing a valid file",
+    async () => {
+      const directory = await mkdtemp(join(tmpdir(), "hush-inbox-existing-"));
+      temporaryDirectories.push(directory);
+      const stateFile = join(directory, "unified-inbox-state.json");
       await writeFile(
         stateFile,
         JSON.stringify({
@@ -318,18 +395,13 @@ describe("FileInboxStateBackend", () => {
           completed_send_claims: {}
         })
       );
-      await chmod(stateFile, 0o666);
-      const backend = await FileInboxStateBackend.open(stateFile);
+      await chmod(directory, 0o755);
+      await chmod(stateFile, 0o644);
 
+      await FileInboxStateBackend.open(stateFile);
+
+      expect((await stat(directory)).mode & 0o777).toBe(0o755);
       expect((await stat(stateFile)).mode & 0o777).toBe(0o600);
-      expect((await stat(dirname(stateFile))).mode & 0o777).toBe(0o700);
-
-      await new InMemoryInboxRepository(backend).upsert(
-        directEvent("permission-message")
-      );
-
-      expect((await stat(stateFile)).mode & 0o777).toBe(0o600);
-      expect((await stat(dirname(stateFile))).mode & 0o777).toBe(0o700);
     }
   );
 });
