@@ -3,11 +3,17 @@ import type {
   InboxDraft,
   InboxEvent,
   InboxProvider,
+  InboxSendResult,
   InboxSummaryResult,
   InboxSyncStatus,
   UnifiedInboxItem
 } from "../domain/contracts.js";
 import { AppError } from "../domain/errors.js";
+import type {
+  IdempotencyClaimInput,
+  IdempotencyClaimResult,
+  IdempotencyStore
+} from "../domain/ports.js";
 import type {
   CheckpointStore,
   CreateInboxDraft,
@@ -20,15 +26,17 @@ import type {
   TransitionInboxDraft,
   UpdateInboxDraft
 } from "./ports.js";
+import {
+  InMemoryInboxStateBackend,
+  type InboxPersistedState,
+  type InboxStateBackend
+} from "./state-backend.js";
 
 export class InMemoryInboxRepository implements InboxRepository {
-  private readonly items = new Map<string, UnifiedInboxItem>();
-  private readonly idsByDedupeKey = new Map<string, string>();
-  private readonly openDigestIds = new Map<string, string>();
-  private readonly sourceMessagesByItemId = new Map<
-    string,
-    InboxSourceMessage[]
-  >();
+  constructor(
+    private readonly backend: InboxStateBackend =
+      new InMemoryInboxStateBackend()
+  ) {}
 
   async upsert(
     event: InboxEvent,
@@ -38,135 +46,153 @@ export class InMemoryInboxRepository implements InboxRepository {
     created: boolean;
     changed: boolean;
   }> {
-    const dedupeKey = this.dedupeKey(event);
-    const existingId = this.idsByDedupeKey.get(dedupeKey);
-    if (existingId) {
-      return {
-        item: structuredClone(this.items.get(existingId)!),
-        created: false,
-        changed: false
-      };
-    }
-
-    const normalizedEvent = structuredClone(event);
-    const isGroupConversation = normalizedEvent.conversation_type === "group";
-    let sealNewDigest =
-      isGroupConversation && normalizedEvent.conversation_id === null;
-    if (isGroupConversation && normalizedEvent.conversation_id !== null) {
-      const digestKey = this.digestKey(normalizedEvent);
-      const openId = this.openDigestIds.get(digestKey);
-      if (openId) {
-        const current = this.items.get(openId)!;
-        const eventTime = Date.parse(normalizedEvent.received_at);
-        const currentStartTime = Date.parse(current.window_started_at);
-        const currentEndTime = Date.parse(current.window_ended_at);
-        const candidateStartTime = Math.min(currentStartTime, eventTime);
-        const candidateEndTime = Math.max(currentEndTime, eventTime);
-        const reachesTimeLimit =
-          candidateEndTime - candidateStartTime >=
-          24 * 60 * 60 * 1_000;
-        if (reachesTimeLimit && eventTime < currentStartTime) {
-          sealNewDigest = true;
-        } else if (reachesTimeLimit) {
-          this.sealOpenDigest(digestKey, current, now);
-        } else {
-          const messageCount = current.message_count + 1;
-          const reachesMessageLimit = messageCount >= 1_000;
-          const eventIsLatest =
-            eventTime > currentEndTime ||
-            (eventTime === currentEndTime &&
-              normalizedEvent.provider_message_id >
-                current.provider_message_id);
-          const updated: UnifiedInboxItem = {
-            ...current,
-            provider_message_id: eventIsLatest
-              ? normalizedEvent.provider_message_id
-              : current.provider_message_id,
-            received_at: eventIsLatest
-              ? normalizedEvent.received_at
-              : current.received_at,
-            revision: current.revision + 1,
-            message_count: messageCount,
-            window_started_at:
-              eventTime < currentStartTime
-                ? normalizedEvent.received_at
-                : current.window_started_at,
-            window_ended_at:
-              eventTime > currentEndTime
-                ? normalizedEvent.received_at
-                : current.window_ended_at,
-            sealed_at: reachesMessageLimit ? now : null,
-            summary: null,
-            important_points: [],
-            todos: [],
-            priority: "uncertain",
-            needs_reply: null,
-            reply_targets: [],
-            draft_id: null,
-            sync_status: "pending"
-          };
-          this.items.set(openId, updated);
-          this.idsByDedupeKey.set(dedupeKey, openId);
-          this.sourceMessagesByItemId
-            .get(openId)!
-            .push(this.sourceMessage(normalizedEvent));
-          this.sortSourceMessages(openId);
-          if (reachesMessageLimit) {
-            this.openDigestIds.delete(digestKey);
-          }
-          return {
-            item: structuredClone(updated),
+    return this.backend.mutate<{
+      item: UnifiedInboxItem;
+      created: boolean;
+      changed: boolean;
+    }>((state) => {
+      const dedupeKey = this.dedupeKey(event);
+      const existingId = state.dedupe_item_ids[dedupeKey];
+      if (existingId) {
+        return {
+          state,
+          value: {
+            item: state.items[existingId]!,
             created: false,
-            changed: true
-          };
+            changed: false
+          }
+        };
+      }
+
+      const normalizedEvent = structuredClone(event);
+      const isGroupConversation =
+        normalizedEvent.conversation_type === "group";
+      let sealNewDigest =
+        isGroupConversation && normalizedEvent.conversation_id === null;
+      if (
+        isGroupConversation &&
+        normalizedEvent.conversation_id !== null
+      ) {
+        const digestKey = this.digestKey(normalizedEvent);
+        const openId = state.open_digest_ids[digestKey];
+        if (openId) {
+          const current = state.items[openId]!;
+          const eventTime = Date.parse(normalizedEvent.received_at);
+          const currentStartTime = Date.parse(current.window_started_at);
+          const currentEndTime = Date.parse(current.window_ended_at);
+          const candidateStartTime = Math.min(currentStartTime, eventTime);
+          const candidateEndTime = Math.max(currentEndTime, eventTime);
+          const reachesTimeLimit =
+            candidateEndTime - candidateStartTime >=
+            24 * 60 * 60 * 1_000;
+          if (reachesTimeLimit && eventTime < currentStartTime) {
+            sealNewDigest = true;
+          } else if (reachesTimeLimit) {
+            this.sealOpenDigest(state, digestKey, current, now);
+          } else {
+            const messageCount = current.message_count + 1;
+            const reachesMessageLimit = messageCount >= 1_000;
+            const eventIsLatest =
+              eventTime > currentEndTime ||
+              (eventTime === currentEndTime &&
+                normalizedEvent.provider_message_id >
+                  current.provider_message_id);
+            const updated: UnifiedInboxItem = {
+              ...current,
+              provider_message_id: eventIsLatest
+                ? normalizedEvent.provider_message_id
+                : current.provider_message_id,
+              received_at: eventIsLatest
+                ? normalizedEvent.received_at
+                : current.received_at,
+              revision: current.revision + 1,
+              message_count: messageCount,
+              window_started_at:
+                eventTime < currentStartTime
+                  ? normalizedEvent.received_at
+                  : current.window_started_at,
+              window_ended_at:
+                eventTime > currentEndTime
+                  ? normalizedEvent.received_at
+                  : current.window_ended_at,
+              sealed_at: reachesMessageLimit ? now : null,
+              summary: null,
+              important_points: [],
+              todos: [],
+              priority: "uncertain",
+              needs_reply: null,
+              reply_targets: [],
+              draft_id: null,
+              sync_status: "pending"
+            };
+            state.items[openId] = updated;
+            state.dedupe_item_ids[dedupeKey] = openId;
+            state.source_messages[openId]!.push(
+              this.sourceMessage(normalizedEvent)
+            );
+            this.sortSourceMessages(state, openId);
+            if (reachesMessageLimit) {
+              delete state.open_digest_ids[digestKey];
+            }
+            return {
+              state,
+              value: {
+                item: updated,
+                created: false,
+                changed: true
+              }
+            };
+          }
         }
       }
-    }
 
-    const item: UnifiedInboxItem = {
-      id: `inbox_${randomUUID()}`,
-      ...normalizedEvent,
-      sender: isGroupConversation ? null : normalizedEvent.sender,
-      sender_ref: isGroupConversation ? null : normalizedEvent.sender_ref,
-      content: isGroupConversation ? null : normalizedEvent.content,
-      item_kind: isGroupConversation ? "conversation_digest" : "message",
-      revision: 1,
-      message_count: 1,
-      window_started_at: event.received_at,
-      window_ended_at: event.received_at,
-      sealed_at: sealNewDigest ? now : null,
-      acknowledged_at: null,
-      summary: null,
-      important_points: [],
-      todos: [],
-      priority: "uncertain",
-      needs_reply: null,
-      reply_targets: [],
-      draft_id: null,
-      sync_status: "pending"
-    };
-    this.items.set(item.id, item);
-    this.idsByDedupeKey.set(dedupeKey, item.id);
-    this.sourceMessagesByItemId.set(item.id, [
-      this.sourceMessage(normalizedEvent)
-    ]);
-    if (
-      isGroupConversation &&
-      normalizedEvent.conversation_id !== null &&
-      !sealNewDigest
-    ) {
-      this.openDigestIds.set(this.digestKey(normalizedEvent), item.id);
-    }
-    return {
-      item: structuredClone(item),
-      created: true,
-      changed: true
-    };
+      const item: UnifiedInboxItem = {
+        id: `inbox_${randomUUID()}`,
+        ...normalizedEvent,
+        sender: isGroupConversation ? null : normalizedEvent.sender,
+        sender_ref: isGroupConversation ? null : normalizedEvent.sender_ref,
+        content: isGroupConversation ? null : normalizedEvent.content,
+        item_kind: isGroupConversation ? "conversation_digest" : "message",
+        revision: 1,
+        message_count: 1,
+        window_started_at: event.received_at,
+        window_ended_at: event.received_at,
+        sealed_at: sealNewDigest ? now : null,
+        acknowledged_at: null,
+        summary: null,
+        important_points: [],
+        todos: [],
+        priority: "uncertain",
+        needs_reply: null,
+        reply_targets: [],
+        draft_id: null,
+        sync_status: "pending"
+      };
+      state.items[item.id] = item;
+      state.dedupe_item_ids[dedupeKey] = item.id;
+      state.source_messages[item.id] = [
+        this.sourceMessage(normalizedEvent)
+      ];
+      if (
+        isGroupConversation &&
+        normalizedEvent.conversation_id !== null &&
+        !sealNewDigest
+      ) {
+        state.open_digest_ids[this.digestKey(normalizedEvent)] = item.id;
+      }
+      return {
+        state,
+        value: {
+          item,
+          created: true,
+          changed: true
+        }
+      };
+    });
   }
 
   async get(id: string): Promise<UnifiedInboxItem | null> {
-    const item = this.items.get(id);
-    return item ? structuredClone(item) : null;
+    return this.backend.read((state) => state.items[id] ?? null);
   }
 
   async list(input: {
@@ -175,16 +201,18 @@ export class InMemoryInboxRepository implements InboxRepository {
   }): Promise<{ items: UnifiedInboxItem[]; nextCursor: string | null }> {
     const offset = input.cursor ? Number.parseInt(input.cursor, 10) : 0;
     const start = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
-    const sorted = [...this.items.values()].sort((left, right) =>
-      right.received_at.localeCompare(left.received_at)
-    );
-    const items = sorted.slice(start, start + input.limit);
-    const nextOffset = start + items.length;
-    return {
-      items: structuredClone(items),
-      nextCursor:
-        nextOffset < sorted.length ? String(nextOffset) : null
-    };
+    return this.backend.read((state) => {
+      const sorted = Object.values(state.items).sort((left, right) =>
+        right.received_at.localeCompare(left.received_at)
+      );
+      const items = sorted.slice(start, start + input.limit);
+      const nextOffset = start + items.length;
+      return {
+        items,
+        nextCursor:
+          nextOffset < sorted.length ? String(nextOffset) : null
+      };
+    });
   }
 
   async saveEnrichment(
@@ -192,22 +220,26 @@ export class InMemoryInboxRepository implements InboxRepository {
     expectedRevision: number,
     enrichment: InboxSummaryResult
   ): Promise<UnifiedInboxItem> {
-    const item = this.requireItem(id);
-    if (item.revision !== expectedRevision) {
-      throw revisionConflict(item.revision);
-    }
-    const updated: UnifiedInboxItem = {
-      ...item,
-      ...structuredClone(enrichment),
-      sync_status: "ready"
-    };
-    this.items.set(id, updated);
-    return structuredClone(updated);
+    return this.backend.mutate((state) => {
+      const item = this.requireItem(state, id);
+      if (item.revision !== expectedRevision) {
+        throw revisionConflict(item.revision);
+      }
+      const updated: UnifiedInboxItem = {
+        ...item,
+        ...structuredClone(enrichment),
+        sync_status: "ready"
+      };
+      state.items[id] = updated;
+      return { state, value: updated };
+    });
   }
 
   async sourceMessages(id: string): Promise<InboxSourceMessage[]> {
-    this.requireItem(id);
-    return structuredClone(this.sourceMessagesByItemId.get(id) ?? []);
+    return this.backend.read((state) => {
+      this.requireItem(state, id);
+      return state.source_messages[id] ?? [];
+    });
   }
 
   async markEnrichmentFailed(
@@ -215,16 +247,18 @@ export class InMemoryInboxRepository implements InboxRepository {
     expectedRevision: number,
     _reason: string
   ): Promise<UnifiedInboxItem> {
-    const item = this.requireItem(id);
-    if (item.revision !== expectedRevision) {
-      throw revisionConflict(item.revision);
-    }
-    const updated: UnifiedInboxItem = {
-      ...item,
-      sync_status: "failed"
-    };
-    this.items.set(id, updated);
-    return structuredClone(updated);
+    return this.backend.mutate((state) => {
+      const item = this.requireItem(state, id);
+      if (item.revision !== expectedRevision) {
+        throw revisionConflict(item.revision);
+      }
+      const updated: UnifiedInboxItem = {
+        ...item,
+        sync_status: "failed"
+      };
+      state.items[id] = updated;
+      return { state, value: updated };
+    });
   }
 
   async setDraftId(
@@ -232,19 +266,21 @@ export class InMemoryInboxRepository implements InboxRepository {
     expectedRevision: number,
     draftId: string
   ): Promise<UnifiedInboxItem> {
-    const item = this.requireItem(id);
-    if (item.revision !== expectedRevision) {
-      throw revisionConflict(item.revision);
-    }
-    if (item.draft_id !== null) {
-      if (item.draft_id === draftId) {
-        return structuredClone(item);
+    return this.backend.mutate((state) => {
+      const item = this.requireItem(state, id);
+      if (item.revision !== expectedRevision) {
+        throw revisionConflict(item.revision);
       }
-      throw revisionConflict(item.revision);
-    }
-    const updated = { ...item, draft_id: draftId };
-    this.items.set(id, updated);
-    return structuredClone(updated);
+      if (item.draft_id !== null) {
+        if (item.draft_id === draftId) {
+          return { state, value: item };
+        }
+        throw revisionConflict(item.revision);
+      }
+      const updated = { ...item, draft_id: draftId };
+      state.items[id] = updated;
+      return { state, value: updated };
+    });
   }
 
   async acknowledge(
@@ -252,31 +288,36 @@ export class InMemoryInboxRepository implements InboxRepository {
     expectedRevision: number,
     now: string = new Date().toISOString()
   ): Promise<UnifiedInboxItem> {
-    const item = this.requireItem(id);
-    if (
-      item.revision !== expectedRevision ||
-      item.acknowledged_at !== null ||
-      item.sealed_at !== null
-    ) {
-      throw revisionConflict(item.revision);
-    }
-    const updated: UnifiedInboxItem = {
-      ...item,
-      acknowledged_at: now,
-      sealed_at: now
-    };
-    this.items.set(id, updated);
-    if (item.conversation_type === "group") {
-      const digestKey = this.digestKey(item);
-      if (this.openDigestIds.get(digestKey) === id) {
-        this.openDigestIds.delete(digestKey);
+    return this.backend.mutate((state) => {
+      const item = this.requireItem(state, id);
+      if (
+        item.revision !== expectedRevision ||
+        item.acknowledged_at !== null ||
+        item.sealed_at !== null
+      ) {
+        throw revisionConflict(item.revision);
       }
-    }
-    return structuredClone(updated);
+      const updated: UnifiedInboxItem = {
+        ...item,
+        acknowledged_at: now,
+        sealed_at: now
+      };
+      state.items[id] = updated;
+      if (item.conversation_type === "group") {
+        const digestKey = this.digestKey(item);
+        if (state.open_digest_ids[digestKey] === id) {
+          delete state.open_digest_ids[digestKey];
+        }
+      }
+      return { state, value: updated };
+    });
   }
 
-  private requireItem(id: string): UnifiedInboxItem {
-    const item = this.items.get(id);
+  private requireItem(
+    state: Readonly<InboxPersistedState>,
+    id: string
+  ): UnifiedInboxItem {
+    const item = state.items[id];
     if (!item) {
       throw new AppError({
         code: "INBOX_ITEM_NOT_FOUND",
@@ -319,16 +360,20 @@ export class InMemoryInboxRepository implements InboxRepository {
   }
 
   private sealOpenDigest(
+    state: InboxPersistedState,
     digestKey: string,
     item: UnifiedInboxItem,
     now: string
   ): void {
-    this.items.set(item.id, { ...item, sealed_at: now });
-    this.openDigestIds.delete(digestKey);
+    state.items[item.id] = { ...item, sealed_at: now };
+    delete state.open_digest_ids[digestKey];
   }
 
-  private sortSourceMessages(id: string): void {
-    this.sourceMessagesByItemId.get(id)!.sort((left, right) => {
+  private sortSourceMessages(
+    state: InboxPersistedState,
+    id: string
+  ): void {
+    state.source_messages[id]!.sort((left, right) => {
       const receivedOrder =
         Date.parse(left.receivedAt) - Date.parse(right.receivedAt);
       if (receivedOrder !== 0) {
@@ -348,23 +393,25 @@ export class InMemoryInboxRepository implements InboxRepository {
 export class InMemoryInboxParticipantDirectory
   implements InboxParticipantDirectory
 {
-  private readonly bindings = new Map<
-    string,
-    InboxParticipantBinding
-  >();
+  constructor(
+    private readonly backend: InboxStateBackend =
+      new InMemoryInboxStateBackend()
+  ) {}
 
   async bindAll(bindings: InboxParticipantBinding[]): Promise<void> {
-    for (const binding of bindings) {
-      this.bindings.set(
-        this.key(
-          binding.provider,
-          binding.accountId,
-          binding.conversationId,
-          binding.participantRef
-        ),
-        structuredClone(binding)
-      );
-    }
+    await this.backend.mutate((state) => {
+      for (const binding of bindings) {
+        state.participant_bindings[
+          this.key(
+            binding.provider,
+            binding.accountId,
+            binding.conversationId,
+            binding.participantRef
+          )
+        ] = structuredClone(binding);
+      }
+      return { state, value: undefined };
+    });
   }
 
   async resolve(input: {
@@ -373,27 +420,30 @@ export class InMemoryInboxParticipantDirectory
     conversationId: string;
     participantRefs: string[];
   }): Promise<ResolvedInboxParticipant[]> {
-    return input.participantRefs.map((participantRef) => {
-      const binding = this.bindings.get(
-        this.key(
-          input.provider,
-          input.accountId,
-          input.conversationId,
-          participantRef
-        )
-      );
-      if (!binding) {
-        throw new AppError({
-          code: "INBOX_VERSION_CONFLICT",
-          message: "回复目标已发生变化，请刷新后重试。",
-          statusCode: 409
-        });
-      }
-      return {
-        participantRef: binding.participantRef,
-        providerParticipantId: binding.providerParticipantId,
-        displayName: binding.displayName
-      };
+    return this.backend.read((state) => {
+      return input.participantRefs.map((participantRef) => {
+        const binding =
+          state.participant_bindings[
+            this.key(
+              input.provider,
+              input.accountId,
+              input.conversationId,
+              participantRef
+            )
+          ];
+        if (!binding) {
+          throw new AppError({
+            code: "INBOX_VERSION_CONFLICT",
+            message: "回复目标已发生变化，请刷新后重试。",
+            statusCode: 409
+          });
+        }
+        return {
+          participantRef: binding.participantRef,
+          providerParticipantId: binding.providerParticipantId,
+          displayName: binding.displayName
+        };
+      });
     });
   }
 
@@ -415,56 +465,62 @@ export class InMemoryInboxParticipantDirectory
 export class InMemoryInboxDraftRepository
   implements InboxDraftRepository
 {
-  private readonly drafts = new Map<string, InboxDraft>();
+  constructor(
+    private readonly backend: InboxStateBackend =
+      new InMemoryInboxStateBackend()
+  ) {}
 
   async create(input: CreateInboxDraft): Promise<InboxDraft> {
-    const existing = this.drafts.get(input.id);
-    if (existing) {
-      return structuredClone(existing);
-    }
-    const draft: InboxDraft = {
-      id: input.id,
-      inbox_item_id: input.inboxItemId,
-      content: input.content,
-      content_type: input.contentType,
-      version: 1,
-      origin: "ai",
-      status: "ready",
-      provider_draft_id: null,
-      created_at: input.now,
-      updated_at: input.now
-    };
-    this.drafts.set(draft.id, draft);
-    return structuredClone(draft);
+    return this.backend.mutate((state) => {
+      const existing = state.drafts[input.id];
+      if (existing) {
+        return { state, value: existing };
+      }
+      const draft: InboxDraft = {
+        id: input.id,
+        inbox_item_id: input.inboxItemId,
+        content: input.content,
+        content_type: input.contentType,
+        version: 1,
+        origin: "ai",
+        status: "ready",
+        provider_draft_id: null,
+        created_at: input.now,
+        updated_at: input.now
+      };
+      state.drafts[draft.id] = draft;
+      return { state, value: draft };
+    });
   }
 
   async get(id: string): Promise<InboxDraft | null> {
-    const draft = this.drafts.get(id);
-    return draft ? structuredClone(draft) : null;
+    return this.backend.read((state) => state.drafts[id] ?? null);
   }
 
   async update(
     id: string,
     input: UpdateInboxDraft
   ): Promise<InboxDraft> {
-    const draft = this.requireDraft(id);
-    if (!["ready", "edited", "failed"].includes(draft.status)) {
-      throw statusConflict(draft.status);
-    }
-    if (draft.version !== input.expectedVersion) {
-      throw versionConflict(draft.version);
-    }
-    const updated: InboxDraft = {
-      ...draft,
-      content: input.content,
-      content_type: input.contentType,
-      version: draft.version + 1,
-      origin: "user",
-      status: "edited",
-      updated_at: new Date().toISOString()
-    };
-    this.drafts.set(id, updated);
-    return structuredClone(updated);
+    return this.backend.mutate((state) => {
+      const draft = this.requireDraft(state, id);
+      if (!["ready", "edited", "failed"].includes(draft.status)) {
+        throw statusConflict(draft.status);
+      }
+      if (draft.version !== input.expectedVersion) {
+        throw versionConflict(draft.version);
+      }
+      const updated: InboxDraft = {
+        ...draft,
+        content: input.content,
+        content_type: input.contentType,
+        version: draft.version + 1,
+        origin: "user",
+        status: "edited",
+        updated_at: new Date().toISOString()
+      };
+      state.drafts[id] = updated;
+      return { state, value: updated };
+    });
   }
 
   async claimForSend(
@@ -472,50 +528,57 @@ export class InMemoryInboxDraftRepository
     expectedVersion: number,
     now: string
   ): Promise<InboxDraft> {
-    const draft = this.requireDraft(id);
-    if (draft.version !== expectedVersion) {
-      throw versionConflict(draft.version);
-    }
-    if (!["ready", "edited", "failed"].includes(draft.status)) {
-      throw statusConflict(draft.status);
-    }
-    const updated: InboxDraft = {
-      ...draft,
-      status: "sending",
-      updated_at: now
-    };
-    this.drafts.set(id, updated);
-    return structuredClone(updated);
+    return this.backend.mutate((state) => {
+      const draft = this.requireDraft(state, id);
+      if (draft.version !== expectedVersion) {
+        throw versionConflict(draft.version);
+      }
+      if (!["ready", "edited", "failed"].includes(draft.status)) {
+        throw statusConflict(draft.status);
+      }
+      const updated: InboxDraft = {
+        ...draft,
+        status: "sending",
+        updated_at: now
+      };
+      state.drafts[id] = updated;
+      return { state, value: updated };
+    });
   }
 
   async transition(
     id: string,
     input: TransitionInboxDraft
   ): Promise<InboxDraft> {
-    const draft = this.requireDraft(id);
-    if (!input.expectedStatuses.includes(draft.status)) {
-      throw new AppError({
-        code: "INBOX_VERSION_CONFLICT",
-        message: "草稿状态已发生变化，请刷新后重试。",
-        statusCode: 409,
-        details: { current_status: draft.status }
-      });
-    }
-    const updated: InboxDraft = {
-      ...draft,
-      status: input.status,
-      provider_draft_id:
-        input.providerDraftId === undefined
-          ? draft.provider_draft_id
-          : input.providerDraftId,
-      updated_at: input.now
-    };
-    this.drafts.set(id, updated);
-    return structuredClone(updated);
+    return this.backend.mutate((state) => {
+      const draft = this.requireDraft(state, id);
+      if (!input.expectedStatuses.includes(draft.status)) {
+        throw new AppError({
+          code: "INBOX_VERSION_CONFLICT",
+          message: "草稿状态已发生变化，请刷新后重试。",
+          statusCode: 409,
+          details: { current_status: draft.status }
+        });
+      }
+      const updated: InboxDraft = {
+        ...draft,
+        status: input.status,
+        provider_draft_id:
+          input.providerDraftId === undefined
+            ? draft.provider_draft_id
+            : input.providerDraftId,
+        updated_at: input.now
+      };
+      state.drafts[id] = updated;
+      return { state, value: updated };
+    });
   }
 
-  private requireDraft(id: string): InboxDraft {
-    const draft = this.drafts.get(id);
+  private requireDraft(
+    state: Readonly<InboxPersistedState>,
+    id: string
+  ): InboxDraft {
+    const draft = state.drafts[id];
     if (!draft) {
       throw new AppError({
         code: "INBOX_DRAFT_NOT_FOUND",
@@ -530,17 +593,20 @@ export class InMemoryInboxDraftRepository
 interface CheckpointRecord extends InboxSyncStatus {}
 
 export class InMemoryCheckpointStore implements CheckpointStore {
-  private readonly records = new Map<string, CheckpointRecord>();
-
   constructor(
-    private readonly now: () => Date = () => new Date()
+    private readonly now: () => Date = () => new Date(),
+    private readonly backend: InboxStateBackend =
+      new InMemoryInboxStateBackend()
   ) {}
 
   async get(
     provider: InboxProvider,
     accountId: string
   ): Promise<string | null> {
-    return this.ensure(provider, accountId).checkpoint;
+    return this.backend.mutate((state) => {
+      const record = this.ensure(state, provider, accountId);
+      return { state, value: record.checkpoint };
+    });
   }
 
   async put(
@@ -548,18 +614,21 @@ export class InMemoryCheckpointStore implements CheckpointStore {
     accountId: string,
     checkpoint: string
   ): Promise<void> {
-    const record = this.ensure(provider, accountId);
-    this.records.set(this.key(provider, accountId), {
-      ...record,
-      status: "ready",
-      checkpoint,
-      last_synced_at: this.now().toISOString(),
-      last_error: null
+    await this.backend.mutate((state) => {
+      const record = this.ensure(state, provider, accountId);
+      state.checkpoints[this.key(provider, accountId)] = {
+        ...record,
+        status: "ready",
+        checkpoint,
+        last_synced_at: this.now().toISOString(),
+        last_error: null
+      };
+      return { state, value: undefined };
     });
   }
 
   async statuses(): Promise<InboxSyncStatus[]> {
-    return structuredClone([...this.records.values()]);
+    return this.backend.read((state) => Object.values(state.checkpoints));
   }
 
   async recordFailure(
@@ -567,20 +636,24 @@ export class InMemoryCheckpointStore implements CheckpointStore {
     accountId: string,
     reason: string
   ): Promise<void> {
-    const record = this.ensure(provider, accountId);
-    this.records.set(this.key(provider, accountId), {
-      ...record,
-      status: "degraded",
-      last_error: reason
+    await this.backend.mutate((state) => {
+      const record = this.ensure(state, provider, accountId);
+      state.checkpoints[this.key(provider, accountId)] = {
+        ...record,
+        status: "degraded",
+        last_error: reason
+      };
+      return { state, value: undefined };
     });
   }
 
   private ensure(
+    state: InboxPersistedState,
     provider: InboxProvider,
     accountId: string
   ): CheckpointRecord {
     const key = this.key(provider, accountId);
-    const existing = this.records.get(key);
+    const existing = state.checkpoints[key];
     if (existing) {
       return existing;
     }
@@ -597,12 +670,123 @@ export class InMemoryCheckpointStore implements CheckpointStore {
         note: "尚未完成首次同步"
       }
     };
-    this.records.set(key, created);
+    state.checkpoints[key] = created;
     return created;
   }
 
   private key(provider: InboxProvider, accountId: string): string {
     return JSON.stringify([provider, accountId]);
+  }
+}
+
+interface InFlightSendClaim {
+  requestHash: string;
+  value: Promise<IdempotencyClaimResult<InboxSendResult>>;
+}
+
+export class InboxSendIdempotencyStore
+  implements IdempotencyStore<InboxSendResult>
+{
+  private readonly inFlight = new Map<string, InFlightSendClaim>();
+
+  constructor(
+    private readonly backend: InboxStateBackend =
+      new InMemoryInboxStateBackend(),
+    private readonly now: () => number = () => Date.now()
+  ) {}
+
+  async claimOrGet(
+    input: IdempotencyClaimInput<InboxSendResult>
+  ): Promise<IdempotencyClaimResult<InboxSendResult>> {
+    const existingInFlight = this.inFlight.get(input.key);
+    if (existingInFlight) {
+      if (existingInFlight.requestHash !== input.requestHash) {
+        return { kind: "conflict_different_request" };
+      }
+      const result = await existingInFlight.value;
+      return result.kind === "created"
+        ? { kind: "existing_same_request", value: result.value }
+        : result;
+    }
+
+    const value = this.claimOrCreate(input);
+    const claim = {
+      requestHash: input.requestHash,
+      value
+    };
+    this.inFlight.set(input.key, claim);
+    try {
+      return await value;
+    } finally {
+      if (this.inFlight.get(input.key) === claim) {
+        this.inFlight.delete(input.key);
+      }
+    }
+  }
+
+  async deleteExpired(before: string): Promise<number> {
+    const threshold = Date.parse(before);
+    return this.backend.mutate((state) => {
+      let deleted = 0;
+      for (const [key, claim] of Object.entries(
+        state.completed_send_claims
+      )) {
+        if (Date.parse(claim.expires_at) <= threshold) {
+          delete state.completed_send_claims[key];
+          deleted += 1;
+        }
+      }
+      return { state, value: deleted };
+    });
+  }
+
+  private async claimOrCreate(
+    input: IdempotencyClaimInput<InboxSendResult>
+  ): Promise<IdempotencyClaimResult<InboxSendResult>> {
+    const claimKey = this.claimKey(input.key);
+    const now = this.now();
+    const existing = await this.backend.read(
+      (state) => state.completed_send_claims[claimKey]
+    );
+    if (existing && Date.parse(existing.expires_at) > now) {
+      if (existing.request_hash !== input.requestHash) {
+        return { kind: "conflict_different_request" };
+      }
+      return {
+        kind: "existing_same_request",
+        value: existing.result
+      };
+    }
+    if (existing) {
+      await this.backend.mutate((state) => {
+        const current = state.completed_send_claims[claimKey];
+        if (
+          current &&
+          Date.parse(current.expires_at) <= now
+        ) {
+          delete state.completed_send_claims[claimKey];
+        }
+        return { state, value: undefined };
+      });
+    }
+
+    const result = await input.create();
+    const expiresAt = new Date(
+      this.now() + input.ttlSeconds * 1_000
+    ).toISOString();
+    await this.backend.mutate((state) => {
+      state.completed_send_claims[claimKey] = {
+        request_hash: input.requestHash,
+        result,
+        expires_at: expiresAt
+      };
+      return { state, value: undefined };
+    });
+    return { kind: "created", value: result };
+  }
+
+  private claimKey(key: string): string {
+    return JSON.stringify([key]);
   }
 }
 

@@ -130,8 +130,9 @@ describe("ConnectorHost", () => {
 
     const first = host.runOnce();
     const second = host.runOnce();
-    await Promise.resolve();
-    expect(pull).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(pull).toHaveBeenCalledTimes(1);
+    });
     release();
     await Promise.all([first, second]);
   });
