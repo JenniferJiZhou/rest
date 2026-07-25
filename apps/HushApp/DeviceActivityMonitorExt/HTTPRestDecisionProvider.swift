@@ -13,6 +13,7 @@ struct RestDecision {
     let requestID: String
     let shouldOfferRest: Bool
     let message: String
+    let reasonCode: String
     let generatedTask: GeneratedRestTask?
 }
 
@@ -120,6 +121,7 @@ final class HTTPRestDecisionProvider: RestDecisionProviding {
             requestID: suggestion.requestID,
             shouldOfferRest: suggestion.shouldOfferRest,
             message: suggestion.message,
+            reasonCode: suggestion.reasonCode,
             generatedTask: suggestion.generatedTask
         )
     }
@@ -167,6 +169,7 @@ private struct RestSuggestionResponse: Decodable {
     let requestID: String
     let shouldOfferRest: Bool
     let message: String
+    let reasonCode: String
     let generatedTask: GeneratedRestTask?
     let defaultQuestID: String?
 
@@ -174,6 +177,7 @@ private struct RestSuggestionResponse: Decodable {
         case requestID = "request_id"
         case shouldOfferRest = "should_offer_rest"
         case message
+        case reasonCode = "reason_code"
         case generatedTask = "generated_task"
         case defaultQuestID = "default_quest_id"
     }
