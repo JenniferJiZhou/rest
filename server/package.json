@@ -20,6 +20,7 @@
     "test:vertical": "vitest run tests/vertical-slice",
     "test:deployment": "vitest run tests/unit/config.test.ts tests/unit/deployment-artifacts.test.ts tests/integration/deployment-readiness.test.ts tests/integration/smoke-script.test.ts",
     "smoke": "vitest run tests/integration/server.test.ts",
+    "smoke:inbox": "node scripts/smoke-inbox.mjs",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
