@@ -175,7 +175,7 @@ private struct UnifiedInboxRealView: View {
                 .font(HushType.bodyStrong)
             Spacer()
 
-            Label("实时", systemImage: "checkmark.shield")
+            Label(originTitle, systemImage: originImage)
                 .font(HushType.caption)
                 .foregroundStyle(HushColor.textSecondary)
         }
@@ -269,6 +269,9 @@ private struct UnifiedInboxRealView: View {
                 .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                    Text(providerTitle(item.provider))
+                        .font(HushType.caption)
+                        .foregroundStyle(HushColor.textSecondary)
                     Text(item.conversationName).font(HushType.title)
                     if let sender = item.sender { Text(sender) }
                     if let subject = item.subject { Text(subject).font(HushType.bodyStrong) }
@@ -286,6 +289,7 @@ private struct UnifiedInboxRealView: View {
                     Task { await model.acknowledgeSelected() }
                 }
                 .buttonStyle(.bordered)
+                .disabled(model.isMutationInFlight)
 
                 if let draft = model.draft {
                     VStack(alignment: .leading, spacing: HushSpacing.sm) {
@@ -301,6 +305,7 @@ private struct UnifiedInboxRealView: View {
                                 draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                     || model.sendState == .unknown
                                     || model.sendState == .sent
+                                    || model.isMutationInFlight
                             )
                             Spacer()
                             sendControls
@@ -312,6 +317,7 @@ private struct UnifiedInboxRealView: View {
                         Task { await model.loadDraft() }
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(model.isMutationInFlight)
                 }
 
                 sendStatus
@@ -323,18 +329,22 @@ private struct UnifiedInboxRealView: View {
 
     @ViewBuilder
     private var sendControls: some View {
-        switch model.sendState {
-        case .idle, .failed:
-            Button("检查发送") { model.beginReview() }
-        case .sent, .unknown:
-            EmptyView()
-        case .reviewing:
-            Button("获取确认") { Task { await model.requestConfirmation() } }
-        case .confirming:
-            Button("确认发送") { Task { await model.sendConfirmedDraft() } }
-        case .sending:
-            ProgressView()
+        Group {
+            switch model.sendState {
+            case .idle, .failed:
+                Button("检查发送") { model.beginReview() }
+            case .sent, .unknown:
+                EmptyView()
+            case .reviewing:
+                Button("获取确认") { Task { await model.requestConfirmation() } }
+            case .confirming:
+                Button("确认发送") { Task { await model.sendConfirmedDraft() } }
+            case .sending:
+                ProgressView()
+            }
         }
+        .frame(width: 112, height: 36)
+        .disabled(model.isMutationInFlight && model.sendState != .sending)
     }
 
     @ViewBuilder
@@ -353,6 +363,20 @@ private struct UnifiedInboxRealView: View {
             .foregroundStyle(HushColor.textSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, HushSpacing.md)
+    }
+
+    private var originTitle: String {
+        if case .failed = model.loadState { return "连接失败" }
+        return model.origin == .real ? "实时" : "未验证"
+    }
+
+    private var originImage: String {
+        if case .failed = model.loadState {
+            return "exclamationmark.shield"
+        }
+        return model.origin == .real
+            ? "checkmark.shield"
+            : "exclamationmark.shield"
     }
 
     private func providerTitle(_ provider: InboxProviderResponse) -> String {

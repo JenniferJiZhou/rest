@@ -84,6 +84,10 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
     @Published private(set) var providerReadiness: [UnifiedInboxProviderReadiness] = []
     @Published private(set) var selectedItem: UnifiedInboxPresentedItem?
     @Published private(set) var draft: UnifiedInboxPresentedDraft?
+    @Published private(set) var isAcknowledging = false
+    @Published private(set) var isLoadingDraft = false
+    @Published private(set) var isUpdatingDraft = false
+    @Published private(set) var isRequestingConfirmation = false
 
     private let client: any UnifiedInboxClient
     private var transportIDs: [UUID: String] = [:]
@@ -95,6 +99,14 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
 
     init(client: any UnifiedInboxClient) {
         self.client = client
+    }
+
+    var isMutationInFlight: Bool {
+        isAcknowledging
+            || isLoadingDraft
+            || isUpdatingDraft
+            || isRequestingConfirmation
+            || sendState == .sending
     }
 
     func load() async {
@@ -161,10 +173,13 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
 
     func acknowledgeSelected() async {
         guard
+            !isAcknowledging,
             let presentationID = selectedPresentationID,
             let transportID = transportIDs[presentationID],
             let revision = selectedItem?.revision
         else { return }
+        isAcknowledging = true
+        defer { isAcknowledging = false }
         do {
             let response = try await client.acknowledge(
                 id: transportID,
@@ -182,9 +197,12 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
 
     func loadDraft() async {
         guard
+            !isLoadingDraft,
             let presentationID = selectedPresentationID,
             let draftID = draftIDs[presentationID]
         else { return }
+        isLoadingDraft = true
+        defer { isLoadingDraft = false }
         do {
             let response = try await client.draft(id: draftID)
             try accept(response.origin)
@@ -197,11 +215,14 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
 
     func updateDraft(content: String) async {
         guard
+            !isUpdatingDraft,
             let presentationID = selectedPresentationID,
             let draftID = draftIDs[presentationID],
             let version = draft?.version,
             terminalSendStates[draftID] == nil
         else { return }
+        isUpdatingDraft = true
+        defer { isUpdatingDraft = false }
         invalidateConfirmation()
         do {
             let response = try await client.updateDraft(
@@ -232,11 +253,14 @@ final class UnifiedInboxViewModel: ObservableObject, UnifiedInboxStoreProtocol {
 
     func requestConfirmation() async {
         guard
+            !isRequestingConfirmation,
             sendState == .reviewing,
             let presentationID = selectedPresentationID,
             let draftID = draftIDs[presentationID],
             let reviewedVersion = draft?.version
         else { return }
+        isRequestingConfirmation = true
+        defer { isRequestingConfirmation = false }
         let generation = reviewGeneration
         do {
             let response = try await client.confirmation(draftID: draftID)

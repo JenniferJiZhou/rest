@@ -59,6 +59,32 @@ final class UnifiedInboxModeCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.realModel)
     }
 
+    func testLeavingRealForConfigurationOrSampleClearsMemorySession() {
+        let environment = [
+            "HUSH_INBOX_BASE_URL": "https://inbox.example.com",
+            "HUSH_APP_TOKEN": String(repeating: "t", count: 32)
+        ]
+        let configurationCoordinator = UnifiedInboxModeCoordinator(
+            defaults: makeDefaults(),
+            environment: environment,
+            clientFactory: { _ in FailingInboxClient() }
+        )
+        configurationCoordinator.showConfiguration()
+        XCTAssertEqual(configurationCoordinator.selection, .configuration)
+        XCTAssertFalse(configurationCoordinator.hasRuntimeToken)
+        XCTAssertNil(configurationCoordinator.realModel)
+
+        let sampleCoordinator = UnifiedInboxModeCoordinator(
+            defaults: makeDefaults(),
+            environment: environment,
+            clientFactory: { _ in FailingInboxClient() }
+        )
+        sampleCoordinator.selectSample()
+        XCTAssertEqual(sampleCoordinator.selection, .sample)
+        XCTAssertFalse(sampleCoordinator.hasRuntimeToken)
+        XCTAssertNil(sampleCoordinator.realModel)
+    }
+
     private func makeDefaults() -> UserDefaults {
         UserDefaults(suiteName: "UnifiedInboxModeCoordinatorTests.\(UUID().uuidString)")!
     }
