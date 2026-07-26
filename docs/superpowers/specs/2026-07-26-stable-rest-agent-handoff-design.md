@@ -198,7 +198,7 @@ Mac 构造现有 `RestRecommendationRequest`：
   "content_version": "<bundled version>",
   "quest_id": "wash_face_01",
   "reason_code": "long_continuous_use",
-  "intro": "69 分钟了。累了吧？",
+  "intro": "先离开屏幕一会。",
   "fallback_quest_id": "look_far_emergency"
 }
 ```
@@ -208,9 +208,12 @@ Mac 构造现有 `RestRecommendationRequest`：
 Mac 合并结果时使用以下优先级：
 
 - `quest_id`：Agent 推荐 ID → evaluate 的有效默认 ID → 本地安全 ID。
-- `message`：非空 Agent `intro` → evaluate `message` → 本地普通开场。
+- `message`：包含真实使用上下文的 evaluate `message` → 非空 Agent `intro` →
+  本地普通开场。`RestRecommendationRequest` 1.0 不包含连续使用分钟数，Agent
+  不得自行写出时长。
 - `reason_code`：保留 evaluate 的打断原因；推荐原因只用于调试信息。
-- `data_origin`：使用 `/recommend` 本次实际来源。
+- `data_origin`：推荐成功时使用 `/recommend` 本次实际来源；Mac 本地降级时使用
+  Apple 私有 Companion 值 `local`。HTTP 公开来源仍只有 `real | mock | cached`。
 
 最终 Companion Decision 至少包含：
 
@@ -278,7 +281,8 @@ type RestRecommendationExecution = {
 
 展示规则：
 
-- 开场来自 Agent `intro`，最多两行。
+- 开场优先来自 Mac/evaluate 的真实使用上下文，最多两行；只有它为空时才使用
+  Agent `intro`。Agent 不得编造连续使用分钟数。
 - 任务标题和动作来自本地固定内容库。
 - 不显示编号步骤。
 - 不显示“AI 推荐”“Agent 已连接”或模型名称。
@@ -296,7 +300,7 @@ type RestRecommendationExecution = {
 休息好了
 ```
 
-主界面不展示技术错误。普通网络失败并使用本地任务时不增加来源标签。
+主界面不展示技术错误。`data_origin == local` 时不增加来源标签。
 `data_origin == mock` 表示服务端实际返回了演示结果，此时常亮页必须显示低权重但
 持续可见的“演示模式”标识，设置页同时提供来源详情，不能伪装成真实模型结果。
 
@@ -363,7 +367,7 @@ staging 必须配置：
 - evaluate 为 false 时不调用 recommend。
 - evaluate 为 true 时只调用一次 recommend。
 - Agent ID、evaluate 默认 ID、本地 fallback 的优先级正确。
-- Agent intro、evaluate message、本地开场的优先级正确。
+- evaluate 事实开场、Agent intro、本地开场的优先级正确。
 - 请求头、请求 ID 和契约版本正确。
 - 超时、错误 Schema、未知 ID 和版本不一致均降级。
 - 同一 Decision 不重复同步。
@@ -386,7 +390,7 @@ staging 必须配置：
 3. Mac 成功完成 evaluate 和 recommend。
 4. staging 日志确认 Claude 路径成功，且不记录密钥或敏感正文。
 5. iPhone 在 Decision 同步后数秒内展示与返回 `quest_id` 对应的本地任务。
-6. iPhone 展示 Agent `intro`，但不展示 AI 技术信息或编号步骤。
+6. iPhone 展示最终合成开场，但不展示 AI 技术信息或编号步骤。
 7. 点击“休息好了”后两端清除同一 Decision 并启动冷却。
 8. 冷却期间不会重复提醒。
 9. 关闭 Agent 或断网重复测试，iPhone 仍展示本地安全任务。
