@@ -74,6 +74,12 @@ export const usageSummarySchema = z
       .min(0)
       .max(1440)
       .optional(),
+    continuous_screen_usage_minutes: z
+      .number()
+      .int()
+      .min(0)
+      .max(1440)
+      .optional(),
     target_type: z.literal("website").optional(),
     website_domain: websiteDomain.optional(),
     label_source: z.enum(["domain", "user"]).optional(),
@@ -100,6 +106,7 @@ export const usageSummarySchema = z
       "daily_app_usage_minutes",
       "estimated_continuous_app_usage_minutes",
       "continuous_app_usage_minutes",
+      "continuous_screen_usage_minutes",
       "continuous_usage_is_estimated"
     ] as const;
     const websiteCurrentFields = [
@@ -169,6 +176,7 @@ export const usageSummarySchema = z
         value,
         [
           "continuous_app_usage_minutes",
+          "continuous_screen_usage_minutes",
           "target_type",
           "website_domain",
           "label_source",
@@ -204,6 +212,19 @@ export const usageSummarySchema = z
         "continuous_app_usage_minutes",
         context
       );
+      if (
+        value.continuous_screen_usage_minutes !== undefined &&
+        value.continuous_app_usage_minutes !== undefined &&
+        value.continuous_screen_usage_minutes <
+          value.continuous_app_usage_minutes
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["continuous_screen_usage_minutes"],
+          message:
+            "continuous_screen_usage_minutes must not be lower than continuous_app_usage_minutes"
+        });
+      }
       forbidFields(
         value,
         [
@@ -271,6 +292,7 @@ export const usageSummarySchema = z
           "daily_app_usage_minutes",
           "estimated_continuous_app_usage_minutes",
           "continuous_app_usage_minutes",
+          "continuous_screen_usage_minutes",
           "raw_app_names_included"
         ],
         context

@@ -1,17 +1,29 @@
 import SwiftUI
 
+
 struct HushDemoRootView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var store: HushDemoStore
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
     @State private var isShowingSettings = false
-    @State private var inboxRevealProgress: CGFloat = 0
+    // The breath session is always opt-in: a long press on the water offers it,
+    // and only an explicit "开始" starts it.
+    @State private var isOfferingBreath = false
+    @State private var isBreathing = false
+    // Tide transition state machine. The swipe only *triggers* it; once armed it
+    // runs off its own clock and ignores the finger entirely.
+    //   • `isRevealingInbox` == true  → `tideTransitioning` (auto animation)
+    //   • `tideStartedAt`             → the clock origin the whole timeline reads
+    // Absent both, we are `idle` (route == .door) or `messagesVisible`
+    // (route == .inbox).
     @State private var isRevealingInbox = false
-    // The tide-revealed inbox stays mounted for the whole gesture, so `progress`
-    // can drive its reveal continuously instead of the view being inserted or
-    // removed mid-animation. Cleared only once a cancelled swipe has fully
-    // receded, or handed straight to the `.inbox` route on completion.
-    @State private var isSwipingInbox = false
+    @State private var tideStartedAt: Date?
+    @State private var tideTask: Task<Void, Never>?
+    // Sleep entry reuses the very same main-page ocean: it rises and covers the
+    // door, and only under that cover do we switch to the Sleep Handoff route.
+    @State private var isCoveringForSleep = false
+    @State private var sleepCoverTask: Task<Void, Never>?
     private let onSettings: (() -> Void)?
     private let onCompanion: (() -> Void)?
     private let suggestedQuestID: String?
@@ -42,69 +54,96 @@ struct HushDemoRootView: View {
     }
 
     var body: some View {
-        ZStack {
-            HushWaveBackground(revealProgress: inboxRevealProgress)
+        // One clock for the whole transition. It ticks only while the tide is
+        // playing (`paused` otherwise, so idle costs nothing here — the wave's
+        // own line-lull keeps its separate ticker). Everything below reads a
+        // single elapsed value, so the water, the surface and the messages are
+        // three views of the same instant and can never desync.
+        TimelineView(
+            .animation(
+                minimumInterval: 1.0 / 60.0,
+                paused: !(isRevealingInbox || isCoveringForSleep)
+            )
+        ) { timeline in
+            let elapsed = tideStartedAt.map {
+                timeline.date.timeIntervalSince($0)
+            } ?? 0
+            let waterProgress = (isRevealingInbox || isCoveringForSleep)
+                ? HushTideTimeline.tideProgress(elapsed: elapsed)
+                : 0
 
-            if store.route == .door {
-                HushDoorView(
-                    taskText: agentTaskText,
-                    onOpenTask: store.openCurrentQuest,
-                    onSettings: {
-                        if let onSettings {
-                            onSettings()
-                        } else {
-                            isShowingSettings = true
-                        }
-                    },
-                    onInboxSwipeChanged: updateInboxSwipe,
-                    onInboxSwipeEnded: finishInboxSwipe,
-                    onOpenCompanion: onCompanion
-                )
-                .opacity(
-                    1 - min(inboxRevealProgress * 1.65, 1)
-                )
-                .allowsHitTesting(!isRevealingInbox)
-                .transition(.opacity)
-            } else if store.route == .inbox {
-                // The inbox is drawn by the shared tide layer below, so the same
-                // view and store carry unbroken from the transition into the
-                // interactive route — no second instance to fade in over it.
-                EmptyView()
-            } else {
-                VStack(spacing: 0) {
-                    topBar
-                        .padding(.horizontal, HushSpacing.lg)
-                        .padding(.top, HushSpacing.md)
+            ZStack {
+                HushWaveBackground(revealProgress: waterProgress)
 
-                    ScrollView {
-                        routeContent
-                            .frame(maxWidth: 460)
+                if store.route == .door {
+                    HushDoorView(
+                        taskText: agentTaskText,
+                        onOpenTask: store.openCurrentQuest,
+                        onSettings: {
+                            if let onSettings {
+                                onSettings()
+                            } else {
+                                isShowingSettings = true
+                            }
+                        },
+                        onInboxSwipeTriggered: startInboxTide,
+                        onOpenCompanion: onCompanion,
+                        onBreathLongPress: offerBreath
+                    )
+                    .opacity(1 - min(waterProgress * 1.65, 1))
+                    .allowsHitTesting(!isRevealingInbox && !isCoveringForSleep)
+                    .transition(.opacity)
+                } else if store.route == .inbox {
+                    // Drawn by the shared tide layer below, so the same view and
+                    // store carry unbroken from the transition into the route.
+                    EmptyView()
+                } else if store.route == .sleepHandoff {
+                    // Nighttime mode: full screen, no demo/navigation chrome. It
+                    // owns its own layout and safe areas, and is left only by the
+                    // deliberate upward swipe.
+                    SleepHandoffView(
+                        todaySummary: $store.sleepTodaySummary,
+                        highlight: $store.sleepHighlight,
+                        tomorrowFirstStep: $store.sleepTomorrowFirstStep,
+                        onFinish: store.finishSleepHandoff
+                    )
+                    .transition(.opacity)
+                } else {
+                    VStack(spacing: 0) {
+                        topBar
                             .padding(.horizontal, HushSpacing.lg)
-                            .padding(.top, HushSpacing.lg)
-                            .padding(.bottom, HushSpacing.xl)
+                            .padding(.top, HushSpacing.md)
+
+                        ScrollView {
+                            routeContent
+                                .frame(maxWidth: 460)
+                                .padding(.horizontal, HushSpacing.lg)
+                                .padding(.top, HushSpacing.lg)
+                                .padding(.bottom, HushSpacing.xl)
+                        }
+                        .scrollIndicators(.hidden)
                     }
-                    .scrollIndicators(.hidden)
-
+                    .transition(.opacity)
                 }
-                .transition(
-                    store.route == .sleepHandoff
-                        ? .move(edge: .top).combined(with: .opacity)
-                        : .opacity
-                )
-            }
 
-            // One continuous inbox, brought out by the tide. It is present for
-            // the whole swipe (`isSwipingInbox`) and stays for the `.inbox`
-            // route, so `inboxRevealProgress` — the same driver as the wave —
-            // reveals its surface and rows in lock-step with the rising water.
-            // Once routed it reads a constant 1 (fully settled, interactive).
-            if store.route == .inbox || isSwipingInbox || isRevealingInbox {
-                UnifiedInboxView(
-                    onClose: store.closeInbox,
-                    revealProgress: store.route == .inbox ? 1 : inboxRevealProgress
-                )
-                .allowsHitTesting(store.route == .inbox)
-                .transition(.opacity)
+                // One continuous inbox, brought out by the tide. Present for the
+                // whole auto transition and kept for the `.inbox` route, so the
+                // same view and store carry across the hand-off. During the tide
+                // it reads the clock (water progress + elapsed seconds); once
+                // routed it is `.settled` — fully revealed and interactive.
+                if store.route == .inbox || isRevealingInbox {
+                    UnifiedInboxView(
+                        onClose: store.closeInbox,
+                        reveal: store.route == .inbox
+                            ? .settled
+                            : HushTideReveal(
+                                progress: waterProgress,
+                                elapsed: elapsed
+                            )
+                    )
+                    .allowsHitTesting(store.route == .inbox)
+                    .transition(.opacity)
+                }
             }
         }
         #if os(macOS)
@@ -117,10 +156,37 @@ struct HushDemoRootView: View {
         #else
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         #endif
+        .overlay {
+            if isOfferingBreath {
+                ZStack {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture { isOfferingBreath = false }
+
+                    HushBreathInviteView(
+                        onAccept: {
+                            isOfferingBreath = false
+                            isBreathing = true
+                        },
+                        onDismiss: { isOfferingBreath = false }
+                    )
+                }
+                .transition(.opacity)
+            }
+        }
+        .overlay {
+            if isBreathing {
+                HushBreathTideView { isBreathing = false }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.28), value: isOfferingBreath)
+        .animation(.easeInOut(duration: 0.45), value: isBreathing)
         .preferredColorScheme(.dark)
         .task {
             if sleepSchedule.consumePendingRoute() {
-                store.startSleepHandoff()
+                startSleepEntry()
             }
         }
         .onReceive(
@@ -128,10 +194,14 @@ struct HushDemoRootView: View {
                 for: .hushSleepHandoffRequested
             )
         ) { _ in
-            store.startSleepHandoff()
+            startSleepEntry()
         }
         .onChange(of: suggestionEventID) { _, _ in
             store.presentRestSuggestion(questID: suggestedQuestID)
+        }
+        .onDisappear {
+            tideTask?.cancel()
+            sleepCoverTask?.cancel()
         }
         .sheet(isPresented: $isShowingSettings) {
             HushSettingsView(
@@ -149,6 +219,13 @@ struct HushDemoRootView: View {
                 }
             )
         }
+    }
+
+    /// Offer the breath, but never over a transition that is already running:
+    /// the door hands the screen to the tide, and two tides at once would fight.
+    private func offerBreath() {
+        guard !isRevealingInbox, !isCoveringForSleep, !isBreathing else { return }
+        isOfferingBreath = true
     }
 
     private var agentTaskText: String {
@@ -180,63 +257,89 @@ struct HushDemoRootView: View {
         return task.hasSuffix("。") ? task : "\(task)。"
     }
 
-    /// While the finger is down, the whole choreography — water, page, messages
-    /// — tracks the swipe distance directly (no animation, so it follows the
-    /// finger frame-for-frame). Mounting the inbox on the first movement lets it
-    /// begin surfacing as the water rises, rather than after the swipe ends.
-    private func updateInboxSwipe(_ progress: CGFloat) {
-        guard !isRevealingInbox else { return }
+    /// A single upward swipe past the door's small threshold lands here and
+    /// starts the whole tide — once. From this point the finger is irrelevant:
+    /// the clock is set, the `TimelineView` unpauses, and the water, surface and
+    /// messages all play off `tideStartedAt` on their fixed timeline. It cannot
+    /// be re-triggered, reversed by a finger retreat, or cancelled by an early
+    /// release — the guard and the state machine see to that.
+    private func startInboxTide() {
+        guard store.route == .door, !isRevealingInbox else { return }
 
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            isSwipingInbox = true
-            inboxRevealProgress = min(0.96, max(0, progress))
-        }
-    }
-
-    private func finishInboxSwipe(_ shouldComplete: Bool) {
-        guard !isRevealingInbox else { return }
-
-        // Cancelled: the water falls back and the surfacing messages recede with
-        // it, continuing from wherever the finger let go — never a jump-cut back
-        // to frame zero. Faster the less there is to undo.
-        guard shouldComplete else {
-            let duration = 0.34 + Double(inboxRevealProgress) * 0.55
-            withAnimation(
-                .timingCurve(0.22, 0.72, 0.28, 1, duration: duration)
-            ) {
-                inboxRevealProgress = 0
-            } completion: {
-                isSwipingInbox = false
-            }
-            return
-        }
-
-        // Committed: continue from the current progress to the end. Duration
-        // scales with the distance left so a late release settles quickly and an
-        // early flick still gets a full, unhurried tide — the gesture's own
-        // reach standing in for its velocity, then easing out.
+        tideTask?.cancel()
         isRevealingInbox = true
-        let remaining = max(0, 1 - inboxRevealProgress)
-        let duration = 0.45 + Double(remaining) * 0.95
-        withAnimation(
-            .timingCurve(0.26, 0.03, 0.12, 1, duration: duration)
-        ) {
-            inboxRevealProgress = 1
-        } completion: {
-            // The reveal already shows the fully-settled inbox, so switching to
-            // the interactive route is a same-frame, animation-free swap: no
-            // fade, no page appearing "after" the tide. Progress resets to 0 for
-            // next time; the routed inbox reads a constant 1 and stays opaque,
-            // hiding the wave view as it rewinds behind it.
+        tideStartedAt = Date()
+
+        // The transition is a fixed length with no cancel path, so a plain sleep
+        // is the whole "completion criteria": when the clock runs out the fully
+        // revealed inbox is already on screen, and we swap to the interactive
+        // route in one animation-free frame (identical pixels → seamless). The
+        // wave view resets behind the now-opaque surface.
+        tideTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(HushTideTimeline.tideDuration * 1_000_000_000)
+            )
+            guard !Task.isCancelled else { return }
+
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 store.route = .inbox
-                inboxRevealProgress = 0
                 isRevealingInbox = false
-                isSwipingInbox = false
+                tideStartedAt = nil
+            }
+        }
+    }
+
+    /// A sleep notification / schedule brings the app to the main page, then the
+    /// existing main-page ocean rises and covers it; only under that opaque
+    /// cover do we switch to the Sleep Handoff route and let the ocean recede,
+    /// revealing the night without a flash. Guarded so repeated notifications
+    /// never start overlapping transitions. Reduce Motion takes a short
+    /// crossfade instead of the full rise.
+    private func startSleepEntry() {
+        guard !isCoveringForSleep,
+              !isRevealingInbox,
+              store.route != .sleepHandoff else { return }
+
+        // Come back to the main/door page first, so the ocean rises from it.
+        if store.route != .door {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { store.route = .door }
+        }
+
+        if reduceMotion {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                store.route = .sleepHandoff
+            }
+            return
+        }
+
+        sleepCoverTask?.cancel()
+        isCoveringForSleep = true
+        tideStartedAt = Date()
+
+        let cover = HushTideTimeline.tideDuration
+        sleepCoverTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(cover * 1_000_000_000)
+            )
+            guard !Task.isCancelled else { return }
+
+            // Fully covered: fade the night in over the opaque ocean…
+            withAnimation(.easeInOut(duration: 0.55)) {
+                store.route = .sleepHandoff
+            }
+            try? await Task.sleep(nanoseconds: 560_000_000)
+            guard !Task.isCancelled else { return }
+
+            // …then reset the ocean behind the now-covering Sleep Handoff.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isCoveringForSleep = false
+                tideStartedAt = nil
             }
         }
     }
@@ -309,12 +412,8 @@ struct HushDemoRootView: View {
         case .completed:
             RestCompletionView(onDone: store.reset)
         case .sleepHandoff:
-            SleepHandoffView(
-                todaySummary: $store.sleepTodaySummary,
-                highlight: $store.sleepHighlight,
-                tomorrowFirstStep: $store.sleepTomorrowFirstStep,
-                onFinish: store.finishSleepHandoff
-            )
+            // Rendered full-screen by its own route branch above.
+            EmptyView()
         case .handoffRunning:
             HandoffRunningView(onShowResult: store.showPauseReceipt)
         case .pauseReceipt:

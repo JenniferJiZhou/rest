@@ -8,6 +8,7 @@ struct HushCompanionDecision: Codable, Equatable {
     let reasonCode: String
     let message: String
     let defaultQuestID: String?
+    let generatedTask: GeneratedRestTask?
 }
 
 struct HushCompanionSnapshot: Codable, Equatable {

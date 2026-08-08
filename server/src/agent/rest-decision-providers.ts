@@ -61,7 +61,12 @@ export class CannedRestDecisionProvider
         questId
       );
     }
-    if (context.usage.continuousMinutes >= 20) {
+    if (
+      Math.max(
+        context.usage.continuousMinutes,
+        context.usage.continuousScreenMinutes ?? 0
+      ) >= 20
+    ) {
       return offer(
         "long_continuous_use",
         context.usage.continuousIsEstimated

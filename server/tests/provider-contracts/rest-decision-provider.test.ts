@@ -29,6 +29,7 @@ const context = (
   usage: {
     dailyMinutes: 35,
     continuousMinutes: 30,
+    continuousScreenMinutes: null,
     continuousIsEstimated: true
   },
   appSwitchesLast10Minutes: null,

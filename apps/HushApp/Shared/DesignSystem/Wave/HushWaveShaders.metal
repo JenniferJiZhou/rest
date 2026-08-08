@@ -119,3 +119,112 @@ static float hushTension(float x, float t, float lane) {
 
     return float2(position.x, position.y - dy * h * amplitude);
 }
+
+// Generic organic "floating threads" displacement for the Companion idle lines.
+//
+// Unlike hushThreadDrift, this carries no measured profile — it is meant for the
+// warm-ivory idle plate (hush-companion-idle) whose stroke positions were not
+// measured. It only chooses where to SAMPLE the bitmap, so the hand-drawn ivory
+// texture, weight and colour travel with their own pixels; nothing is redrawn.
+//
+// The field is a small sum of incommensurate low-frequency waves in x and t,
+// with a per-line phase (lane) so strokes at different heights bend
+// independently and follow one another with a delay, and a centre-weighted
+// envelope so the middle of the composition moves more than the calmer sides.
+// A slow global breath expands and contracts the whole amplitude. Periods are
+// ~9–16 s: a calm swell, never a rapid or mechanical oscillation.
+[[ stitchable ]] float2 hushLineFloat(
+    float2 position,
+    float time,
+    float2 plate,
+    float amplitude
+) {
+    if (amplitude <= 0.0) {
+        return position;
+    }
+
+    float w = max(plate.x, 1.0);
+    float h = max(plate.y, 1.0);
+    float x = clamp(position.x / w, 0.0, 1.0);
+
+    // Calmer at the edges, livelier through the middle.
+    float env = 0.32 + 0.68 * sin(M_PI_F * x);
+
+    // Per-line phase so different threads move independently, with a lag.
+    float lane = clamp(position.y / h, 0.0, 1.0);
+
+    float dy = 0.0;
+    dy += sin(x * HUSH_TAU * 1.0 + time * 0.66 + lane * 1.2) * 0.55;
+    dy += sin(x * HUSH_TAU * 1.7 - time * 0.44 + lane * 0.7 + 1.3) * 0.30;
+    dy += sin(x * HUSH_TAU * 0.6 + time * 0.30 - lane * 0.5 + 2.1) * 0.26;
+
+    // Slow overall breathing of the amplitude.
+    float breathe = 0.72 + 0.28 * sin(time * 0.34 + lane * 0.4);
+    dy *= env * breathe;
+
+    // Half-amplitude reach, as a fraction of plate height.
+    float reach = 0.055 * h * amplitude;
+    return float2(position.x, position.y - dy * reach);
+}
+
+// Slow two-dimensional refraction for the Companion foam plates. This bends
+// local cells in place; it deliberately has no large translation component, so
+// the result reads as material changing shape rather than a bitmap flying past.
+[[ stitchable ]] float2 hushFoamFlow(
+    float2 position,
+    float time,
+    float2 plate,
+    float amplitude,
+    float phase
+) {
+    if (amplitude <= 0.0) {
+        return position;
+    }
+
+    float w = max(plate.x, 1.0);
+    float h = max(plate.y, 1.0);
+    float2 uv = position / float2(w, h);
+
+    float envelope = sin(M_PI_F * clamp(uv.y, 0.0, 1.0));
+    float dx = sin(uv.y * HUSH_TAU * 2.1 + time * 0.72 + phase) * 0.55
+             + sin((uv.x + uv.y) * HUSH_TAU * 1.2 - time * 0.43 + phase * 1.7) * 0.25;
+    float dy = sin(uv.x * HUSH_TAU * 1.35 - time * 0.58 + phase * 0.8) * 0.48
+             + cos((uv.x - uv.y) * HUSH_TAU * 0.9 + time * 0.36 + phase) * 0.24;
+
+    float reach = min(w, h) * 0.018 * amplitude;
+    return position + float2(dx, dy) * reach * (0.55 + 0.45 * envelope);
+}
+
+static float hushFoamNoise(float2 p) {
+    float n = sin(p.x * 12.7 + sin(p.y * 4.1)) * 0.46;
+    n += sin(p.y * 9.3 - p.x * 3.7 + 1.8) * 0.31;
+    n += sin((p.x + p.y) * 19.1 + 0.7) * 0.14;
+    return n;
+}
+
+// Gives the composited foam material an irregular leading and trailing edge.
+// `reveal` grows it upward from the lower part of the screen; `retreat` erodes
+// it upward again, leaving the black destination behind. The edge is feathered
+// and noise-modulated, avoiding both a straight wipe and a full-frame dissolve.
+[[ stitchable ]] half4 hushFoamErode(
+    float2 position,
+    half4 color,
+    float2 plate,
+    float reveal,
+    float retreat,
+    float time
+) {
+    float2 size = max(plate, float2(1.0));
+    float2 uv = position / size;
+    float noise = hushFoamNoise(uv * float2(2.4, 3.1) + float2(time * 0.035, -time * 0.018));
+    float feather = 0.075;
+
+    float revealFront = mix(1.16, -0.16, clamp(reveal, 0.0, 1.0));
+    float revealMask = smoothstep(revealFront + feather, revealFront - feather, uv.y + noise * 0.055);
+
+    float retreatFront = mix(1.16, -0.16, clamp(retreat, 0.0, 1.0));
+    float retreatMask = smoothstep(retreatFront - feather, retreatFront + feather, uv.y + noise * 0.07);
+
+    color.a *= half(clamp(revealMask * retreatMask, 0.0, 1.0));
+    return color;
+}

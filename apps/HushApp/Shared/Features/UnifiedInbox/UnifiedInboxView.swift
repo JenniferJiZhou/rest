@@ -117,15 +117,16 @@ struct UnifiedInboxView: View {
     @StateObject private var store = UnifiedInboxDemoStore()
     let onClose: () -> Void
 
-    /// Shared tide-transition driver, 0…1. At 1 (the default) the inbox is fully
-    /// settled and every reveal below is a no-op, so a directly-presented inbox
-    /// behaves exactly as before. Below 1 the reading surface and each row are
-    /// brought out by the tide front — see `HushTideTimeline`.
-    var revealProgress: CGFloat = 1
+    /// Tide clock. `.settled` (the default) presents an ordinary interactive
+    /// inbox — the surface is solid and every row reads fully revealed. During
+    /// the transition it carries the water progress (for the reading surface)
+    /// and the elapsed seconds (for the tight message cadence). See
+    /// `HushTideTimeline`.
+    var reveal: HushTideReveal = .settled
 
     var body: some View {
         ZStack {
-            HushTidePageSurface(progress: revealProgress)
+            HushTidePageSurface(progress: reveal.progress)
 
             if let item = store.selectedItem {
                 detail(item)
@@ -152,19 +153,17 @@ struct UnifiedInboxView: View {
 
     private var inbox: some View {
         // Reveal order top → bottom: header, notice, picker, then each card.
-        // The tide front (derived from `revealProgress`) sweeps this order, and
-        // each row's index is its vertical slot, so a row is brought out exactly
-        // as the water passes where it will sit — with heavy overlap between
-        // neighbours so the whole list reads as one continuous stream.
+        // Each row's index is its vertical slot; the tide's tight cadence opens
+        // them in that order, ~0.06 s apart, so the list reads as one continuous
+        // downward stream left in the water's wake — see `HushTideTimeline`.
         let items = store.filteredItems
-        let revealCount = 3 + items.count
+        let elapsed = reveal.elapsed
 
         return VStack(spacing: 0) {
             belowSurfaceHeader
                 .hushTideReveal(
                     index: 0,
-                    count: revealCount,
-                    progress: revealProgress,
+                    elapsed: elapsed,
                     reduceMotion: reduceMotion
                 )
 
@@ -173,15 +172,13 @@ struct UnifiedInboxView: View {
                     fixtureNotice
                         .hushTideReveal(
                             index: 1,
-                            count: revealCount,
-                            progress: revealProgress,
+                            elapsed: elapsed,
                             reduceMotion: reduceMotion
                         )
                     providerPicker
                         .hushTideReveal(
                             index: 2,
-                            count: revealCount,
-                            progress: revealProgress,
+                            elapsed: elapsed,
                             reduceMotion: reduceMotion
                         )
 
@@ -190,8 +187,7 @@ struct UnifiedInboxView: View {
                             itemCard(item)
                                 .hushTideReveal(
                                     index: 3 + offset,
-                                    count: revealCount,
-                                    progress: revealProgress,
+                                    elapsed: elapsed,
                                     reduceMotion: reduceMotion
                                 )
                         }

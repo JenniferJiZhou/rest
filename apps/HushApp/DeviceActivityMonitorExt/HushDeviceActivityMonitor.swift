@@ -21,7 +21,11 @@ final class HushDeviceActivityMonitor: DeviceActivityMonitor {
     private static let lastCompletedRestDateKey = "restSession.lastCompletedDate"
     private static let lastThresholdKey = "deviceActivity.lastThresholdDate"
     private static let lastAgentDecisionKey = "agent.lastDecisionMessage"
+    private static let lastAgentShouldOfferRestKey =
+        "agent.lastDecisionShouldOfferRest"
     private static let lastAgentErrorKey = "agent.lastErrorMessage"
+    private static let isGeneratingRestTaskKey =
+        "agent.isGeneratingRestTask"
     private static let appUsageStatesKey = "deviceActivity.appUsageStates"
     private static let continuousUsageGraceInterval: TimeInterval = 7 * 60
     private static let managedSettingsStore = ManagedSettingsStore(
@@ -61,10 +65,6 @@ final class HushDeviceActivityMonitor: DeviceActivityMonitor {
             let contextLabel = Self.contextLabel(
                 for: event,
                 userDefaults: userDefaults
-            ),
-            let applicationToken = Self.applicationToken(
-                for: event,
-                userDefaults: userDefaults
             )
         else {
             recordAgentError(
@@ -86,7 +86,6 @@ final class HushDeviceActivityMonitor: DeviceActivityMonitor {
             estimatedContinuousAppUsageMinutes:
                 usageState.estimatedContinuousMinutes,
             contextLabel: contextLabel,
-            applicationToken: applicationToken,
             now: now,
             userDefaults: userDefaults
         )
@@ -96,7 +95,6 @@ final class HushDeviceActivityMonitor: DeviceActivityMonitor {
         dailyAppUsageMinutes: Int,
         estimatedContinuousAppUsageMinutes: Int,
         contextLabel: String,
-        applicationToken: ApplicationToken,
         now: Date,
         userDefaults: UserDefaults?
     ) {
@@ -113,7 +111,14 @@ final class HushDeviceActivityMonitor: DeviceActivityMonitor {
             userDefaults: userDefaults
         )
 
+        userDefaults?.set(true, forKey: Self.isGeneratingRestTaskKey)
         Task {
+            defer {
+                userDefaults?.set(
+                    false,
+                    forKey: Self.isGeneratingRestTaskKey
+                )
+            }
             do {
                 let provider = try HTTPRestDecisionProvider(
                     baseURLString: baseURL
@@ -130,26 +135,32 @@ final class HushDeviceActivityMonitor: DeviceActivityMonitor {
                     decision.message,
                     forKey: Self.lastAgentDecisionKey
                 )
+                userDefaults?.set(
+                    decision.shouldOfferRest,
+                    forKey: Self.lastAgentShouldOfferRestKey
+                )
 
                 guard decision.shouldOfferRest else {
                     return
                 }
 
-                if userDefaults?.string(
-                    forKey: Self.interruptionModeKey
-                ) == "firm" {
-                    applyFirmInterruption(
-                        applicationToken: applicationToken,
-                        contextLabel: contextLabel,
-                        message: decision.message
-                    )
+                guard let generatedTask = decision.generatedTask else {
+                    return
                 }
 
                 scheduleReminder(
                     contextLabel: contextLabel,
-                    agentMessage: decision.message
+                    requestID: decision.requestID,
+                    agentMessage: decision.message,
+                    generatedTask: generatedTask
                 )
             } catch {
+                userDefaults?.removeObject(
+                    forKey: Self.lastAgentDecisionKey
+                )
+                userDefaults?.removeObject(
+                    forKey: Self.lastAgentShouldOfferRestKey
+                )
                 recordAgentError(
                     "无法连接云端 Agent，本次未执行打断。",
                     userDefaults: userDefaults
@@ -314,7 +325,9 @@ final class HushDeviceActivityMonitor: DeviceActivityMonitor {
 
     private func scheduleReminder(
         contextLabel: String,
-        agentMessage: String
+        requestID: String,
+        agentMessage: String,
+        generatedTask: GeneratedRestTask
     ) {
         let content = UNMutableNotificationContent()
         content.title = "Hush"
@@ -322,7 +335,15 @@ final class HushDeviceActivityMonitor: DeviceActivityMonitor {
             ? "已经使用了一会儿 \(contextLabel)。现在把一分钟留给自己吧。"
             : agentMessage
         content.sound = .default
-        content.userInfo = ["hush_entry": "device_activity"]
+        content.userInfo = [
+            "hush_entry": "device_activity",
+            "request_id": requestID,
+            "message": agentMessage,
+            "generated_task_title": generatedTask.title,
+            "generated_task_duration_seconds":
+                generatedTask.durationSeconds,
+            "generated_task_steps": generatedTask.steps
+        ]
 
         let request = UNNotificationRequest(
             identifier: "hush.device-activity.\(UUID().uuidString)",

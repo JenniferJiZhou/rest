@@ -57,6 +57,7 @@ describe("Rest Decision execution", () => {
       usage: {
         dailyMinutes: 35,
         continuousMinutes: 30,
+        continuousScreenMinutes: null,
         continuousIsEstimated: true
       },
       outputConstraints: {
@@ -74,6 +75,7 @@ describe("Rest Decision execution", () => {
       trigger_source: "macos_usage_checkpoint",
       estimated_continuous_app_usage_minutes: undefined,
       continuous_app_usage_minutes: 12,
+      continuous_screen_usage_minutes: 38,
       continuous_usage_is_estimated: false
     });
 
@@ -86,6 +88,7 @@ describe("Rest Decision execution", () => {
       usage: {
         dailyMinutes: 35,
         continuousMinutes: 12,
+        continuousScreenMinutes: 38,
         continuousIsEstimated: false
       }
     });
@@ -131,6 +134,7 @@ describe("Rest Decision execution", () => {
       usage: {
         dailyMinutes: 60,
         continuousMinutes: 12,
+        continuousScreenMinutes: null,
         continuousIsEstimated: false
       }
     });
@@ -155,6 +159,7 @@ describe("Rest Decision execution", () => {
     expect(context.usage).toEqual({
       dailyMinutes: null,
       continuousMinutes: 25,
+      continuousScreenMinutes: 25,
       continuousIsEstimated: false
     });
     expect(context.monitoredContext.userProvidedLabel).toBeNull();

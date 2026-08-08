@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800mm" height="1800mm" viewBox="0 0 800 1800" preserveAspectRatio="xMidYMid slice">
+<title>Hush poster background 80x180</title>
+<defs>
+<filter id="paint0" filterUnits="userSpaceOnUse" x="-140" y="-60" width="1080" height="1960"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.011" numOctaves="3" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/></filter>
+<filter id="paint1" filterUnits="userSpaceOnUse" x="-140" y="-60" width="1080" height="1960"><feTurbulence type="fractalNoise" baseFrequency="0.006 0.014" numOctaves="3" seed="23" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter>
+<filter id="bloom" x="0%" y="0%" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.0022" numOctaves="4" seed="41"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 1"/></feComponentTransfer></filter>
+<filter id="mottle" x="0%" y="0%" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="5" seed="12"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 0.9"/></feComponentTransfer></filter>
+<filter id="grain" x="0%" y="0%" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="3"/><feColorMatrix type="saturate" values="0"/></filter>
+<linearGradient id="haze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#04070D" stop-opacity="1"/><stop offset="0.45" stop-color="#04070D" stop-opacity="0.62"/><stop offset="0.75" stop-color="#04070D" stop-opacity="0.24"/><stop offset="1" stop-color="#04070D" stop-opacity="0"/></linearGradient>
+<radialGradient id="crestGlow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#4E7089" stop-opacity="0.30"/><stop offset="1" stop-color="#4E7089" stop-opacity="0"/></radialGradient>
+<radialGradient id="vignette" cx="0.5" cy="0.55" r="0.82"><stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.14"/></radialGradient>
+<linearGradient id="g0" x1="0" y1="0" x2="1" y2="0.35"><stop offset="0" stop-color="#4A6B82"/><stop offset="0.55" stop-color="#3D6274"/><stop offset="1" stop-color="#4A6B82"/></linearGradient>
+<linearGradient id="g1" x1="0" y1="0" x2="0.8" y2="0.35"><stop offset="0" stop-color="#2F5872"/><stop offset="0.55" stop-color="#345F6E"/><stop offset="1" stop-color="#2F5872"/></linearGradient>
+<linearGradient id="g2" x1="0" y1="0" x2="1" y2="0.35"><stop offset="0" stop-color="#316B76"/><stop offset="0.55" stop-color="#2B5C6A"/><stop offset="1" stop-color="#316B76"/></linearGradient>
+<linearGradient id="g3" x1="0" y1="0" x2="0.8" y2="0.35"><stop offset="0" stop-color="#24425F"/><stop offset="0.55" stop-color="#2A5065"/><stop offset="1" stop-color="#24425F"/></linearGradient>
+<linearGradient id="g4" x1="0" y1="0" x2="1" y2="0.35"><stop offset="0" stop-color="#2E5A66"/><stop offset="0.55" stop-color="#264E60"/><stop offset="1" stop-color="#2E5A66"/></linearGradient>
+<linearGradient id="g5" x1="0.400" y1="0" x2="1.060" y2="0.10"><stop offset="0" stop-color="#24425E"/><stop offset="0.22" stop-color="#A28A68"/><stop offset="0.72" stop-color="#A28A68"/><stop offset="1" stop-color="#24425E"/></linearGradient>
+<linearGradient id="g6" x1="0" y1="0" x2="1" y2="0.35"><stop offset="0" stop-color="#1D3852"/><stop offset="0.55" stop-color="#22485F"/><stop offset="1" stop-color="#1D3852"/></linearGradient>
+<linearGradient id="g7" x1="0" y1="0" x2="0.8" y2="0.35"><stop offset="0" stop-color="#2C6069"/><stop offset="0.55" stop-color="#23535C"/><stop offset="1" stop-color="#2C6069"/></linearGradient>
+<linearGradient id="g8" x1="-0.060" y1="0" x2="0.440" y2="0.10"><stop offset="0" stop-color="#1B3247"/><stop offset="0.22" stop-color="#8E7A5E"/><stop offset="0.72" stop-color="#8E7A5E"/><stop offset="1" stop-color="#1B3247"/></linearGradient>
+<linearGradient id="g9" x1="0" y1="0" x2="0.8" y2="0.35"><stop offset="0" stop-color="#17304A"/><stop offset="0.55" stop-color="#1B3852"/><stop offset="1" stop-color="#17304A"/></linearGradient>
+<path id="crest-1" d="M -60.0,1140.0 C 81.8,1140.0 43.5,915.0 165.0,915.0 C 291.9,915.0 251.9,1120.0 400.0,1120.0 C 563.8,1120.0 519.6,720.0 660.0,720.0 C 778.8,720.0 741.4,970.0 880.0,970.0"/>
+<path id="crest-2" d="M -60.0,1075.0 C 113.2,1075.0 66.5,1035.0 215.0,1035.0 C 344.6,1035.0 303.8,1300.0 455.0,1300.0 C 618.8,1300.0 574.6,860.0 715.0,860.0 C 804.1,860.0 776.0,1055.0 880.0,1055.0"/>
+<path id="crest-3" d="M -60.0,1005.0 C 76.5,1005.0 32.4,1215.0 150.0,1215.0 C 287.2,1215.0 235.8,1070.0 395.0,1070.0 C 554.2,1070.0 502.8,1285.0 640.0,1285.0 C 774.4,1285.0 724.0,1040.0 880.0,1040.0"/>
+<path id="crest-4" d="M -60.0,1300.0 C 135.3,1300.0 82.6,1195.0 250.0,1195.0 C 420.1,1195.0 366.6,1335.0 565.0,1335.0 C 763.5,1335.0 709.9,1225.0 880.0,1225.0"/>
+<path id="crest-5" d="M -60.0,1372.0 C 106.9,1372.0 61.9,1288.0 205.0,1288.0 C 377.8,1288.0 323.4,1428.0 525.0,1428.0 C 720.3,1428.0 667.6,1305.0 835.0,1305.0 C 859.3,1305.0 851.6,1312.0 880.0,1312.0"/>
+<path id="crest-6" d="M -60.0,1455.0 C 166.8,1455.0 105.6,1368.0 300.0,1368.0 C 467.4,1368.0 414.7,1498.0 610.0,1498.0 C 780.1,1498.0 734.2,1392.0 880.0,1392.0"/>
+<path id="crest-7" d="M -60.0,1528.0 C 122.7,1528.0 73.4,1462.0 230.0,1462.0 C 400.1,1462.0 346.6,1578.0 545.0,1578.0 C 756.0,1578.0 699.1,1478.0 880.0,1478.0"/>
+<path id="crest-8" d="M -60.0,1602.0 C 182.6,1602.0 117.1,1532.0 325.0,1532.0 C 487.0,1532.0 436.0,1655.0 625.0,1655.0 C 785.6,1655.0 742.3,1558.0 880.0,1558.0"/>
+<path id="crest-9" d="M -60.0,1672.0 C 142.9,1672.0 88.1,1618.0 262.0,1618.0 C 436.4,1618.0 381.5,1720.0 585.0,1720.0 C 770.9,1720.0 720.7,1628.0 880.0,1628.0"/>
+<path id="crest-10" d="M -60.0,1742.0 C 192.0,1742.0 124.0,1692.0 340.0,1692.0 C 510.1,1692.0 456.6,1778.0 655.0,1778.0 C 796.8,1778.0 758.5,1706.0 880.0,1706.0"/>
+<filter id="soften" filterUnits="userSpaceOnUse" x="-140" y="-60" width="1080" height="1960"><feGaussianBlur stdDeviation="24"/></filter>
+<clipPath id="bandClip0"><path d="M -60.0,1140.0 C 81.8,1140.0 43.5,915.0 165.0,915.0 C 291.9,915.0 251.9,1120.0 400.0,1120.0 C 563.8,1120.0 519.6,720.0 660.0,720.0 C 778.8,720.0 741.4,970.0 880.0,970.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip1"><path d="M -60.0,1075.0 C 113.2,1075.0 66.5,1035.0 215.0,1035.0 C 344.6,1035.0 303.8,1300.0 455.0,1300.0 C 618.8,1300.0 574.6,860.0 715.0,860.0 C 804.1,860.0 776.0,1055.0 880.0,1055.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip2"><path d="M -60.0,1005.0 C 76.5,1005.0 32.4,1215.0 150.0,1215.0 C 287.2,1215.0 235.8,1070.0 395.0,1070.0 C 554.2,1070.0 502.8,1285.0 640.0,1285.0 C 774.4,1285.0 724.0,1040.0 880.0,1040.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip3"><path d="M -60.0,1300.0 C 135.3,1300.0 82.6,1195.0 250.0,1195.0 C 420.1,1195.0 366.6,1335.0 565.0,1335.0 C 763.5,1335.0 709.9,1225.0 880.0,1225.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip4"><path d="M -60.0,1372.0 C 106.9,1372.0 61.9,1288.0 205.0,1288.0 C 377.8,1288.0 323.4,1428.0 525.0,1428.0 C 720.3,1428.0 667.6,1305.0 835.0,1305.0 C 859.3,1305.0 851.6,1312.0 880.0,1312.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip5"><path d="M -60.0,1455.0 C 166.8,1455.0 105.6,1368.0 300.0,1368.0 C 467.4,1368.0 414.7,1498.0 610.0,1498.0 C 780.1,1498.0 734.2,1392.0 880.0,1392.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip6"><path d="M -60.0,1528.0 C 122.7,1528.0 73.4,1462.0 230.0,1462.0 C 400.1,1462.0 346.6,1578.0 545.0,1578.0 C 756.0,1578.0 699.1,1478.0 880.0,1478.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip7"><path d="M -60.0,1602.0 C 182.6,1602.0 117.1,1532.0 325.0,1532.0 C 487.0,1532.0 436.0,1655.0 625.0,1655.0 C 785.6,1655.0 742.3,1558.0 880.0,1558.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip8"><path d="M -60.0,1672.0 C 142.9,1672.0 88.1,1618.0 262.0,1618.0 C 436.4,1618.0 381.5,1720.0 585.0,1720.0 C 770.9,1720.0 720.7,1628.0 880.0,1628.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="bandClip9"><path d="M -60.0,1742.0 C 192.0,1742.0 124.0,1692.0 340.0,1692.0 C 510.1,1692.0 456.6,1778.0 655.0,1778.0 C 796.8,1778.0 758.5,1706.0 880.0,1706.0 L 880.0,1840 L -60.0,1840 Z"/></clipPath>
+<clipPath id="seaClip"><rect width="800" height="1800"/></clipPath>
+</defs>
+<rect width="800" height="1800" fill="#04070D"/>
+<ellipse cx="650" cy="770" rx="440" ry="310" fill="url(#crestGlow)"/>
+<g clip-path="url(#seaClip)">
+<g filter="url(#paint0)">
+<path d="M -60.0,1140.0 C 81.8,1140.0 43.5,915.0 165.0,915.0 C 291.9,915.0 251.9,1120.0 400.0,1120.0 C 563.8,1120.0 519.6,720.0 660.0,720.0 C 778.8,720.0 741.4,970.0 880.0,970.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g0)"/>
+<g clip-path="url(#bandClip0)"><use href="#crest-1" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-1" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.50" stroke-linecap="round"/>
+<use href="#crest-1" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.23"/>
+</g>
+<g filter="url(#paint1)">
+<path d="M -60.0,1075.0 C 113.2,1075.0 66.5,1035.0 215.0,1035.0 C 344.6,1035.0 303.8,1300.0 455.0,1300.0 C 618.8,1300.0 574.6,860.0 715.0,860.0 C 804.1,860.0 776.0,1055.0 880.0,1055.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g1)"/>
+<g clip-path="url(#bandClip1)"><use href="#crest-2" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-2" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.60" stroke-linecap="round"/>
+<use href="#crest-2" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.27"/>
+</g>
+<g filter="url(#paint0)">
+<path d="M -60.0,1005.0 C 76.5,1005.0 32.4,1215.0 150.0,1215.0 C 287.2,1215.0 235.8,1070.0 395.0,1070.0 C 554.2,1070.0 502.8,1285.0 640.0,1285.0 C 774.4,1285.0 724.0,1040.0 880.0,1040.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g2)"/>
+<g clip-path="url(#bandClip2)"><use href="#crest-3" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-3" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.55" stroke-linecap="round"/>
+<use href="#crest-3" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.25"/>
+</g>
+<g filter="url(#paint1)">
+<path d="M -60.0,1300.0 C 135.3,1300.0 82.6,1195.0 250.0,1195.0 C 420.1,1195.0 366.6,1335.0 565.0,1335.0 C 763.5,1335.0 709.9,1225.0 880.0,1225.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g3)"/>
+<g clip-path="url(#bandClip3)"><use href="#crest-4" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-4" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.72" stroke-linecap="round"/>
+<use href="#crest-4" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.32"/>
+</g>
+<g filter="url(#paint0)">
+<path d="M -60.0,1372.0 C 106.9,1372.0 61.9,1288.0 205.0,1288.0 C 377.8,1288.0 323.4,1428.0 525.0,1428.0 C 720.3,1428.0 667.6,1305.0 835.0,1305.0 C 859.3,1305.0 851.6,1312.0 880.0,1312.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g4)"/>
+<g clip-path="url(#bandClip4)"><use href="#crest-5" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-5" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.58" stroke-linecap="round"/>
+<use href="#crest-5" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.26"/>
+</g>
+<g filter="url(#paint1)">
+<path d="M -60.0,1455.0 C 166.8,1455.0 105.6,1368.0 300.0,1368.0 C 467.4,1368.0 414.7,1498.0 610.0,1498.0 C 780.1,1498.0 734.2,1392.0 880.0,1392.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g5)"/>
+<g clip-path="url(#bandClip5)"><use href="#crest-6" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-6" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.64" stroke-linecap="round"/>
+<use href="#crest-6" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.29"/>
+</g>
+<g filter="url(#paint0)">
+<path d="M -60.0,1528.0 C 122.7,1528.0 73.4,1462.0 230.0,1462.0 C 400.1,1462.0 346.6,1578.0 545.0,1578.0 C 756.0,1578.0 699.1,1478.0 880.0,1478.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g6)"/>
+<g clip-path="url(#bandClip6)"><use href="#crest-7" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-7" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.78" stroke-linecap="round"/>
+<use href="#crest-7" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.35"/>
+</g>
+<g filter="url(#paint1)">
+<path d="M -60.0,1602.0 C 182.6,1602.0 117.1,1532.0 325.0,1532.0 C 487.0,1532.0 436.0,1655.0 625.0,1655.0 C 785.6,1655.0 742.3,1558.0 880.0,1558.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g7)"/>
+<g clip-path="url(#bandClip7)"><use href="#crest-8" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-8" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.62" stroke-linecap="round"/>
+<use href="#crest-8" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.28"/>
+</g>
+<g filter="url(#paint0)">
+<path d="M -60.0,1672.0 C 142.9,1672.0 88.1,1618.0 262.0,1618.0 C 436.4,1618.0 381.5,1720.0 585.0,1720.0 C 770.9,1720.0 720.7,1628.0 880.0,1628.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g8)"/>
+<g clip-path="url(#bandClip8)"><use href="#crest-9" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-9" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.80" stroke-linecap="round"/>
+<use href="#crest-9" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.36"/>
+</g>
+<g filter="url(#paint1)">
+<path d="M -60.0,1742.0 C 192.0,1742.0 124.0,1692.0 340.0,1692.0 C 510.1,1692.0 456.6,1778.0 655.0,1778.0 C 796.8,1778.0 758.5,1706.0 880.0,1706.0 L 880.0,1840 L -60.0,1840 Z" fill="url(#g9)"/>
+<g clip-path="url(#bandClip9)"><use href="#crest-10" fill="none" stroke="#BFD4E2" stroke-width="86" stroke-opacity="0.13" filter="url(#soften)"/></g>
+<use href="#crest-10" fill="none" stroke="#E8DFCA" stroke-width="2.4" stroke-opacity="0.66" stroke-linecap="round"/>
+<use href="#crest-10" fill="none" stroke="#F6F1E4" stroke-width="0.9" stroke-opacity="0.30"/>
+</g>
+<rect width="800" height="640" fill="#04070D"/>
+<rect y="640" width="800" height="260" fill="url(#haze)"/>
+<rect width="800" height="1800" filter="url(#bloom)" opacity="0.20" style="mix-blend-mode:soft-light"/>
+<rect width="800" height="1800" filter="url(#mottle)" opacity="0.20" style="mix-blend-mode:soft-light"/>
+<rect width="800" height="1800" filter="url(#grain)" opacity="0.09" style="mix-blend-mode:overlay"/>
+<rect width="800" height="1800" fill="url(#vignette)"/>
+</g>
+</svg>

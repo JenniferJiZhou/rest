@@ -7,15 +7,65 @@ struct HushDoorView: View {
     let taskText: String
     let onOpenTask: () -> Void
     let onSettings: () -> Void
-    var onInboxSwipeChanged: ((CGFloat) -> Void)?
-    var onInboxSwipeEnded: ((Bool) -> Void)?
+    /// Fired once when a clear upward swipe crosses a small threshold. The swipe
+    /// is only an ignition signal: after this the tide plays its own fixed
+    /// timeline and never reads the finger again.
+    var onInboxSwipeTriggered: (() -> Void)?
     var onOpenCompanion: (() -> Void)?
+    /// Fired by a long press held on the water itself. The breath is offered
+    /// from the place it will happen, so there is no button to find and nothing
+    /// added to the door's surface.
+    var onBreathLongPress: (() -> Void)?
+
+    /// Tiny self-contained "arming" feedback (0…1) as the finger rises toward the
+    /// threshold — a brightening, lifting chevron. Deliberately NOT the water:
+    /// the gesture arms the tide, it does not drag it up.
+    @State private var armProgress: CGFloat = 0
+    /// One-shot latch so a single swipe ignites the tide exactly once, even
+    /// though drag callbacks keep arriving while the finger is still moving.
+    @State private var hasTriggered = false
+    /// Held-press feedback on the water. The only cue is the chevron settling,
+    /// so the door gains no new furniture for a gesture most users never use.
+    @State private var breathPressed = false
+
+    /// A light push is enough — ~44 pt of rise, or a clear upward flick, arms it.
+    /// The user never has to drag the water all the way up.
+    private let triggerDistance: CGFloat = 44
+    private let triggerVelocity: CGFloat = 450
 
     var body: some View {
         GeometryReader { geometry in
             let taskWidth = min(300, geometry.size.width - 88)
 
             ZStack(alignment: .topTrailing) {
+                // The water band, listening for a held press. It sits at the
+                // bottom of the stack so the task text and the controls keep
+                // their taps, and it carries no gesture of its own beyond the
+                // hold — the upward swipe above still reaches the door.
+                if onBreathLongPress != nil {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(
+                            width: geometry.size.width,
+                            height: geometry.size.height * 0.38
+                        )
+                        .position(
+                            x: geometry.size.width * 0.5,
+                            y: geometry.size.height * 0.81
+                        )
+                        .onLongPressGesture(minimumDuration: 0.55) {
+                            breathPressed = false
+                            onBreathLongPress?()
+                        } onPressingChanged: { pressing in
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                breathPressed = pressing
+                            }
+                        }
+                        .accessibilityLabel("跟随潮水呼吸")
+                        .accessibilityHint("长按水面开始")
+                        .accessibilityAddTraits(.isButton)
+                }
+
                 Button(action: onOpenTask) {
                     HushTypewriterText(text: taskText)
                         .frame(
@@ -73,10 +123,16 @@ struct HushDoorView: View {
                 .padding(.top, HushSpacing.md)
                 .padding(.trailing, HushSpacing.lg)
 
-                if onInboxSwipeChanged != nil, onInboxSwipeEnded != nil {
+                if onInboxSwipeTriggered != nil {
                     Image(systemName: "chevron.up")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.48))
+                        .foregroundStyle(
+                            Color.white.opacity(
+                                (0.42 + 0.5 * armProgress) * (breathPressed ? 0.3 : 1)
+                            )
+                        )
+                        .offset(y: -8 * armProgress)
+                        .animation(.easeOut(duration: 0.14), value: armProgress)
                         .position(
                             x: geometry.size.width * 0.5,
                             y: geometry.size.height * 0.93
@@ -85,12 +141,8 @@ struct HushDoorView: View {
 
                     #if os(macOS)
                     HushMacTrackpadSwipeView(
-                        onProgressChanged: { progress in
-                            onInboxSwipeChanged?(progress)
-                        },
-                        onGestureEnded: { shouldComplete in
-                            onInboxSwipeEnded?(shouldComplete)
-                        }
+                        onArmChanged: { arm in armProgress = arm },
+                        onTriggered: fireTrigger
                     )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .allowsHitTesting(false)
@@ -99,49 +151,59 @@ struct HushDoorView: View {
             }
             .contentShape(Rectangle())
             #if !os(macOS)
-            .gesture(
-                DragGesture(minimumDistance: 4)
-                    .onChanged { value in
-                        let upwardDistance = max(
-                            0,
-                            -value.translation.height
-                        )
-                        let progress = min(
-                            0.96,
-                            upwardDistance
-                                / max(1, geometry.size.height * 0.55)
-                        )
-                        onInboxSwipeChanged?(progress)
-                    }
-                    .onEnded { value in
-                        let upwardDistance = max(
-                            0,
-                            -value.translation.height
-                        )
-                        let threshold = geometry.size.height * 0.25
-                        let isPrimarilyVertical =
-                            upwardDistance > abs(value.translation.width)
-                        onInboxSwipeEnded?(
-                            upwardDistance >= threshold
-                                && isPrimarilyVertical
-                        )
-                    }
-            )
+            .gesture(inboxSwipeGesture)
             #endif
         }
     }
+
+    /// Ignite the tide once per swipe, then let its own timeline take over.
+    private func fireTrigger() {
+        guard !hasTriggered else { return }
+        hasTriggered = true
+        armProgress = 0
+        onInboxSwipeTriggered?()
+    }
+
+    #if !os(macOS)
+    private var inboxSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                guard onInboxSwipeTriggered != nil, !hasTriggered else { return }
+
+                let up = max(0, -value.translation.height)
+                let upwardVelocity = max(0, -value.velocity.height)
+                let isPrimarilyVertical = up > abs(value.translation.width)
+
+                // Arm on a light push: a short rise OR a clear upward flick.
+                // Beyond the threshold the finger is ignored entirely — no
+                // distance-to-height mapping, so the water never "follows".
+                if isPrimarilyVertical,
+                   up >= triggerDistance || upwardVelocity >= triggerVelocity {
+                    fireTrigger()
+                } else {
+                    armProgress = min(1, up / triggerDistance)
+                }
+            }
+            .onEnded { _ in
+                // Re-arm for a fresh swipe. A trigger that already fired is not
+                // undone — the tide owns the animation now — and the door is
+                // non-interactive during the transition anyway.
+                hasTriggered = false
+                withAnimation(.easeOut(duration: 0.25)) { armProgress = 0 }
+            }
+    }
+    #endif
 }
 
 #if os(macOS)
 private struct HushMacTrackpadSwipeView: NSViewRepresentable {
-    let onProgressChanged: (CGFloat) -> Void
-    let onGestureEnded: (Bool) -> Void
+    /// Arming feedback (0…1) as the two fingers rise toward the threshold.
+    let onArmChanged: (CGFloat) -> Void
+    /// Fired once per gesture when the rise (or a quick upward flick) arms it.
+    let onTriggered: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(
-            onProgressChanged: onProgressChanged,
-            onGestureEnded: onGestureEnded
-        )
+        Coordinator(onArmChanged: onArmChanged, onTriggered: onTriggered)
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -151,8 +213,8 @@ private struct HushMacTrackpadSwipeView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.onProgressChanged = onProgressChanged
-        context.coordinator.onGestureEnded = onGestureEnded
+        context.coordinator.onArmChanged = onArmChanged
+        context.coordinator.onTriggered = onTriggered
         context.coordinator.monitoredView = nsView
     }
 
@@ -162,18 +224,24 @@ private struct HushMacTrackpadSwipeView: NSViewRepresentable {
 
     final class Coordinator {
         weak var monitoredView: NSView?
-        var onProgressChanged: (CGFloat) -> Void
-        var onGestureEnded: (Bool) -> Void
+        var onArmChanged: (CGFloat) -> Void
+        var onTriggered: () -> Void
 
         private var eventMonitor: Any?
         private var upwardDistance: CGFloat = 0
+        private var hasTriggered = false
+
+        // A light push arms it: ~44 pt of accumulated rise, or a single quick
+        // upward delta (a flick). The finger is never mapped to water height.
+        private let triggerDistance: CGFloat = 44
+        private let flickDelta: CGFloat = 14
 
         init(
-            onProgressChanged: @escaping (CGFloat) -> Void,
-            onGestureEnded: @escaping (Bool) -> Void
+            onArmChanged: @escaping (CGFloat) -> Void,
+            onTriggered: @escaping () -> Void
         ) {
-            self.onProgressChanged = onProgressChanged
-            self.onGestureEnded = onGestureEnded
+            self.onArmChanged = onArmChanged
+            self.onTriggered = onTriggered
         }
 
         func startMonitoring(for view: NSView) {
@@ -202,40 +270,35 @@ private struct HushMacTrackpadSwipeView: NSViewRepresentable {
             }
 
             // Ignore inertial/momentum scrolling that continues after the
-            // fingers lift. Progress must follow the physical two-finger
-            // distance only — projected velocity must never bypass the
-            // completion threshold or hijack a cancelled return.
+            // fingers lift — arming must come from a deliberate physical push.
             guard event.momentumPhase == [] else {
                 return
             }
 
             if event.phase == .began {
                 upwardDistance = 0
-                onProgressChanged(0)
+                hasTriggered = false
+                onArmChanged(0)
             }
 
             let physicalDelta = event.scrollingDeltaY
                 * (event.isDirectionInvertedFromDevice ? 1 : -1)
             upwardDistance = max(0, upwardDistance + physicalDelta)
 
-            let viewHeight = max(
-                1,
-                monitoredView?.bounds.height
-                    ?? monitoredView?.window?.contentView?.bounds.height
-                    ?? 1
-            )
-            let progress = min(
-                0.96,
-                upwardDistance / (viewHeight * 0.55)
-            )
-            onProgressChanged(progress)
+            if !hasTriggered {
+                if upwardDistance >= triggerDistance || physicalDelta >= flickDelta {
+                    hasTriggered = true
+                    onArmChanged(0)
+                    onTriggered()
+                } else {
+                    onArmChanged(min(1, upwardDistance / triggerDistance))
+                }
+            }
 
             if event.phase == .ended || event.phase == .cancelled {
-                let shouldComplete =
-                    event.phase != .cancelled
-                    && upwardDistance >= viewHeight * 0.25
-                onGestureEnded(shouldComplete)
                 upwardDistance = 0
+                hasTriggered = false
+                onArmChanged(0)
             }
         }
     }

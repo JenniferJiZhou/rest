@@ -89,6 +89,7 @@ final class MacUsageMonitoringModel: ObservableObject {
         let reasonCode: String
         let message: String
         let defaultQuestID: String?
+        let generatedTask: GeneratedRestTask?
 
         enum CodingKeys: String, CodingKey {
             case requestID = "request_id"
@@ -96,6 +97,7 @@ final class MacUsageMonitoringModel: ObservableObject {
             case reasonCode = "reason_code"
             case message
             case defaultQuestID = "default_quest_id"
+            case generatedTask = "generated_task"
         }
     }
 
@@ -772,7 +774,7 @@ final class MacUsageMonitoringModel: ObservableObject {
             .appendingPathComponent("evaluate")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 5
+        request.timeoutInterval = 35
         request.httpBody = body
         request.setValue(
             "application/json",
@@ -780,7 +782,7 @@ final class MacUsageMonitoringModel: ObservableObject {
         )
         request.setValue(requestID, forHTTPHeaderField: "X-Request-ID")
         request.setValue("1.0.0", forHTTPHeaderField: "X-Client-Version")
-        request.setValue("1.0", forHTTPHeaderField: "X-Contract-Version")
+        request.setValue("1.1", forHTTPHeaderField: "X-Contract-Version")
 
         Task {
             do {
@@ -801,7 +803,12 @@ final class MacUsageMonitoringModel: ObservableObject {
                     RestSuggestionResponse.self,
                     from: data
                 )
-                guard suggestion.requestID == requestID else {
+                guard
+                    suggestion.requestID == requestID,
+                    suggestion.shouldOfferRest
+                        == (suggestion.generatedTask != nil),
+                    suggestion.defaultQuestID == nil
+                else {
                     agentStatusMessage = "Agent 响应的 request_id 不匹配。"
                     isSendingAgentRequest = false
                     return
@@ -813,16 +820,19 @@ final class MacUsageMonitoringModel: ObservableObject {
                     shouldOfferRest: suggestion.shouldOfferRest,
                     reasonCode: suggestion.reasonCode,
                     message: suggestion.message,
-                    defaultQuestID: suggestion.defaultQuestID
+                    defaultQuestID: suggestion.defaultQuestID,
+                    generatedTask: suggestion.generatedTask
                 )
                 agentStatusMessage = suggestion.shouldOfferRest
                     ? "Agent 建议休息：\(suggestion.message)"
                     : "Agent 建议继续：\(suggestion.message)"
-                if suggestion.shouldOfferRest {
+                if suggestion.shouldOfferRest,
+                   let generatedTask = suggestion.generatedTask
+                {
                     HushMacRestNotificationController.shared
                         .sendRestSuggestion(
                             message: suggestion.message,
-                            questID: suggestion.defaultQuestID,
+                            generatedTask: generatedTask,
                             requestID: suggestion.requestID
                         )
                 }

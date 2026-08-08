@@ -75,6 +75,12 @@
       "maximum": 1440,
       "description": "Mac App continuous usage checkpoint; must not exceed daily_app_usage_minutes."
     },
+    "continuous_screen_usage_minutes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1440,
+      "description": "Optional current Mac whole-screen continuous usage across App switches. When present, it must not be lower than continuous_app_usage_minutes."
+    },
     "target_type": {
       "type": "string",
       "const": "website"
@@ -206,6 +212,11 @@
           },
           {
             "required": [
+              "continuous_screen_usage_minutes"
+            ]
+          },
+          {
+            "required": [
               "website_domain"
             ]
           }
@@ -319,6 +330,11 @@
           },
           {
             "required": [
+              "continuous_screen_usage_minutes"
+            ]
+          },
+          {
+            "required": [
               "raw_app_names_included"
             ]
           }
@@ -353,6 +369,11 @@
           {
             "required": [
               "continuous_usage_is_estimated"
+            ]
+          },
+          {
+            "required": [
+              "continuous_screen_usage_minutes"
             ]
           },
           {

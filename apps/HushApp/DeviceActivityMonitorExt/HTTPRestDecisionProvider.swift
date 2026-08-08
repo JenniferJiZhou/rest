@@ -10,8 +10,23 @@ protocol RestDecisionProviding {
 }
 
 struct RestDecision {
+    let requestID: String
     let shouldOfferRest: Bool
     let message: String
+    let reasonCode: String
+    let generatedTask: GeneratedRestTask?
+}
+
+struct GeneratedRestTask: Codable {
+    let title: String
+    let durationSeconds: Int
+    let steps: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case durationSeconds = "duration_seconds"
+        case steps
+    }
 }
 
 final class HTTPRestDecisionProvider: RestDecisionProviding {
@@ -36,8 +51,8 @@ final class HTTPRestDecisionProvider: RestDecisionProviding {
         self.baseURL = baseURL
 
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 5
-        configuration.timeoutIntervalForResource = 5
+        configuration.timeoutIntervalForRequest = 35
+        configuration.timeoutIntervalForResource = 35
         session = URLSession(configuration: configuration)
     }
 
@@ -73,11 +88,11 @@ final class HTTPRestDecisionProvider: RestDecisionProviding {
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 5
+        request.timeoutInterval = 35
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(requestID, forHTTPHeaderField: "X-Request-ID")
         request.setValue("1.0.0", forHTTPHeaderField: "X-Client-Version")
-        request.setValue("1.0", forHTTPHeaderField: "X-Contract-Version")
+        request.setValue("1.1", forHTTPHeaderField: "X-Contract-Version")
         request.httpBody = try JSONEncoder().encode(payload)
 
         let (data, response) = try await session.data(for: request)
@@ -92,13 +107,21 @@ final class HTTPRestDecisionProvider: RestDecisionProviding {
             RestSuggestionResponse.self,
             from: data
         )
-        guard suggestion.requestID == requestID else {
+        guard
+            suggestion.requestID == requestID,
+            suggestion.shouldOfferRest
+                == (suggestion.generatedTask != nil),
+            suggestion.defaultQuestID == nil
+        else {
             throw ProviderError.invalidResponse
         }
 
         return RestDecision(
+            requestID: suggestion.requestID,
             shouldOfferRest: suggestion.shouldOfferRest,
-            message: suggestion.message
+            message: suggestion.message,
+            reasonCode: suggestion.reasonCode,
+            generatedTask: suggestion.generatedTask
         )
     }
 }
@@ -145,10 +168,16 @@ private struct RestSuggestionResponse: Decodable {
     let requestID: String
     let shouldOfferRest: Bool
     let message: String
+    let reasonCode: String
+    let generatedTask: GeneratedRestTask?
+    let defaultQuestID: String?
 
     enum CodingKeys: String, CodingKey {
         case requestID = "request_id"
         case shouldOfferRest = "should_offer_rest"
         case message
+        case reasonCode = "reason_code"
+        case generatedTask = "generated_task"
+        case defaultQuestID = "default_quest_id"
     }
 }

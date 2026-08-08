@@ -5,6 +5,8 @@ DerivedData/
 xcuserdata/
 .build/
 .swiftpm/
+apps/HushApp/build/
+/.worktrees/
 
 # Node
 node_modules/
@@ -28,6 +30,8 @@ logs/
 # IDE
 .vscode/
 .idea/
+.superpowers/brainstorm/
+.Rhistory
 
 # Demo artifacts
 demo-output/

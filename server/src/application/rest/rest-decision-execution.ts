@@ -207,6 +207,12 @@ function normalizeParsedContext(
     usage: {
       dailyMinutes: daily,
       continuousMinutes: continuous,
+      continuousScreenMinutes:
+        sourceFormat === "legacy"
+          ? request.continuous_screen_minutes ?? null
+          : request.trigger_source === "macos_usage_checkpoint"
+            ? request.continuous_screen_usage_minutes ?? null
+            : null,
       continuousIsEstimated:
         sourceFormat === "current"
           ? request.continuous_usage_is_estimated ?? false

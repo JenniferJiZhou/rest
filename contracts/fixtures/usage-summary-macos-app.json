@@ -7,6 +7,7 @@
   "user_provided_context_label": "写作",
   "daily_app_usage_minutes": 60,
   "continuous_app_usage_minutes": 12,
+  "continuous_screen_usage_minutes": 38,
   "continuous_usage_is_estimated": false,
   "app_switches_last_10_minutes": 3,
   "local_hour": 14,

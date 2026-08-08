@@ -665,25 +665,40 @@ private struct HushAlwaysOnCompanionExperienceView: View {
     @State private var isCompletingExit = false
     @State private var collapseTask: Task<Void, Never>?
 
+    /// A light push arms the exit — the same feel as the main page's swipe: ~44 pt
+    /// of rise, or a clear upward flick. The finger is never mapped to the water.
+    private let exitTriggerDistance: CGFloat = 44
+    private let exitTriggerVelocity: CGFloat = 450
+
     let onClose: () -> Void
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                HushWaveBackground(revealProgress: exitProgress)
+                HushCompanionBackground(
+                    exitProgress: exitProgress,
+                    readingLower: model.phase == .resting
+                        ? 0.4
+                        : (isShowingWorkDetails ? 1 : 0)
+                )
 
-                if model.phase == .resting {
-                    restTaskContent
-                        .padding(.horizontal, 30)
-                        .transition(.opacity)
-                } else if isShowingWorkDetails {
-                    workDetailsContent
-                        .padding(.horizontal, 24)
-                        .transition(.opacity)
-                } else {
-                    idleTimer
-                        .transition(.opacity)
+                Group {
+                    if model.phase == .resting {
+                        restTaskContent
+                            .padding(.horizontal, 30)
+                            .transition(.opacity)
+                    } else if isShowingWorkDetails {
+                        workDetailsContent
+                            .padding(.horizontal, 24)
+                            .transition(.opacity)
+                    } else {
+                        idleTimer
+                            .transition(.opacity)
+                    }
                 }
+                // Let the foreground recede as the tide rises, so the exit reads
+                // as ocean, not ocean-plus-UI.
+                .opacity(1 - Double(min(exitProgress * 1.7, 1)))
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -785,77 +800,95 @@ private struct HushAlwaysOnCompanionExperienceView: View {
     }
 
     private var restTaskContent: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            if let intro = model.suggestionIntro {
-                HushCompanionTypewriterText(text: intro)
-                    .font(.system(size: 24, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.9))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        // The task is part of the atmosphere: no card, no title-card, no big
+        // symbol. The lead-in and task sit slightly above and to the left of the
+        // curve, which has settled just below to make a clean reading area.
+        GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: 18) {
+                if let intro = model.suggestionIntro {
+                    HushCompanionTypewriterText(text: intro)
+                        .font(.system(size: 23, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .lineSpacing(7)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            if let quest = model.selectedQuest {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(quest.title)
-                        .font(.title3.weight(.semibold))
+                if let quest = model.selectedQuest {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(quest.title)
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(Color.white.opacity(0.9))
 
-                    Text(quest.durationLabel)
-                        .font(.caption)
-                        .foregroundStyle(Color.white.opacity(0.5))
+                        Text(quest.durationLabel)
+                            .font(.caption)
+                            .tracking(0.6)
+                            .foregroundStyle(Color.white.opacity(0.46))
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(
-                            Array(quest.steps.enumerated()),
-                            id: \.offset
-                        ) { index, step in
-                            Text("\(index + 1). \(step)")
+                        VStack(alignment: .leading, spacing: 9) {
+                            ForEach(
+                                Array(quest.steps.enumerated()),
+                                id: \.offset
+                            ) { index, step in
+                                Text("\(index + 1). \(step)")
+                            }
                         }
+                        .font(.callout)
+                        .lineSpacing(5)
+                        .foregroundStyle(Color.white.opacity(0.72))
                     }
-                    .font(.body)
-                    .foregroundStyle(Color.white.opacity(0.82))
                 }
-            }
 
-            Button("我休息好了") {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    model.finishRest()
-                    isShowingWorkDetails = false
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        model.finishRest()
+                        isShowingWorkDetails = false
+                    }
+                } label: {
+                    Text("我休息好了")
+                        .font(.callout)
+                        .foregroundStyle(Color.white.opacity(0.66))
                 }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
             }
-            .buttonStyle(HushCompanionPrimaryButtonStyle())
+            .frame(
+                width: min(geometry.size.width * 0.72, 360),
+                alignment: .leading
+            )
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .topLeading
+            )
+            .padding(.leading, 2)
+            .padding(.top, geometry.size.height * 0.16)
         }
-        .frame(maxWidth: 420, maxHeight: .infinity, alignment: .center)
+        .contentShape(Rectangle())
         .onTapGesture {
             model.acknowledgeRestTask()
         }
     }
 
     private func exitGesture(in size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 12)
+        // The swipe is only an ignition signal — mirroring the main page's
+        // `onInboxSwipeTriggered`. A short rise, or a clear upward flick, from
+        // the lower half arms the exit exactly once; from then on the tide plays
+        // its own timeline and the finger is ignored. A below-threshold release
+        // does nothing (no water follows the finger, no exit) because the water
+        // is never mapped to drag distance in the first place.
+        DragGesture(minimumDistance: 8)
             .onChanged { value in
-                guard isValidExitDrag(value, in: size) else { return }
-                collapseTask?.cancel()
-                let distance = -value.translation.height
-                exitProgress = min(
-                    1,
-                    max(0, distance / (size.height * 0.58))
-                )
-            }
-            .onEnded { value in
-                guard isValidExitDrag(value, in: size) else { return }
-                let threshold = size.height * 0.25
-                if -value.translation.height >= threshold {
-                    completeExit()
-                } else {
-                    withAnimation(
-                        .easeOut(duration: reduceMotion ? 0.15 : 0.72)
-                    ) {
-                        exitProgress = 0
-                    }
+                guard isExitTriggerEligible(value, in: size) else { return }
+                let rise = -value.translation.height
+                let upwardVelocity = -value.velocity.height
+                if rise >= exitTriggerDistance
+                    || upwardVelocity >= exitTriggerVelocity {
+                    startExit()
                 }
             }
     }
 
-    private func isValidExitDrag(
+    private func isExitTriggerEligible(
         _ value: DragGesture.Value,
         in size: CGSize
     ) -> Bool {
@@ -899,13 +932,30 @@ private struct HushAlwaysOnCompanionExperienceView: View {
         }
     }
 
-    private func completeExit() {
+    /// Fired once when the swipe arms it. From here the exit is autonomous: a
+    /// single `withAnimation` drives `exitProgress` 0 → 1 monotonically on its
+    /// own clock, `isCompletingExit` blocks any re-trigger / tap / long-press,
+    /// and nothing reads the finger again — a finger held, released, or pulled
+    /// back down cannot reverse or cancel it.
+    private func startExit() {
+        guard !isCompletingExit else { return }
         isCompletingExit = true
         collapseTask?.cancel()
-        let duration = reduceMotion ? 0.2 : 1.35
-        withAnimation(.easeInOut(duration: duration)) {
+
+        // Normal mode reuses the main page's tide: the same duration and the
+        // same velocity curve (`HushTideTimeline.tideProgress`'s bezier), so the
+        // two exits share one calm rhythm. Reduce Motion keeps the quick path.
+        let duration = reduceMotion
+            ? 0.2
+            : Double(HushTideTimeline.tideDuration)
+        let animation: Animation = reduceMotion
+            ? .easeInOut(duration: duration)
+            : .timingCurve(0.12, 0.16, 0.62, 1.0, duration: duration)
+
+        withAnimation(animation) {
             exitProgress = 1
         }
+
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(duration))
             guard !Task.isCancelled else { return }

@@ -118,6 +118,7 @@ export interface AgentLLM {
 export interface NormalizedUsageSignals {
   dailyMinutes: number | null;
   continuousMinutes: number;
+  continuousScreenMinutes: number | null;
   continuousIsEstimated: boolean;
 }
 
