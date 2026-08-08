@@ -7,23 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A50000000000000000000001 /* UnifiedInboxTransportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000001 /* UnifiedInboxTransportModels.swift */; };
-		A50000000000000000000002 /* UnifiedInboxTransportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000001 /* UnifiedInboxTransportModels.swift */; };
-		A50000000000000000000003 /* UnifiedInboxTransportModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000002 /* UnifiedInboxTransportModelsTests.swift */; };
-		A50000000000000000000004 /* inbox-item-enriched-demo.json in Resources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000003 /* inbox-item-enriched-demo.json */; };
-		A50000000000000000000005 /* inbox-group-digest-demo.json in Resources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000004 /* inbox-group-digest-demo.json */; };
-		A50000000000000000000006 /* inbox-draft-edited-demo.json in Resources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000005 /* inbox-draft-edited-demo.json */; };
-		A50000000000000000000007 /* UnifiedInboxAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000006 /* UnifiedInboxAPIClientTests.swift */; };
-		A50000000000000000000008 /* UnifiedInboxConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000007 /* UnifiedInboxConfiguration.swift */; };
-		A50000000000000000000009 /* UnifiedInboxConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000007 /* UnifiedInboxConfiguration.swift */; };
-		A50000000000000000000010 /* UnifiedInboxAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000008 /* UnifiedInboxAPIClient.swift */; };
-		A50000000000000000000011 /* UnifiedInboxAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000008 /* UnifiedInboxAPIClient.swift */; };
-		A50000000000000000000012 /* UnifiedInboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000009 /* UnifiedInboxStore.swift */; };
-		A50000000000000000000013 /* UnifiedInboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000009 /* UnifiedInboxStore.swift */; };
-		A50000000000000000000014 /* UnifiedInboxStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000010 /* UnifiedInboxStoreTests.swift */; };
-		A50000000000000000000015 /* UnifiedInboxConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000011 /* UnifiedInboxConnectionView.swift */; };
-		A50000000000000000000016 /* UnifiedInboxConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000011 /* UnifiedInboxConnectionView.swift */; };
-		A50000000000000000000017 /* UnifiedInboxModeCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000012 /* UnifiedInboxModeCoordinatorTests.swift */; };
 		A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* iOSApp/App/HushApp.swift */; };
 		A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* Shared/Core/HushProduct.swift */; };
 		A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */; };
@@ -48,6 +31,9 @@
 		A00000000000000000000022 /* Shared/Core/HushLockdownState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */; };
 		A00000000000000000000023 /* iOSApp/Platform/LockdownCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */; };
 		A00000000000000000000024 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */; };
+		A30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift */; };
+		A30000000000000000000002 /* Shared/Core/Networking/HushCompanionPeerSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift */; };
+		A30000000000000000000003 /* iOSApp/Platform/HushCompanionRestAgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000002 /* iOSApp/Platform/HushCompanionRestAgentService.swift */; };
 		A10000000000000000000001 /* HushComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* HushComponents.swift */; };
 		A10000000000000000000002 /* HushComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* HushComponents.swift */; };
 		A10000000000000000000003 /* HushTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* HushTokens.swift */; };
@@ -92,11 +78,14 @@
 		A10000000000000000000042 /* safety-rules.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* safety-rules.json */; };
 		A10000000000000000000043 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
 		A10000000000000000000044 /* UnifiedInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* UnifiedInboxView.swift */; };
-		A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000024 /* HushTestTargetSmokeTests.swift */; };
-		A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000026 /* HushTideTimelineTests.swift */; };
-		A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000028 /* HushDoorTriggerTests.swift */; };
-		A00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift */; };
-		A00000000000000000000030 /* HushSleepExitPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000030 /* HushSleepExitPolicyTests.swift */; };
+		A20000000000000000000003 /* hush-wave-keyframe-01.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* hush-wave-keyframe-01.png */; };
+		A20000000000000000000004 /* hush-wave-keyframe-01.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* hush-wave-keyframe-01.png */; };
+		A20000000000000000000005 /* hush-wave-keyframe-02.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* hush-wave-keyframe-02.png */; };
+		A20000000000000000000006 /* hush-wave-keyframe-02.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* hush-wave-keyframe-02.png */; };
+		A20000000000000000000007 /* hush-wave-keyframe-03.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* hush-wave-keyframe-03.png */; };
+		A20000000000000000000008 /* hush-wave-keyframe-03.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* hush-wave-keyframe-03.png */; };
+		A20000000000000000000009 /* hush-wave-keyframe-04.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* hush-wave-keyframe-04.png */; };
+		A20000000000000000000010 /* hush-wave-keyframe-04.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* hush-wave-keyframe-04.png */; };
 		A20000000000000000000011 /* hush-companion-idle.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* hush-companion-idle.png */; };
 		A20000000000000000000012 /* hush-companion-idle.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* hush-companion-idle.png */; };
 		A20000000000000000000013 /* hush-companion-ocean-a.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* hush-companion-ocean-a.png */; };
@@ -109,10 +98,10 @@
 		A20000000000000000000020 /* hush-sleep-tide.png in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000010 /* hush-sleep-tide.png */; };
 		A40000000000000000000001 /* HushWaveShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000001 /* HushWaveShaders.metal */; };
 		A40000000000000000000002 /* HushWaveShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B40000000000000000000001 /* HushWaveShaders.metal */; };
-		A30000000000000000000001 /* HushBreathTideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000001 /* HushBreathTideView.swift */; };
-		A30000000000000000000002 /* HushBreathTideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000001 /* HushBreathTideView.swift */; };
-		A30000000000000000000003 /* HushBreathShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000002 /* HushBreathShaders.metal */; };
-		A30000000000000000000004 /* HushBreathShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B30000000000000000000002 /* HushBreathShaders.metal */; };
+		A50000000000000000000001 /* HushBreathTideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000001 /* HushBreathTideView.swift */; };
+		A50000000000000000000002 /* HushBreathTideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000001 /* HushBreathTideView.swift */; };
+		A50000000000000000000003 /* HushBreathShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000002 /* HushBreathShaders.metal */; };
+		A50000000000000000000004 /* HushBreathShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000002 /* HushBreathShaders.metal */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -129,13 +118,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = E00000000000000000000004;
 			remoteInfo = HushRestLiveActivity;
-		};
-		I00000000000000000000003 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = F00000000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = E00000000000000000000001;
-			remoteInfo = Hush;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -155,18 +137,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		B50000000000000000000001 /* UnifiedInboxTransportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxTransportModels.swift; sourceTree = SOURCE_ROOT; };
-		B50000000000000000000002 /* UnifiedInboxTransportModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedInboxTransportModelsTests.swift; sourceTree = "<group>"; };
-		B50000000000000000000003 /* inbox-item-enriched-demo.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../../contracts/fixtures/inbox-item-enriched-demo.json; sourceTree = "<group>"; };
-		B50000000000000000000004 /* inbox-group-digest-demo.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../../contracts/fixtures/inbox-group-digest-demo.json; sourceTree = "<group>"; };
-		B50000000000000000000005 /* inbox-draft-edited-demo.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../../contracts/fixtures/inbox-draft-edited-demo.json; sourceTree = "<group>"; };
-		B50000000000000000000006 /* UnifiedInboxAPIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedInboxAPIClientTests.swift; sourceTree = "<group>"; };
-		B50000000000000000000007 /* UnifiedInboxConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxConfiguration.swift; sourceTree = SOURCE_ROOT; };
-		B50000000000000000000008 /* UnifiedInboxAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxAPIClient.swift; sourceTree = SOURCE_ROOT; };
-		B50000000000000000000009 /* UnifiedInboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxStore.swift; sourceTree = SOURCE_ROOT; };
-		B50000000000000000000010 /* UnifiedInboxStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedInboxStoreTests.swift; sourceTree = "<group>"; };
-		B50000000000000000000011 /* UnifiedInboxConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxConnectionView.swift; sourceTree = SOURCE_ROOT; };
-		B50000000000000000000012 /* UnifiedInboxModeCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedInboxModeCoordinatorTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000001 /* iOSApp/App/HushApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/App/HushApp.swift; sourceTree = "<group>"; };
 		B00000000000000000000002 /* iOSApp/Hush.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iOSApp/Hush.entitlements; sourceTree = "<group>"; };
 		B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/App/HushMacApp.swift; sourceTree = "<group>"; };
@@ -190,6 +160,8 @@
 		B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Core/HushLockdownState.swift; sourceTree = "<group>"; };
 		B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/LockdownCoordinator.swift; sourceTree = "<group>"; };
 		B00000000000000000000023 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacMenuBar/Platform/MacWebsiteMonitoringModel.swift; sourceTree = "<group>"; };
+		B30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Core/Networking/HushCompanionPeerSync.swift; sourceTree = "<group>"; };
+		B30000000000000000000002 /* iOSApp/Platform/HushCompanionRestAgentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp/Platform/HushCompanionRestAgentService.swift; sourceTree = "<group>"; };
 		B10000000000000000000001 /* HushComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/HushComponents.swift; sourceTree = "<group>"; };
 		B10000000000000000000002 /* HushTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/HushTokens.swift; sourceTree = "<group>"; };
 		B10000000000000000000003 /* HushWaveBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/DesignSystem/Wave/HushWaveBackground.swift; sourceTree = "<group>"; };
@@ -212,24 +184,22 @@
 		B10000000000000000000020 /* bluebox-cards.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/bluebox-cards.json; sourceTree = "<group>"; };
 		B10000000000000000000021 /* safety-rules.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../content/safety-rules.json; sourceTree = "<group>"; };
 		B10000000000000000000022 /* UnifiedInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxView.swift; sourceTree = "<group>"; };
-		B00000000000000000000024 /* HushTestTargetSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushTestTargetSmokeTests.swift; sourceTree = "<group>"; };
-		B00000000000000000000026 /* HushTideTimelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushTideTimelineTests.swift; sourceTree = "<group>"; };
-		B00000000000000000000028 /* HushDoorTriggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushDoorTriggerTests.swift; sourceTree = "<group>"; };
-		B00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushDemoStoreDynamicRestTests.swift; sourceTree = "<group>"; };
-		B00000000000000000000030 /* HushSleepExitPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushSleepExitPolicyTests.swift; sourceTree = "<group>"; };
+		B20000000000000000000002 /* hush-wave-keyframe-01.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-wave-keyframe-01.png; sourceTree = "<group>"; };
+		B20000000000000000000003 /* hush-wave-keyframe-02.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-wave-keyframe-02.png; sourceTree = "<group>"; };
+		B20000000000000000000004 /* hush-wave-keyframe-03.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-wave-keyframe-03.png; sourceTree = "<group>"; };
+		B20000000000000000000005 /* hush-wave-keyframe-04.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-wave-keyframe-04.png; sourceTree = "<group>"; };
 		B20000000000000000000006 /* hush-companion-idle.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-idle.png; sourceTree = "<group>"; };
 		B20000000000000000000007 /* hush-companion-ocean-a.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-ocean-a.png; sourceTree = "<group>"; };
 		B20000000000000000000008 /* hush-companion-ocean-b.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-ocean-b.png; sourceTree = "<group>"; };
 		B20000000000000000000009 /* hush-companion-ocean-c.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-companion-ocean-c.png; sourceTree = "<group>"; };
 		B20000000000000000000010 /* hush-sleep-tide.png */ = {isa = PBXFileReference; explicitFileType = file; path = Shared/DesignSystem/Wave/Assets/hush-sleep-tide.png; sourceTree = "<group>"; };
-		B40000000000000000000001 /* HushWaveShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shared/DesignSystem/Wave/HushWaveShaders.metal; sourceTree = "<group>"; };
-		B30000000000000000000001 /* HushBreathTideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/BreathTide/HushBreathTideView.swift; sourceTree = "<group>"; };
-		B30000000000000000000002 /* HushBreathShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shared/Features/BreathTide/HushBreathShaders.metal; sourceTree = "<group>"; };
 		B00000000000000000000101 /* Hush.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hush.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000102 /* HushMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HushMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000103 /* HushDeviceActivityMonitor.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushDeviceActivityMonitor.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000104 /* HushRestLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HushRestLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		B00000000000000000000105 /* HushTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HushTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B40000000000000000000001 /* HushWaveShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shared/DesignSystem/Wave/HushWaveShaders.metal; sourceTree = "<group>"; };
+		B50000000000000000000001 /* HushBreathTideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/BreathTide/HushBreathTideView.swift; sourceTree = "<group>"; };
+		B50000000000000000000002 /* HushBreathShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shared/Features/BreathTide/HushBreathShaders.metal; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -261,13 +231,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D00000000000000000000402 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -279,7 +242,6 @@
 				C00000000000000000000005 /* MacMenuBar */,
 				C00000000000000000000006 /* DeviceActivityMonitorExt */,
 				C00000000000000000000007 /* RestLiveActivityWidget */,
-				C00000000000000000000008 /* HushTests */,
 				C10000000000000000000003 /* Content */,
 				C00000000000000000000002 /* Products */,
 			);
@@ -292,7 +254,6 @@
 				B00000000000000000000102 /* HushMac.app */,
 				B00000000000000000000103 /* HushDeviceActivityMonitor.appex */,
 				B00000000000000000000104 /* HushRestLiveActivity.appex */,
-				B00000000000000000000105 /* HushTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -303,6 +264,7 @@
 				B00000000000000000000004 /* Shared/Core/HushProduct.swift */,
 				B00000000000000000000015 /* Shared/Core/HushRestActivityAttributes.swift */,
 				B00000000000000000000021 /* Shared/Core/HushLockdownState.swift */,
+				B30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift */,
 				C10000000000000000000001 /* DesignSystem */,
 				C10000000000000000000002 /* Features */,
 			);
@@ -322,6 +284,7 @@
 				B00000000000000000000017 /* iOSApp/Platform/InterruptionModeModel.swift */,
 				B00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift */,
 				B00000000000000000000022 /* iOSApp/Platform/LockdownCoordinator.swift */,
+				B30000000000000000000002 /* iOSApp/Platform/HushCompanionRestAgentService.swift */,
 				B00000000000000000000002 /* iOSApp/Hush.entitlements */,
 			);
 			name = iOSApp;
@@ -357,25 +320,6 @@
 			name = RestLiveActivityWidget;
 			sourceTree = "<group>";
 		};
-		C00000000000000000000008 /* HushTests */ = {
-			isa = PBXGroup;
-			children = (
-				B50000000000000000000012 /* UnifiedInboxModeCoordinatorTests.swift */,
-				B50000000000000000000010 /* UnifiedInboxStoreTests.swift */,
-				B50000000000000000000002 /* UnifiedInboxTransportModelsTests.swift */,
-				B50000000000000000000006 /* UnifiedInboxAPIClientTests.swift */,
-				B50000000000000000000003 /* inbox-item-enriched-demo.json */,
-				B50000000000000000000004 /* inbox-group-digest-demo.json */,
-				B50000000000000000000005 /* inbox-draft-edited-demo.json */,
-				B00000000000000000000024 /* HushTestTargetSmokeTests.swift */,
-				B00000000000000000000026 /* HushTideTimelineTests.swift */,
-				B00000000000000000000028 /* HushDoorTriggerTests.swift */,
-				B00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift */,
-				B00000000000000000000030 /* HushSleepExitPolicyTests.swift */,
-			);
-			path = HushTests;
-			sourceTree = "<group>";
-		};
 		C10000000000000000000001 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
@@ -383,6 +327,10 @@
 				B10000000000000000000002 /* HushTokens.swift */,
 				B10000000000000000000003 /* HushWaveBackground.swift */,
 				B40000000000000000000001 /* HushWaveShaders.metal */,
+				B20000000000000000000002 /* hush-wave-keyframe-01.png */,
+				B20000000000000000000003 /* hush-wave-keyframe-02.png */,
+				B20000000000000000000004 /* hush-wave-keyframe-03.png */,
+				B20000000000000000000005 /* hush-wave-keyframe-04.png */,
 				B20000000000000000000006 /* hush-companion-idle.png */,
 				B20000000000000000000007 /* hush-companion-ocean-a.png */,
 				B20000000000000000000008 /* hush-companion-ocean-b.png */,
@@ -395,11 +343,6 @@
 		C10000000000000000000002 /* Features */ = {
 			isa = PBXGroup;
 			children = (
-				B50000000000000000000001 /* UnifiedInboxTransportModels.swift */,
-				B50000000000000000000007 /* UnifiedInboxConfiguration.swift */,
-				B50000000000000000000008 /* UnifiedInboxAPIClient.swift */,
-				B50000000000000000000009 /* UnifiedInboxStore.swift */,
-				B50000000000000000000011 /* UnifiedInboxConnectionView.swift */,
 				B10000000000000000000004 /* DayResetView.swift */,
 				B10000000000000000000005 /* HushDemoRootView.swift */,
 				B10000000000000000000006 /* HushDemoStandalone.swift */,
@@ -408,14 +351,14 @@
 				B10000000000000000000009 /* RestFeedbackView.swift */,
 				B10000000000000000000010 /* GuidedDriftView.swift */,
 				B10000000000000000000011 /* HushDoorView.swift */,
-				B30000000000000000000001 /* HushBreathTideView.swift */,
-				B30000000000000000000002 /* HushBreathShaders.metal */,
 				B10000000000000000000012 /* HushRestContent.swift */,
 				B10000000000000000000013 /* RestQuestView.swift */,
 				B10000000000000000000014 /* BlueResetView.swift */,
 				B10000000000000000000015 /* PauseReceiptView.swift */,
 				B10000000000000000000016 /* SleepHandoffView.swift */,
 				B10000000000000000000022 /* UnifiedInboxView.swift */,
+				B50000000000000000000001 /* HushBreathTideView.swift */,
+				B50000000000000000000002 /* HushBreathShaders.metal */,
 			);
 			name = Features;
 			sourceTree = "<group>";
@@ -506,24 +449,6 @@
 			productReference = B00000000000000000000104 /* HushRestLiveActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		E00000000000000000000005 /* HushTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = G00000000000000000000503 /* Build configuration list for PBXNativeTarget "HushTests" */;
-			buildPhases = (
-				D00000000000000000000401 /* Sources */,
-				D00000000000000000000402 /* Frameworks */,
-				D00000000000000000000403 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				H00000000000000000000003 /* PBXTargetDependency */,
-			);
-			name = HushTests;
-			productName = HushTests;
-			productReference = B00000000000000000000105 /* HushTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -562,10 +487,6 @@
 					E00000000000000000000004 = {
 						CreatedOnToolsVersion = 16.0;
 					};
-					E00000000000000000000005 = {
-						CreatedOnToolsVersion = 16.0;
-						TestTargetID = E00000000000000000000001;
-					};
 				};
 			};
 			buildConfigurationList = G00000000000000000000003 /* Build configuration list for PBXProject "Hush" */;
@@ -585,7 +506,6 @@
 				E00000000000000000000002 /* HushMac */,
 				E00000000000000000000003 /* HushDeviceActivityMonitor */,
 				E00000000000000000000004 /* HushRestLiveActivity */,
-				E00000000000000000000005 /* HushTests */,
 			);
 		};
 /* End PBXProject section */
@@ -600,6 +520,10 @@
 				A10000000000000000000037 /* drift-prompts.json in Resources */,
 				A10000000000000000000039 /* bluebox-cards.json in Resources */,
 				A10000000000000000000041 /* safety-rules.json in Resources */,
+				A20000000000000000000003 /* hush-wave-keyframe-01.png in Resources */,
+				A20000000000000000000005 /* hush-wave-keyframe-02.png in Resources */,
+				A20000000000000000000007 /* hush-wave-keyframe-03.png in Resources */,
+				A20000000000000000000009 /* hush-wave-keyframe-04.png in Resources */,
 				A20000000000000000000011 /* hush-companion-idle.png in Resources */,
 				A20000000000000000000013 /* hush-companion-ocean-a.png in Resources */,
 				A20000000000000000000015 /* hush-companion-ocean-b.png in Resources */,
@@ -617,6 +541,10 @@
 				A10000000000000000000038 /* drift-prompts.json in Resources */,
 				A10000000000000000000040 /* bluebox-cards.json in Resources */,
 				A10000000000000000000042 /* safety-rules.json in Resources */,
+				A20000000000000000000004 /* hush-wave-keyframe-01.png in Resources */,
+				A20000000000000000000006 /* hush-wave-keyframe-02.png in Resources */,
+				A20000000000000000000008 /* hush-wave-keyframe-03.png in Resources */,
+				A20000000000000000000010 /* hush-wave-keyframe-04.png in Resources */,
 				A20000000000000000000012 /* hush-companion-idle.png in Resources */,
 				A20000000000000000000014 /* hush-companion-ocean-a.png in Resources */,
 				A20000000000000000000016 /* hush-companion-ocean-b.png in Resources */,
@@ -639,16 +567,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D00000000000000000000403 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				A50000000000000000000004 /* inbox-item-enriched-demo.json in Resources */,
-				A50000000000000000000005 /* inbox-group-digest-demo.json in Resources */,
-				A50000000000000000000006 /* inbox-draft-edited-demo.json in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -656,11 +574,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A50000000000000000000001 /* UnifiedInboxTransportModels.swift in Sources */,
-				A50000000000000000000008 /* UnifiedInboxConfiguration.swift in Sources */,
-				A50000000000000000000010 /* UnifiedInboxAPIClient.swift in Sources */,
-				A50000000000000000000012 /* UnifiedInboxStore.swift in Sources */,
-				A50000000000000000000015 /* UnifiedInboxConnectionView.swift in Sources */,
 				A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */,
 				A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */,
 				A00000000000000000000009 /* iOSApp/Platform/FamilyControlsAuthorizationModel.swift in Sources */,
@@ -674,6 +587,8 @@
 				A00000000000000000000018 /* iOSApp/Platform/AgentConnectionSettingsModel.swift in Sources */,
 				A00000000000000000000021 /* Shared/Core/HushLockdownState.swift in Sources */,
 				A00000000000000000000023 /* iOSApp/Platform/LockdownCoordinator.swift in Sources */,
+				A30000000000000000000001 /* Shared/Core/Networking/HushCompanionPeerSync.swift in Sources */,
+				A30000000000000000000003 /* iOSApp/Platform/HushCompanionRestAgentService.swift in Sources */,
 				A10000000000000000000001 /* HushComponents.swift in Sources */,
 				A10000000000000000000003 /* HushTokens.swift in Sources */,
 				A10000000000000000000005 /* HushWaveBackground.swift in Sources */,
@@ -686,14 +601,14 @@
 				A10000000000000000000017 /* RestFeedbackView.swift in Sources */,
 				A10000000000000000000019 /* GuidedDriftView.swift in Sources */,
 				A10000000000000000000021 /* HushDoorView.swift in Sources */,
-				A30000000000000000000001 /* HushBreathTideView.swift in Sources */,
-				A30000000000000000000003 /* HushBreathShaders.metal in Sources */,
 				A10000000000000000000023 /* HushRestContent.swift in Sources */,
 				A10000000000000000000025 /* RestQuestView.swift in Sources */,
 				A10000000000000000000027 /* BlueResetView.swift in Sources */,
 				A10000000000000000000029 /* PauseReceiptView.swift in Sources */,
 				A10000000000000000000031 /* SleepHandoffView.swift in Sources */,
 				A10000000000000000000043 /* UnifiedInboxView.swift in Sources */,
+				A50000000000000000000001 /* HushBreathTideView.swift in Sources */,
+				A50000000000000000000003 /* HushBreathShaders.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -701,15 +616,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A50000000000000000000002 /* UnifiedInboxTransportModels.swift in Sources */,
-				A50000000000000000000009 /* UnifiedInboxConfiguration.swift in Sources */,
-				A50000000000000000000011 /* UnifiedInboxAPIClient.swift in Sources */,
-				A50000000000000000000013 /* UnifiedInboxStore.swift in Sources */,
-				A50000000000000000000016 /* UnifiedInboxConnectionView.swift in Sources */,
 				A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */,
 				A00000000000000000000004 /* Shared/Core/HushProduct.swift in Sources */,
 				A00000000000000000000020 /* MacMenuBar/Platform/MacUsageMonitoringModel.swift in Sources */,
 				A00000000000000000000024 /* MacMenuBar/Platform/MacWebsiteMonitoringModel.swift in Sources */,
+				A30000000000000000000002 /* Shared/Core/Networking/HushCompanionPeerSync.swift in Sources */,
 				A10000000000000000000002 /* HushComponents.swift in Sources */,
 				A10000000000000000000004 /* HushTokens.swift in Sources */,
 				A10000000000000000000006 /* HushWaveBackground.swift in Sources */,
@@ -722,14 +633,14 @@
 				A10000000000000000000018 /* RestFeedbackView.swift in Sources */,
 				A10000000000000000000020 /* GuidedDriftView.swift in Sources */,
 				A10000000000000000000022 /* HushDoorView.swift in Sources */,
-				A30000000000000000000002 /* HushBreathTideView.swift in Sources */,
-				A30000000000000000000004 /* HushBreathShaders.metal in Sources */,
 				A10000000000000000000024 /* HushRestContent.swift in Sources */,
 				A10000000000000000000026 /* RestQuestView.swift in Sources */,
 				A10000000000000000000028 /* BlueResetView.swift in Sources */,
 				A10000000000000000000030 /* PauseReceiptView.swift in Sources */,
 				A10000000000000000000032 /* SleepHandoffView.swift in Sources */,
 				A10000000000000000000044 /* UnifiedInboxView.swift in Sources */,
+				A50000000000000000000002 /* HushBreathTideView.swift in Sources */,
+				A50000000000000000000004 /* HushBreathShaders.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -752,22 +663,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D00000000000000000000401 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				A50000000000000000000003 /* UnifiedInboxTransportModelsTests.swift in Sources */,
-				A50000000000000000000007 /* UnifiedInboxAPIClientTests.swift in Sources */,
-				A50000000000000000000014 /* UnifiedInboxStoreTests.swift in Sources */,
-				A50000000000000000000017 /* UnifiedInboxModeCoordinatorTests.swift in Sources */,
-				A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */,
-				A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */,
-				A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */,
-				A00000000000000000000029 /* HushDemoStoreDynamicRestTests.swift in Sources */,
-				A00000000000000000000030 /* HushSleepExitPolicyTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -780,11 +675,6 @@
 			isa = PBXTargetDependency;
 			target = E00000000000000000000004 /* HushRestLiveActivity */;
 			targetProxy = I00000000000000000000002 /* PBXContainerItemProxy */;
-		};
-		H00000000000000000000003 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = E00000000000000000000001 /* Hush */;
-			targetProxy = I00000000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -901,15 +791,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = iOSApp/Hush.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				COMPRESS_PNG_FILES = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K85XR4H88D;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iOSApp/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Hush;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Hush 连接你配置的局域网消息服务，用于同步飞书、钉钉和邮箱消息。";
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -931,15 +817,11 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = iOSApp/Hush.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				COMPRESS_PNG_FILES = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K85XR4H88D;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iOSApp/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Hush;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Hush 连接你配置的局域网消息服务，用于同步飞书、钉钉和邮箱消息。";
-				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -962,10 +844,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K85XR4H88D;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Hush;
-				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Hush 只读取 Safari 和 Chrome 当前标签页的域名，用于统计网站使用时间；不会读取完整网址、搜索词或页面标题。";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MacMenuBar/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -987,10 +867,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K85XR4H88D;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Hush;
-				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Hush 只读取 Safari 和 Chrome 当前标签页的域名，用于统计网站使用时间；不会读取完整网址、搜索词或页面标题。";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MacMenuBar/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1112,48 +990,6 @@
 			};
 			name = Release;
 		};
-		G00000000000000000000501 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hush.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hush";
-			};
-			name = Debug;
-		};
-		G00000000000000000000502 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hush.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hush";
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1198,15 +1034,6 @@
 			buildConfigurations = (
 				G00000000000000000000401 /* Debug */,
 				G00000000000000000000402 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		G00000000000000000000503 /* Build configuration list for PBXNativeTarget "HushTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				G00000000000000000000501 /* Debug */,
-				G00000000000000000000502 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

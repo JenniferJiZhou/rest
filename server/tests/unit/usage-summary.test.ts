@@ -31,6 +31,7 @@ const macAppUsage = (overrides: Record<string, unknown> = {}) => ({
   user_provided_context_label: "写作",
   daily_app_usage_minutes: 60,
   continuous_app_usage_minutes: 12,
+  continuous_screen_usage_minutes: 38,
   continuous_usage_is_estimated: false,
   app_switches_last_10_minutes: 3,
   local_hour: 14,
@@ -201,7 +202,29 @@ describe("UsageSummary current and legacy compatibility", () => {
   });
 
   it("accepts the current Mac App usage checkpoint", () => {
-    expect(usageSummarySchema.safeParse(macAppUsage()).success).toBe(true);
+    const result = usageSummarySchema.parse(macAppUsage());
+
+    expect(result.continuous_screen_usage_minutes).toBe(38);
+  });
+
+  it.each([
+    ["below current App usage", 11],
+    ["negative", -1],
+    ["over one day", 1441]
+  ])("rejects Mac whole-screen continuous usage when %s", (_case, value) => {
+    expect(
+      usageSummarySchema.safeParse(
+        macAppUsage({ continuous_screen_usage_minutes: value })
+      ).success
+    ).toBe(false);
+  });
+
+  it("keeps Mac whole-screen continuous usage optional for older clients", () => {
+    expect(
+      usageSummarySchema.safeParse(
+        macAppUsage({ continuous_screen_usage_minutes: undefined })
+      ).success
+    ).toBe(true);
   });
 
   it("accepts the current Mac website checkpoint", () => {
@@ -220,6 +243,7 @@ describe("UsageSummary current and legacy compatibility", () => {
         user_provided_context_label: undefined,
         daily_app_usage_minutes: undefined,
         continuous_app_usage_minutes: undefined,
+        continuous_screen_usage_minutes: undefined,
         continuous_usage_is_estimated: undefined
       }).success
     ).toBe(true);
@@ -331,6 +355,10 @@ describe("UsageSummary current and legacy compatibility", () => {
     [
       "Mac App and iOS estimated fields",
       macAppUsage({ estimated_continuous_app_usage_minutes: 12 })
+    ],
+    [
+      "iOS and Mac whole-screen fields",
+      currentUsage({ continuous_screen_usage_minutes: 15 })
     ],
     [
       "website and App usage fields",

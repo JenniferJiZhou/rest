@@ -5,7 +5,8 @@ import UserNotifications
 struct HushMacRestSuggestion: Codable, Equatable, Sendable {
     let requestID: String
     let message: String
-    let generatedTask: GeneratedRestTask
+    let questID: String?
+    let generatedTask: GeneratedRestTask?
 }
 
 extension Notification.Name {
@@ -22,10 +23,9 @@ final class HushMacRestNotificationController:
 
     private static let storedSuggestionKey =
         "mac.notifications.lastOpenedRestSuggestion"
-    private static let companionMessageKey =
-        "mac.agent.lastCompanionMessage"
     private static let requestIDKey = "request_id"
     private static let messageKey = "message"
+    private static let questIDKey = "quest_id"
     private static let taskTitleKey = "generated_task_title"
     private static let taskDurationSecondsKey =
         "generated_task_duration_seconds"
@@ -43,12 +43,9 @@ final class HushMacRestNotificationController:
 
     func sendRestSuggestion(
         message: String,
-        generatedTask: GeneratedRestTask,
+        questID: String?,
         requestID: String
     ) {
-        UserDefaults.standard.removeObject(
-            forKey: Self.companionMessageKey
-        )
         let trimmedMessage = message.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -56,6 +53,42 @@ final class HushMacRestNotificationController:
         content.title = "Hush 提醒你休息一下"
         content.body = trimmedMessage.isEmpty
             ? "有一个很短的休息任务在等你。"
+            : trimmedMessage
+        content.sound = .default
+        content.userInfo = [
+            Self.requestIDKey: requestID,
+            Self.messageKey: trimmedMessage,
+            Self.questIDKey: questID ?? ""
+        ]
+
+        let request = UNNotificationRequest(
+            identifier: "hush-rest-\(requestID)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func sendTestSuggestion() {
+        sendRestSuggestion(
+            message: "先把手机留在这里，去洗一把脸。",
+            questID: "wash_face_01",
+            requestID: "req_mac_notification_test_\(UUID().uuidString)"
+        )
+    }
+
+    func sendRestSuggestion(
+        message: String,
+        generatedTask: GeneratedRestTask,
+        requestID: String
+    ) {
+        let trimmedMessage = message.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let content = UNMutableNotificationContent()
+        content.title = "Hush 提醒你休息一下"
+        content.body = trimmedMessage.isEmpty
+            ? generatedTask.title
             : trimmedMessage
         content.sound = .default
         content.userInfo = [
@@ -72,48 +105,6 @@ final class HushMacRestNotificationController:
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
-    }
-
-    func updateCompanionMessage(_ message: String) {
-        let trimmedMessage = message.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        if trimmedMessage.isEmpty {
-            UserDefaults.standard.removeObject(
-                forKey: Self.companionMessageKey
-            )
-        } else {
-            UserDefaults.standard.set(
-                trimmedMessage,
-                forKey: Self.companionMessageKey
-            )
-        }
-        NotificationCenter.default.post(
-            name: .hushCompanionMessageUpdated,
-            object: trimmedMessage
-        )
-    }
-
-    func lastCompanionMessage() -> String? {
-        UserDefaults.standard.string(
-            forKey: Self.companionMessageKey
-        )
-    }
-
-    func sendTestSuggestion() {
-        sendRestSuggestion(
-            message: "先把手机留在这里，去洗一把脸。",
-            generatedTask: GeneratedRestTask(
-                title: "一分钟桌边重置",
-                durationSeconds: 60,
-                steps: [
-                    "暂时让双手离开键盘",
-                    "看向比屏幕更远的位置",
-                    "肩膀放松后再回来"
-                ]
-            ),
-            requestID: "req_mac_notification_test_\(UUID().uuidString)"
-        )
     }
 
     func lastOpenedSuggestion() -> HushMacRestSuggestion? {
@@ -189,22 +180,27 @@ final class HushMacRestNotificationController:
         }
 
         let message = userInfo[messageKey] as? String ?? ""
-        guard
+        let rawQuestID = userInfo[questIDKey] as? String
+        let generatedTask: GeneratedRestTask?
+        if
             let title = userInfo[taskTitleKey] as? String,
-            let durationSeconds =
-                userInfo[taskDurationSecondsKey] as? Int,
+            let durationNumber =
+                userInfo[taskDurationSecondsKey] as? NSNumber,
             let steps = userInfo[taskStepsKey] as? [String]
-        else {
-            return nil
+        {
+            generatedTask = GeneratedRestTask(
+                title: title,
+                durationSeconds: durationNumber.intValue,
+                steps: steps
+            )
+        } else {
+            generatedTask = nil
         }
         return HushMacRestSuggestion(
             requestID: requestID,
             message: message,
-            generatedTask: GeneratedRestTask(
-                title: title,
-                durationSeconds: durationSeconds,
-                steps: steps
-            )
+            questID: rawQuestID?.isEmpty == false ? rawQuestID : nil,
+            generatedTask: generatedTask
         )
     }
 }
@@ -345,10 +341,7 @@ private struct HushMacHomeView: View {
                 openWindow(id: "settings")
                 NSApplication.shared.activate(ignoringOtherApps: true)
             },
-            suggestedGeneratedTask: suggestion?.generatedTask,
-            initialCompanionMessage:
-                HushMacRestNotificationController.shared
-                    .lastCompanionMessage(),
+            suggestedQuestID: suggestion?.questID,
             suggestionMessage: suggestion?.message,
             suggestionEventID: suggestion?.requestID
         )
@@ -406,6 +399,7 @@ private struct HushMacDashboardView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .tint(Color.white.opacity(0.78))
         .sheet(isPresented: $isShowingAppPicker) {
             HushMacAppPickerView(model: model)
         }
@@ -435,13 +429,13 @@ private struct HushMacDashboardView: View {
             .font(.system(size: 12, weight: .medium, design: .rounded))
             .foregroundStyle(
                 model.isMonitoring
-                    ? Color.mint
+                    ? Color.white.opacity(0.88)
                     : Color.white.opacity(0.62)
             )
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(.white.opacity(0.08), in: Capsule())
-            .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+            .background(.white.opacity(0.045), in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.09), lineWidth: 0.8))
         }
     }
 
@@ -466,7 +460,7 @@ private struct HushMacDashboardView: View {
                     } else {
                         Image(systemName: "macwindow")
                             .font(.system(size: 25, weight: .light))
-                            .foregroundStyle(.cyan.opacity(0.88))
+                            .foregroundStyle(.white.opacity(0.78))
                     }
                 }
                 .frame(width: 54, height: 54)
@@ -488,7 +482,7 @@ private struct HushMacDashboardView: View {
                         .font(.caption2)
                         .foregroundStyle(
                             model.currentAppIsMonitored
-                                ? Color.mint.opacity(0.85)
+                                ? Color.white.opacity(0.72)
                                 : Color.white.opacity(0.4)
                         )
                     }
@@ -543,7 +537,7 @@ private struct HushMacDashboardView: View {
             HStack(spacing: 12) {
                 Image(systemName: "globe")
                     .font(.system(size: 24, weight: .light))
-                    .foregroundStyle(.cyan.opacity(0.85))
+                    .foregroundStyle(.white.opacity(0.72))
                     .frame(width: 38)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -600,7 +594,7 @@ private struct HushMacDashboardView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(HushMacSecondaryButtonStyle())
             .disabled(!websiteModel.currentWebsiteCanBeSent)
 
             Text(websiteModel.uploadStatus)
@@ -657,7 +651,7 @@ private struct HushMacDashboardView: View {
                                     }
                                 )
                             )
-                            .textFieldStyle(.roundedBorder)
+                            .hushMacField()
                         }
 
                         Button {
@@ -742,7 +736,7 @@ private struct HushMacDashboardView: View {
                                     }
                                 )
                             )
-                            .textFieldStyle(.roundedBorder)
+                            .hushMacField()
                         }
 
                         Button {
@@ -763,7 +757,7 @@ private struct HushMacDashboardView: View {
             Button("添加 App") {
                 isShowingAppPicker = true
             }
-                .buttonStyle(.bordered)
+                .buttonStyle(HushMacSecondaryButtonStyle())
                 .disabled(model.availableApplications.isEmpty)
 
             Text("Safari 和 Chrome 内的网站由上方网站监测处理，不会重复发送浏览器 App 检查点。")
@@ -821,7 +815,7 @@ private struct HushMacDashboardView: View {
             Button("立即预览睡前模式") {
                 sleepSchedule.previewNow()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(HushMacSecondaryButtonStyle())
 
             Text("到点后，Hush 会打开波浪主页并向下进入睡前交接。")
                 .font(.caption)
@@ -851,7 +845,7 @@ private struct HushMacDashboardView: View {
                 "https://agent.example.com",
                 text: $model.agentBaseURL
             )
-            .textFieldStyle(.roundedBorder)
+            .hushMacField()
 
             Text(model.agentStatusMessage)
                 .font(.caption)
@@ -872,13 +866,13 @@ private struct HushMacDashboardView: View {
             Button("记录刚刚完成休息") {
                 model.recordRestCompleted()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(HushMacSecondaryButtonStyle())
 
             Button("发送测试通知") {
                 HushMacRestNotificationController.shared
                     .sendTestSuggestion()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(HushMacSecondaryButtonStyle())
 
             Button {
                 model.sendCurrentCheckpoint()
@@ -895,7 +889,7 @@ private struct HushMacDashboardView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(HushMacPrimaryButtonStyle())
             .disabled(!model.canSendCurrentCheckpoint)
 
             if let json = model.lastRequestJSON {
@@ -938,7 +932,7 @@ private struct HushMacDashboardView: View {
         Text(title.uppercased())
             .font(.system(size: 11, weight: .semibold, design: .rounded))
             .tracking(1.1)
-            .foregroundStyle(.white.opacity(0.5))
+            .foregroundStyle(.white.opacity(0.44))
     }
 
     private func metric(
@@ -969,7 +963,14 @@ private struct HushMacDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(15)
-        .background(.black.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
+        .background(
+            .white.opacity(0.025),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.white.opacity(0.055), lineWidth: 0.7)
+        )
     }
 
     private func privacyRow(
@@ -984,8 +985,8 @@ private struct HushMacDashboardView: View {
             )
             .foregroundStyle(
                 included
-                    ? Color.mint.opacity(0.88)
-                    : Color.white.opacity(0.35)
+                    ? Color.white.opacity(0.76)
+                    : Color.white.opacity(0.28)
             )
 
             Text(title)
@@ -1000,69 +1001,76 @@ private struct HushMacAppPickerView: View {
     @ObservedObject var model: MacUsageMonitoringModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("添加关注的 App")
-                        .font(.title2.weight(.semibold))
+        ZStack {
+            HushMacBackground()
 
-                    Text("这里只显示当前正在运行或 Hush 最近发现的 App。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("添加关注的 App")
+                            .font(.title2.weight(.semibold))
 
-                Spacer()
-
-                Button("完成") {
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-
-            if model.availableApplications.isEmpty {
-                ContentUnavailableView(
-                    "没有可添加的 App",
-                    systemImage: "app.dashed",
-                    description: Text(
-                        "先打开一个其他 App，再回到 Hush。"
-                    )
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(model.availableApplications) { application in
-                    HStack(spacing: 12) {
-                        Image(nsImage: model.icon(for: application))
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 34, height: 34)
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(application.systemDisplayName)
-                                .font(.body.weight(.medium))
-                            Text(application.bundleIdentifier)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        Button("添加") {
-                            model.addMonitoredApplication(application)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                        Text("这里只显示当前正在运行或 Hush 最近发现的 App。")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.48))
                     }
-                    .padding(.vertical, 4)
-                }
-                .listStyle(.inset)
-            }
 
-            Text("系统名称和 Bundle ID 只在本机用于识别 App，不会上传。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                    Spacer()
+
+                    Button("完成") {
+                        dismiss()
+                    }
+                    .buttonStyle(HushMacSecondaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                }
+
+                if model.availableApplications.isEmpty {
+                    ContentUnavailableView(
+                        "没有可添加的 App",
+                        systemImage: "app.dashed",
+                        description: Text(
+                            "先打开一个其他 App，再回到 Hush。"
+                        )
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(model.availableApplications) { application in
+                        HStack(spacing: 12) {
+                            Image(nsImage: model.icon(for: application))
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 34, height: 34)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(application.systemDisplayName)
+                                    .font(.body.weight(.medium))
+                                Text(application.bundleIdentifier)
+                                    .font(.caption2)
+                                    .foregroundStyle(.white.opacity(0.38))
+                            }
+
+                            Spacer()
+
+                            Button("添加") {
+                                model.addMonitoredApplication(application)
+                            }
+                            .buttonStyle(HushMacSecondaryButtonStyle())
+                            .controlSize(.small)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .scrollContentBackground(.hidden)
+                    .listStyle(.inset)
+                }
+
+                Text("系统名称和 Bundle ID 只在本机用于识别 App，不会上传。")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.42))
+            }
+            .padding(22)
         }
-        .padding(22)
         .frame(width: 520, height: 430)
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -1071,14 +1079,17 @@ private struct HushMacBackground: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
+            Color.black
+
+            RadialGradient(
                 colors: [
-                    Color(red: 0.035, green: 0.045, blue: 0.11),
-                    Color(red: 0.11, green: 0.10, blue: 0.25),
-                    Color(red: 0.035, green: 0.045, blue: 0.11)
+                    Color(red: 0.16, green: 0.20, blue: 0.25)
+                        .opacity(0.18),
+                    Color.clear
                 ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                center: .bottomTrailing,
+                startRadius: 30,
+                endRadius: 560
             )
 
             TimelineView(
@@ -1093,38 +1104,42 @@ private struct HushMacBackground: View {
                     let phase = reduceMotion
                         ? 0.8
                         : elapsed.truncatingRemainder(
-                            dividingBy: 12
-                        ) * 0.52
-                    let centerY = size.height * 0.72
+                            dividingBy: 18
+                        ) * 0.34
+                    let centerY = size.height * 0.78
 
                     drawWave(
                         context: &context,
                         size: size,
                         centerY: centerY,
-                        amplitude: min(66, size.height * 0.1),
-                        frequency: 2.25,
+                        amplitude: min(54, size.height * 0.075),
+                        frequency: 1.85,
                         phase: phase,
-                        color: .cyan.opacity(0.48),
-                        lineWidth: 1.8
+                        color: .white.opacity(0.12),
+                        lineWidth: 1.3
                     )
 
                     drawWave(
                         context: &context,
                         size: size,
                         centerY: centerY + 8,
-                        amplitude: min(45, size.height * 0.07),
-                        frequency: 2.9,
+                        amplitude: min(38, size.height * 0.052),
+                        frequency: 2.25,
                         phase: -phase * 0.7 + 1.3,
-                        color: .purple.opacity(0.38),
-                        lineWidth: 1.2
+                        color: Color(
+                            red: 0.42,
+                            green: 0.62,
+                            blue: 0.76
+                        ).opacity(0.13),
+                        lineWidth: 1
                     )
                 }
             }
 
             LinearGradient(
                 colors: [
-                    .black.opacity(0.02),
-                    .black.opacity(0.28)
+                    .black.opacity(0.04),
+                    .black.opacity(0.46)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -1193,20 +1208,23 @@ private struct HushMacPanelModifier: ViewModifier {
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(
-                        .white.opacity(emphasized ? 0.115 : 0.075)
+                        .white.opacity(emphasized ? 0.052 : 0.032)
                     )
                     .overlay(
                         RoundedRectangle(
                             cornerRadius: 22,
                             style: .continuous
                         )
-                        .stroke(.white.opacity(0.12), lineWidth: 1)
+                        .stroke(
+                            .white.opacity(emphasized ? 0.10 : 0.065),
+                            lineWidth: 0.8
+                        )
                     )
             )
             .shadow(
-                color: .black.opacity(0.16),
-                radius: 24,
-                y: 12
+                color: .black.opacity(0.28),
+                radius: 30,
+                y: 16
             )
     }
 }
@@ -1225,19 +1243,76 @@ private struct HushMacPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 14, weight: .semibold, design: .rounded))
-            .foregroundStyle(.white)
+            .foregroundStyle(.black.opacity(0.88))
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 43)
             .background(
                 LinearGradient(
-                    colors: [.indigo, .purple],
+                    colors: [
+                        .white.opacity(configuration.isPressed ? 0.72 : 0.96),
+                        .white.opacity(configuration.isPressed ? 0.64 : 0.80)
+                    ],
                     startPoint: .leading,
                     endPoint: .trailing
                 ),
                 in: Capsule()
             )
+            .overlay(
+                Capsule()
+                    .stroke(.white.opacity(0.20), lineWidth: 0.8)
+            )
+            .shadow(
+                color: .white.opacity(configuration.isPressed ? 0.02 : 0.07),
+                radius: configuration.isPressed ? 3 : 12,
+                y: 4
+            )
             .opacity(isEnabled ? 1 : 0.38)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
+    }
+}
+
+private struct HushMacSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(.white.opacity(0.78))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 34)
+            .background(
+                .white.opacity(configuration.isPressed ? 0.09 : 0.045),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule()
+                    .stroke(.white.opacity(0.075), lineWidth: 0.8)
+            )
+            .opacity(isEnabled ? 1 : 0.34)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+    }
+}
+
+private struct HushMacFieldModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 30)
+            .background(
+                .white.opacity(0.035),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(.white.opacity(0.065), lineWidth: 0.8)
+            )
+    }
+}
+
+private extension View {
+    func hushMacField() -> some View {
+        modifier(HushMacFieldModifier())
     }
 }
 

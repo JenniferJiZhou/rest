@@ -44,14 +44,12 @@ struct HushManualRestContext: Equatable, Sendable {
     let locationTags: [String]
 }
 
-@MainActor
 protocol HushManualRestTaskProviding {
     func generateTask(
         context: HushManualRestContext
     ) async throws -> HushDynamicRestSuggestion
 }
 
-@MainActor
 final class HTTPManualRestTaskProvider: HushManualRestTaskProviding {
     enum ProviderError: Error {
         case invalidBaseURL

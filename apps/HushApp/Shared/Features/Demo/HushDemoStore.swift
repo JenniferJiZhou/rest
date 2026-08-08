@@ -43,46 +43,24 @@ final class HushDemoStore: ObservableObject {
     @Published var sleepTodaySummary = ""
     @Published var sleepHighlight = ""
     @Published var sleepTomorrowFirstStep = ""
-    @Published private(set) var generatedRestTask: GeneratedRestTask?
 
     let content: HushDemoContentSnapshot
-    private let manualRestProvider: (any HushManualRestTaskProviding)?
 
     init(
-        provider: any HushRestContentProviding,
-        manualRestProvider: (any HushManualRestTaskProviding)?,
-        initialQuestID: String? = nil,
-        initialGeneratedRestTask: GeneratedRestTask? = nil
+        provider: any HushRestContentProviding = BundledHushRestContentProvider.automatic,
+        initialQuestID: String? = nil
     ) {
         content = HushDemoContentSnapshot.load(from: provider)
-        self.manualRestProvider = manualRestProvider
-        generatedRestTask = initialGeneratedRestTask
-        if let initialQuestID,
-           let initialIndex = content.quests.firstIndex(where: { $0.id == initialQuestID }) {
+        let preferredQuestID = initialQuestID ?? "wash_face_01"
+        if let initialIndex = content.quests.firstIndex(
+            where: { $0.id == preferredQuestID }
+        ) {
             selectedQuestIndex = initialIndex
         }
     }
 
-    convenience init(
-        provider: any HushRestContentProviding =
-            BundledHushRestContentProvider.automatic,
-        initialQuestID: String? = nil,
-        initialGeneratedRestTask: GeneratedRestTask? = nil
-    ) {
-        self.init(
-            provider: provider,
-            manualRestProvider:
-                HTTPManualRestTaskProvider.automatic,
-            initialQuestID: initialQuestID,
-            initialGeneratedRestTask: initialGeneratedRestTask
-        )
-    }
-
     var currentQuest: HushQuestContent {
-        if let generatedRestTask {
-            return generatedRestTask.questContent
-        }
-        return content.quests[selectedQuestIndex % content.quests.count]
+        content.quests[selectedQuestIndex % content.quests.count]
     }
 
     var currentDriftPrompt: HushDriftPrompt {
@@ -102,7 +80,6 @@ final class HushDemoStore: ObservableObject {
     }
 
     func surpriseMe() {
-        generatedRestTask = nil
         selectedPreference = nil
         selectFirstMatchingQuest(preference: nil)
         move(to: .quest)
@@ -120,46 +97,12 @@ final class HushDemoStore: ObservableObject {
     }
 
     func choosePreference(_ preference: HushDemoPreference) {
-        generatedRestTask = nil
         selectedPreference = preference
-        guard let manualRestProvider else {
-            move(to: .door)
-            return
-        }
-        NotificationCenter.default.post(
-            name: .hushRestTaskGenerationStarted,
-            object: nil
-        )
-        Task {
-            defer {
-                NotificationCenter.default.post(
-                    name: .hushRestTaskGenerationFinished,
-                    object: nil
-                )
-            }
-            do {
-                let suggestion = try await manualRestProvider.generateTask(
-                    context: HushManualRestContext(
-                        sessionID:
-                            "session_manual_\(UUID().uuidString.lowercased())",
-                        fatigueType: "unknown",
-                        userPreference: preference.rawValue,
-                        availableMinutes: availableMinutes,
-                        source: Self.manualRestSource,
-                        locationTags: []
-                    )
-                )
-                generatedRestTask = suggestion.generatedTask
-                move(to: .quest)
-            } catch {
-                generatedRestTask = nil
-                move(to: .door)
-            }
-        }
+        selectFirstMatchingQuest(preference: preference)
+        move(to: .quest)
     }
 
     func swapQuest() {
-        generatedRestTask = nil
         guard content.quests.count > 1 else { return }
         selectedQuestIndex = (selectedQuestIndex + 1) % content.quests.count
     }
@@ -206,7 +149,6 @@ final class HushDemoStore: ObservableObject {
     }
 
     func presentRestSuggestion(questID: String?) {
-        generatedRestTask = nil
         if let questID,
            let index = content.quests.firstIndex(
                where: { $0.id == questID }
@@ -217,30 +159,10 @@ final class HushDemoStore: ObservableObject {
         move(to: .door)
     }
 
-    func presentRestSuggestion(task: GeneratedRestTask) {
-        generatedRestTask = task
-        move(to: .door)
-    }
-
-    func clearGeneratedRestSuggestion() {
-        generatedRestTask = nil
-    }
-
-    func remindAboutGeneratedRestSuggestionLater() {
-        guard generatedRestTask != nil else { return }
-        move(to: .door)
-    }
-
-    func dismissGeneratedRestSuggestion() {
-        generatedRestTask = nil
-        move(to: .door)
-    }
-
     func reset() {
         fatigueDescription = ""
         selectedPreference = nil
         selectedQuestIndex = 0
-        generatedRestTask = nil
         clearSleepDraft()
         route = .door
     }
@@ -272,14 +194,6 @@ final class HushDemoStore: ObservableObject {
     private func selectFirstMatchingQuest(preference: HushDemoPreference?) {
         let preferredEnergy = preference == .quiet ? "very_low" : "low"
         selectedQuestIndex = content.quests.firstIndex(where: { $0.energyRequired == preferredEnergy }) ?? 0
-    }
-
-    private static var manualRestSource: String {
-        #if os(macOS)
-        "manual_macos"
-        #else
-        "manual_ios"
-        #endif
     }
 
     private func clearSleepDraft() {

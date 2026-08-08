@@ -3,18 +3,6 @@ import SwiftUI
 import AppKit
 #endif
 
-enum HushDoorSwipeTrigger {
-    static let triggerDistance: CGFloat = 44
-    static let triggerVelocity: CGFloat = 450
-
-    static func shouldTrigger(
-        translationY: CGFloat,
-        velocityY: CGFloat
-    ) -> Bool {
-        translationY <= -triggerDistance || velocityY <= -triggerVelocity
-    }
-}
-
 struct HushDoorView: View {
     let taskText: String
     let onOpenTask: () -> Void
@@ -40,8 +28,15 @@ struct HushDoorView: View {
     /// so the door gains no new furniture for a gesture most users never use.
     @State private var breathPressed = false
 
+    /// A light push is enough — ~44 pt of rise, or a clear upward flick, arms it.
+    /// The user never has to drag the water all the way up.
+    private let triggerDistance: CGFloat = 44
+    private let triggerVelocity: CGFloat = 450
+
     var body: some View {
         GeometryReader { geometry in
+            let taskWidth = min(300, geometry.size.width - 88)
+
             ZStack(alignment: .topTrailing) {
                 // The water band, listening for a held press. It sits at the
                 // bottom of the stack so the task text and the controls keep
@@ -74,7 +69,7 @@ struct HushDoorView: View {
                 Button(action: onOpenTask) {
                     HushTypewriterText(text: taskText)
                         .frame(
-                            width: min(290, geometry.size.width - 88),
+                            width: taskWidth,
                             alignment: .leading
                         )
                 }
@@ -82,8 +77,8 @@ struct HushDoorView: View {
                 .accessibilityLabel(taskText)
                 .accessibilityHint("打开任务详情")
                 .position(
-                    x: geometry.size.width * 0.43,
-                    y: geometry.size.height * 0.57
+                    x: 44 + taskWidth / 2,
+                    y: geometry.size.height * 0.545
                 )
 
                 HStack(spacing: HushSpacing.xs) {
@@ -155,9 +150,6 @@ struct HushDoorView: View {
                 }
             }
             .contentShape(Rectangle())
-            .accessibilityAction(named: Text("打开消息")) {
-                fireTrigger()
-            }
             #if !os(macOS)
             .gesture(inboxSwipeGesture)
             #endif
@@ -179,19 +171,17 @@ struct HushDoorView: View {
                 guard onInboxSwipeTriggered != nil, !hasTriggered else { return }
 
                 let up = max(0, -value.translation.height)
+                let upwardVelocity = max(0, -value.velocity.height)
                 let isPrimarilyVertical = up > abs(value.translation.width)
 
                 // Arm on a light push: a short rise OR a clear upward flick.
                 // Beyond the threshold the finger is ignored entirely — no
                 // distance-to-height mapping, so the water never "follows".
                 if isPrimarilyVertical,
-                   HushDoorSwipeTrigger.shouldTrigger(
-                       translationY: value.translation.height,
-                       velocityY: value.velocity.height
-                   ) {
+                   up >= triggerDistance || upwardVelocity >= triggerVelocity {
                     fireTrigger()
                 } else {
-                    armProgress = min(1, up / HushDoorSwipeTrigger.triggerDistance)
+                    armProgress = min(1, up / triggerDistance)
                 }
             }
             .onEnded { _ in

@@ -107,7 +107,12 @@ final class HTTPRestDecisionProvider: RestDecisionProviding {
             RestSuggestionResponse.self,
             from: data
         )
-        guard suggestion.requestID == requestID else {
+        guard
+            suggestion.requestID == requestID,
+            suggestion.shouldOfferRest
+                == (suggestion.generatedTask != nil),
+            suggestion.defaultQuestID == nil
+        else {
             throw ProviderError.invalidResponse
         }
         guard suggestion.shouldOfferRest

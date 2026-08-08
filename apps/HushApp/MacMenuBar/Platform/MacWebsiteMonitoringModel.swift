@@ -71,12 +71,14 @@ final class MacWebsiteMonitoringModel: ObservableObject {
         let requestID: String
         let shouldOfferRest: Bool
         let message: String
+        let defaultQuestID: String?
         let generatedTask: GeneratedRestTask?
 
         enum CodingKeys: String, CodingKey {
             case requestID = "request_id"
             case shouldOfferRest = "should_offer_rest"
             case message
+            case defaultQuestID = "default_quest_id"
             case generatedTask = "generated_task"
         }
     }
@@ -450,10 +452,6 @@ final class MacWebsiteMonitoringModel: ObservableObject {
             ? "网站达到 5 分钟检查点，正在请求 Agent…"
             : "正在发送当前网站数据…"
         isSendingRequest = true
-        NotificationCenter.default.post(
-            name: .hushRestTaskGenerationStarted,
-            object: nil
-        )
 
         let endpoint = baseURL
             .appendingPathComponent("v1")
@@ -472,13 +470,6 @@ final class MacWebsiteMonitoringModel: ObservableObject {
         request.setValue("1.1", forHTTPHeaderField: "X-Contract-Version")
 
         Task {
-            defer {
-                isSendingRequest = false
-                NotificationCenter.default.post(
-                    name: .hushRestTaskGenerationFinished,
-                    object: nil
-                )
-            }
             do {
                 let (data, response) = try await URLSession.shared.data(
                     for: request
@@ -489,6 +480,7 @@ final class MacWebsiteMonitoringModel: ObservableObject {
                 guard (200..<300).contains(httpResponse.statusCode) else {
                     uploadStatus =
                         "Agent 返回 HTTP \(httpResponse.statusCode)。"
+                    isSendingRequest = false
                     return
                 }
 
@@ -496,14 +488,14 @@ final class MacWebsiteMonitoringModel: ObservableObject {
                     RestSuggestionResponse.self,
                     from: data
                 )
-                guard suggestion.requestID == requestID else {
-                    uploadStatus = "Agent 响应的 request_id 不匹配。"
-                    return
-                }
-                guard suggestion.shouldOfferRest
-                    == (suggestion.generatedTask != nil)
+                guard
+                    suggestion.requestID == requestID,
+                    suggestion.shouldOfferRest
+                        == (suggestion.generatedTask != nil),
+                    suggestion.defaultQuestID == nil
                 else {
-                    uploadStatus = "Agent 响应格式不正确。"
+                    uploadStatus = "Agent 响应的 request_id 不匹配。"
+                    isSendingRequest = false
                     return
                 }
                 uploadStatus = suggestion.shouldOfferRest
@@ -518,14 +510,12 @@ final class MacWebsiteMonitoringModel: ObservableObject {
                             generatedTask: generatedTask,
                             requestID: suggestion.requestID
                         )
-                } else {
-                    HushMacRestNotificationController.shared
-                        .updateCompanionMessage(suggestion.message)
                 }
             } catch {
                 uploadStatus =
-                    "暂时无法生成休息建议；你可以继续使用 Hush。"
+                    "网站请求失败：\(error.localizedDescription)"
             }
+            isSendingRequest = false
         }
     }
 

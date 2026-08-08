@@ -31,7 +31,7 @@ private struct HushPhoneRootView: View {
             HushSettingsView()
         }
         .fullScreenCover(isPresented: $isShowingCompanion) {
-            HushAlwaysOnCompanionView {
+            HushAlwaysOnCompanionExperienceView {
                 isShowingCompanion = false
             }
         }
@@ -79,7 +79,7 @@ private struct HushPlaceholderView: View {
             HushSettingsView()
         }
         .fullScreenCover(isPresented: $isShowingCompanion) {
-            HushAlwaysOnCompanionView {
+            HushAlwaysOnCompanionExperienceView {
                 isShowingCompanion = false
             }
         }
@@ -290,59 +290,60 @@ private struct HushPlaceholderView: View {
     }
 }
 
-private struct HushCompanionSnapshot {
-    let deviceName: String
-    let currentContext: String
-    let continuousMinutes: Int
-    let dailyMinutes: Int
-}
-
-private protocol HushCompanionSnapshotProviding {
-    func currentSnapshot() async -> HushCompanionSnapshot
-}
-
-private struct FixtureHushCompanionSnapshotProvider:
-    HushCompanionSnapshotProviding
-{
-    func currentSnapshot() async -> HushCompanionSnapshot {
-        HushCompanionSnapshot(
-            deviceName: "Jennifer 的 Mac",
-            currentContext: "Xcode · Hush",
-            continuousMinutes: 37,
-            dailyMinutes: 104
-        )
-    }
-}
-
 @MainActor
 private final class HushAlwaysOnCompanionModel: ObservableObject {
     enum Phase: Equatable {
         case idle
+        case connecting
         case working
-        case approachingRest
         case restSuggested
         case resting
     }
 
+    enum RestTriggerSource: Equatable {
+        case userInitiated
+        case agentInitiated
+    }
+
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var snapshot: HushCompanionSnapshot?
-    @Published private(set) var elapsedSeconds = 0
     @Published private(set) var restSeconds = 0
-    @Published private(set) var companionMessage: String?
-    @Published private(set) var isGeneratingRestTask = false
+    @Published private(set) var connectionText = "正在寻找 Mac…"
+    @Published private(set) var selectedQuest: HushQuestContent?
+    @Published private(set) var suggestionIntro: String?
+    @Published private(set) var restTriggerSource: RestTriggerSource?
+    @Published private(set) var agentErrorMessage: String?
+    @Published private(set) var isRequestingManualRest = false
 
-    private let provider: any HushCompanionSnapshotProviding
+    private let transport: HushCompanionPeerTransport
+    private let agentService: any HushCompanionRestAgentServing
+    private let content: HushDemoContentSnapshot
     private var timer: AnyCancellable?
-    private var nextOfferAtElapsedSeconds = 50 * 60
-    private let sharedDefaults = UserDefaults(
-        suiteName: "group.com.JenniferJi.Hush"
-    )
+    private var lastSnapshotReceivedAt: Date?
+    private var latestSequenceBySession: [String: Int] = [:]
+    private var handledDecisionIDs: Set<String> = []
+    private var activeDecisionID: String?
+    private var firmHapticTask: Task<Void, Never>?
 
     init(
-        provider: any HushCompanionSnapshotProviding =
-            FixtureHushCompanionSnapshotProvider()
+        agentService: any HushCompanionRestAgentServing =
+            HTTPHushCompanionRestAgentService(),
+        contentProvider: any HushRestContentProviding =
+            BundledHushRestContentProvider.automatic
     ) {
-        self.provider = provider
+        self.agentService = agentService
+        content = HushDemoContentSnapshot.load(from: contentProvider)
+        transport = HushCompanionPeerTransport(
+            role: .phoneReceiver,
+            displayName: UIDevice.current.name
+        )
+
+        transport.onSnapshot = { [weak self] snapshot in
+            self?.receive(snapshot)
+        }
+        transport.onConnectionStateChanged = { [weak self] state in
+            self?.receiveConnectionState(state)
+        }
     }
 
     var isSessionActive: Bool {
@@ -350,49 +351,61 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     }
 
     var formattedElapsed: String {
-        format(seconds: elapsedSeconds)
+        format(seconds: snapshot?.continuousScreenSeconds ?? 0)
     }
 
     var formattedRest: String {
         format(seconds: restSeconds)
     }
 
+    var dailyMinutes: Int {
+        max(0, (snapshot?.dailySeconds ?? 0) / 60)
+    }
+
+    var appContinuousMinutes: Int {
+        max(0, (snapshot?.continuousAppSeconds ?? 0) / 60)
+    }
+
     var statusText: String {
-        if phase == .working || phase == .approachingRest {
-            if isGeneratingRestTask {
-                return "Hush 正在为此刻留出一点空间……"
-            }
-            if let companionMessage, !companionMessage.isEmpty {
-                return companionMessage
-            }
-        }
         switch phase {
         case .idle:
             return "准备好后，让 Hush 在旁边陪你工作。"
+        case .connecting:
+            return "保持 Hush 打开，正在接续 Mac 的真实工作计时。"
         case .working:
-            return "节奏平稳，先继续手上的事情。"
-        case .approachingRest:
-            return "快到休息点了，把这一小段收个尾。"
+            if
+                let message = snapshot?.latestDecision?.message
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                !message.isEmpty
+            {
+                return message
+            }
+            return snapshot?.isMonitoring == true
+                ? "我在这里陪你。需要停一停的时候，我会轻轻提醒你。"
+                : "Mac 已连接，等待开始关注一项工作。"
         case .restSuggested:
-            return "该把注意力从屏幕上移开一会儿了。"
+            return suggestionIntro ?? "现在停一会儿正合适。"
         case .resting:
             return "不用赶时间，慢慢回来。"
         }
     }
 
     func start() async {
-        refreshAgentState()
-        snapshot = await provider.currentSnapshot()
-        elapsedSeconds = (snapshot?.continuousMinutes ?? 0) * 60
-        nextOfferAtElapsedSeconds = max(50 * 60, elapsedSeconds + 60)
-        phase = elapsedSeconds >= 45 * 60 ? .approachingRest : .working
+        guard phase == .idle else {
+            return
+        }
+        phase = .connecting
         setScreenAwake(true)
+        transport.start()
         startTimer()
     }
 
     func stop() {
         timer?.cancel()
         timer = nil
+        transport.stop()
+        firmHapticTask?.cancel()
+        firmHapticTask = nil
         phase = .idle
         setScreenAwake(false)
     }
@@ -401,34 +414,68 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
         setScreenAwake(isSceneActive && isSessionActive)
     }
 
-    func simulateAgentRestDecision() {
-        guard phase == .working || phase == .approachingRest else {
+    func requestManualRest() async {
+        guard
+            phase == .working || phase == .connecting,
+            !isRequestingManualRest
+        else {
             return
         }
 
-        offerRest()
+        isRequestingManualRest = true
+        agentErrorMessage = nil
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        defer { isRequestingManualRest = false }
+
+        let fallbackQuest = content.quests.first ?? .emergencyFallback
+        activeDecisionID = nil
+        enterRest(
+            source: .userInitiated,
+            quest: fallbackQuest,
+            intro: userInitiatedRestIntro()
+        )
+
+        if let snapshot {
+            do {
+                let recommendation = try await agentService.recommendManualRest(
+                    from: snapshot,
+                    content: content
+                )
+                selectedQuest = recommendation.quest
+            } catch {
+                // A deliberate rest request should still work while the
+                // remote Agent is unavailable.
+                agentErrorMessage = nil
+            }
+        }
     }
 
+    func acknowledgeRestTask() {
+        firmHapticTask?.cancel()
+        firmHapticTask = nil
+    }
+
+    // Kept for the legacy preview view below. The live experience enters the
+    // task directly and does not use a confirmation step.
     func beginRest() {
-        restSeconds = 0
         phase = .resting
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
     }
 
     func remindLater() {
-        nextOfferAtElapsedSeconds = elapsedSeconds + 5 * 60
+        clearSuggestion()
         phase = .working
     }
 
     func skipCurrentSuggestion() {
-        nextOfferAtElapsedSeconds = elapsedSeconds + 30 * 60
+        clearSuggestion()
         phase = .working
     }
 
     func finishRest() {
+        acknowledgeRestTask()
+        sendCommand(.restCompleted)
         restSeconds = 0
-        elapsedSeconds = 0
-        nextOfferAtElapsedSeconds = 50 * 60
+        clearSuggestion()
         phase = .working
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
@@ -443,48 +490,159 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
     }
 
     private func tick() {
-        refreshAgentState()
-        switch phase {
-        case .working, .approachingRest:
-            elapsedSeconds += 1
-            if elapsedSeconds >= nextOfferAtElapsedSeconds {
-                offerRest()
-            } else if elapsedSeconds >= nextOfferAtElapsedSeconds - 5 * 60,
-                      phase == .working
-            {
-                phase = .approachingRest
-            }
-        case .resting:
+        if phase == .resting {
             restSeconds += 1
-        case .idle, .restSuggested:
-            break
         }
-    }
 
-    private func offerRest() {
-        phase = .restSuggested
-        UINotificationFeedbackGenerator().notificationOccurred(.warning)
-    }
-
-    private func refreshAgentState() {
-        isGeneratingRestTask = sharedDefaults?.bool(
-            forKey: "agent.isGeneratingRestTask"
-        ) ?? false
         guard
-            sharedDefaults?.object(
-                forKey: "agent.lastDecisionShouldOfferRest"
-            ) != nil,
-            sharedDefaults?.bool(
-                forKey: "agent.lastDecisionShouldOfferRest"
-            ) == false
+            phase != .resting,
+            phase != .restSuggested,
+            let lastSnapshotReceivedAt
         else {
-            companionMessage = nil
             return
         }
-        let message = sharedDefaults?.string(
-            forKey: "agent.lastDecisionMessage"
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
-        companionMessage = message?.isEmpty == false ? message : nil
+        if Date().timeIntervalSince(lastSnapshotReceivedAt) > 3 {
+            phase = .connecting
+            connectionText = "Mac 连接中断，正在重新连接…"
+        }
+    }
+
+    private func receive(_ snapshot: HushCompanionSnapshot) {
+        guard
+            snapshot.protocolVersion
+                == HushCompanionSnapshot.protocolVersion,
+            snapshot.sequence
+                > latestSequenceBySession[snapshot.sessionID, default: -1]
+        else {
+            return
+        }
+
+        latestSequenceBySession[snapshot.sessionID] = snapshot.sequence
+        self.snapshot = snapshot
+        lastSnapshotReceivedAt = Date()
+        connectionText = "已连接 \(snapshot.deviceName)"
+
+        if phase == .connecting {
+            phase = .working
+        }
+
+        guard
+            phase == .working,
+            let decision = snapshot.latestDecision,
+            decision.shouldOfferRest,
+            handledDecisionIDs.insert(decision.id).inserted
+        else {
+            return
+        }
+
+        activeDecisionID = decision.id
+        enterRest(
+            source: .agentInitiated,
+            quest: quest(id: decision.defaultQuestID),
+            intro: agentInitiatedRestIntro(
+                decision.message,
+                snapshot: snapshot
+            )
+        )
+        if snapshot.interruptionMode == "firm" {
+            beginFirmHaptics()
+        } else {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    private func receiveConnectionState(
+        _ state: HushCompanionPeerTransport.ConnectionState
+    ) {
+        switch state {
+        case .stopped:
+            connectionText = "Mac 同步已停止"
+        case .searching:
+            if phase != .resting, phase != .restSuggested {
+                phase = .connecting
+            }
+            connectionText = "正在寻找 Mac…"
+        case let .connected(peerName):
+            connectionText = "已连接 \(peerName)"
+        }
+    }
+
+    private func quest(id: String?) -> HushQuestContent {
+        if
+            let id,
+            let matched = content.quests.first(where: { $0.id == id })
+        {
+            return matched
+        }
+        return content.quests.first ?? .emergencyFallback
+    }
+
+    private func sendCommand(_ kind: HushCompanionCommand.Kind) {
+        transport.send(
+            command: HushCompanionCommand(
+                kind: kind,
+                decisionID: activeDecisionID,
+                emittedAt: Date()
+            )
+        )
+    }
+
+    private func clearSuggestion() {
+        selectedQuest = nil
+        suggestionIntro = nil
+        restTriggerSource = nil
+        activeDecisionID = nil
+    }
+
+    private func enterRest(
+        source: RestTriggerSource,
+        quest: HushQuestContent,
+        intro: String
+    ) {
+        restSeconds = 0
+        selectedQuest = quest
+        suggestionIntro = intro
+        restTriggerSource = source
+        phase = .resting
+        sendCommand(.restStarted)
+    }
+
+    private func userInitiatedRestIntro() -> String {
+        let options = [
+            "有点累啦？那就先停一下。",
+            "现在休息正合适呢。",
+            "想歇一会儿了？那就先照顾一下自己。"
+        ]
+        return options.randomElement() ?? "现在休息正合适呢。"
+    }
+
+    private func agentInitiatedRestIntro(
+        _ message: String,
+        snapshot: HushCompanionSnapshot
+    ) -> String {
+        let trimmed = message.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+
+        let minutes = max(1, snapshot.continuousScreenSeconds / 60)
+        return "这一段持续得有点久了，你已经在 \(snapshot.currentContext) 里忙了 \(minutes) 分钟。现在停一会儿正合适。"
+    }
+
+    private func beginFirmHaptics() {
+        firmHapticTask?.cancel()
+        firmHapticTask = Task { @MainActor [weak self] in
+            for _ in 0..<5 {
+                guard !Task.isCancelled, self?.phase == .resting else {
+                    return
+                }
+                UINotificationFeedbackGenerator()
+                    .notificationOccurred(.warning)
+                try? await Task.sleep(for: .milliseconds(850))
+            }
+        }
     }
 
     private func setScreenAwake(_ awake: Bool) {
@@ -495,6 +653,337 @@ private final class HushAlwaysOnCompanionModel: ObservableObject {
         let minutes = seconds / 60
         let remainder = seconds % 60
         return String(format: "%02d:%02d", minutes, remainder)
+    }
+}
+
+private struct HushAlwaysOnCompanionExperienceView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @StateObject private var model = HushAlwaysOnCompanionModel()
+    @State private var isShowingWorkDetails = false
+    @State private var exitProgress: CGFloat = 0
+    @State private var isCompletingExit = false
+    @State private var collapseTask: Task<Void, Never>?
+
+    /// A light push arms the exit — the same feel as the main page's swipe: ~44 pt
+    /// of rise, or a clear upward flick. The finger is never mapped to the water.
+    private let exitTriggerDistance: CGFloat = 44
+    private let exitTriggerVelocity: CGFloat = 450
+
+    let onClose: () -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                HushCompanionBackground(
+                    exitProgress: exitProgress,
+                    readingLower: model.phase == .resting
+                        ? 0.4
+                        : (isShowingWorkDetails ? 1 : 0)
+                )
+
+                Group {
+                    if model.phase == .resting {
+                        restTaskContent
+                            .padding(.horizontal, 30)
+                            .transition(.opacity)
+                    } else if isShowingWorkDetails {
+                        workDetailsContent
+                            .padding(.horizontal, 24)
+                            .transition(.opacity)
+                    } else {
+                        idleTimer
+                            .transition(.opacity)
+                    }
+                }
+                // Let the foreground recede as the tide rises, so the exit reads
+                // as ocean, not ocean-plus-UI.
+                .opacity(1 - Double(min(exitProgress * 1.7, 1)))
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                handleTap()
+            }
+            .onLongPressGesture(
+                minimumDuration: 0.7,
+                maximumDistance: 24
+            ) {
+                handleLongPress()
+            }
+            .simultaneousGesture(exitGesture(in: geometry.size))
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            guard model.phase == .idle else { return }
+            await model.start()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            model.refreshScreenAwake(isSceneActive: phase == .active)
+        }
+        .onDisappear {
+            collapseTask?.cancel()
+            model.stop()
+        }
+        .animation(.easeInOut(duration: 0.45), value: model.phase)
+        .animation(.easeInOut(duration: 0.35), value: isShowingWorkDetails)
+    }
+
+    private var idleTimer: some View {
+        VStack {
+            Text(model.formattedElapsed)
+                .font(.system(size: 15, weight: .light, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Color.white.opacity(0.38))
+                .contentTransition(.numericText())
+                .padding(.top, 12)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("已连续工作 \(model.formattedElapsed)")
+    }
+
+    private var workDetailsContent: some View {
+        VStack(spacing: 26) {
+            HStack(spacing: 7) {
+                Image(systemName: "laptopcomputer")
+                Text(model.connectionText)
+            }
+            .font(.caption)
+            .foregroundStyle(Color.white.opacity(0.52))
+
+            VStack(spacing: 9) {
+                Text(model.formattedElapsed)
+                    .font(
+                        .system(
+                            size: 78,
+                            weight: .ultraLight,
+                            design: .rounded
+                        )
+                        .monospacedDigit()
+                    )
+                    .contentTransition(.numericText())
+
+                Text("连续使用屏幕")
+                    .font(.subheadline)
+                    .tracking(1.4)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(model.statusText)
+                .font(.body)
+                .foregroundStyle(Color.white.opacity(0.78))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 330)
+
+            if let snapshot = model.snapshot {
+                Text(
+                    "\(snapshot.currentContext) · 当前 \(model.appContinuousMinutes) 分钟 · 今日 \(model.dailyMinutes) 分钟"
+                )
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(0.48))
+                .multilineTextAlignment(.center)
+            }
+
+            if model.isRequestingManualRest {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("正在准备一个休息任务…")
+                }
+                .font(.caption)
+                .foregroundStyle(Color.white.opacity(0.55))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var restTaskContent: some View {
+        // The task is part of the atmosphere: no card, no title-card, no big
+        // symbol. The lead-in and task sit slightly above and to the left of the
+        // curve, which has settled just below to make a clean reading area.
+        GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: 18) {
+                if let intro = model.suggestionIntro {
+                    HushCompanionTypewriterText(text: intro)
+                        .font(.system(size: 23, weight: .regular))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .lineSpacing(7)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let quest = model.selectedQuest {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(quest.title)
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(Color.white.opacity(0.9))
+
+                        Text(quest.durationLabel)
+                            .font(.caption)
+                            .tracking(0.6)
+                            .foregroundStyle(Color.white.opacity(0.46))
+
+                        VStack(alignment: .leading, spacing: 9) {
+                            ForEach(
+                                Array(quest.steps.enumerated()),
+                                id: \.offset
+                            ) { index, step in
+                                Text("\(index + 1). \(step)")
+                            }
+                        }
+                        .font(.callout)
+                        .lineSpacing(5)
+                        .foregroundStyle(Color.white.opacity(0.72))
+                    }
+                }
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        model.finishRest()
+                        isShowingWorkDetails = false
+                    }
+                } label: {
+                    Text("我休息好了")
+                        .font(.callout)
+                        .foregroundStyle(Color.white.opacity(0.66))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
+            .frame(
+                width: min(geometry.size.width * 0.72, 360),
+                alignment: .leading
+            )
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .topLeading
+            )
+            .padding(.leading, 2)
+            .padding(.top, geometry.size.height * 0.16)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            model.acknowledgeRestTask()
+        }
+    }
+
+    private func exitGesture(in size: CGSize) -> some Gesture {
+        // The swipe is only an ignition signal — mirroring the main page's
+        // `onInboxSwipeTriggered`. A short rise, or a clear upward flick, from
+        // the lower half arms the exit exactly once; from then on the tide plays
+        // its own timeline and the finger is ignored. A below-threshold release
+        // does nothing (no water follows the finger, no exit) because the water
+        // is never mapped to drag distance in the first place.
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                guard isExitTriggerEligible(value, in: size) else { return }
+                let rise = -value.translation.height
+                let upwardVelocity = -value.velocity.height
+                if rise >= exitTriggerDistance
+                    || upwardVelocity >= exitTriggerVelocity {
+                    startExit()
+                }
+            }
+    }
+
+    private func isExitTriggerEligible(
+        _ value: DragGesture.Value,
+        in size: CGSize
+    ) -> Bool {
+        model.phase != .resting
+            && !isCompletingExit
+            && value.startLocation.y > size.height * 0.52
+            && value.translation.height < 0
+            && abs(value.translation.height) > abs(value.translation.width)
+    }
+
+    private func handleTap() {
+        guard !isCompletingExit else { return }
+        if model.phase == .resting {
+            model.acknowledgeRestTask()
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.35)) {
+            isShowingWorkDetails = true
+        }
+        scheduleCollapse()
+    }
+
+    private func handleLongPress() {
+        guard model.phase != .resting, !isCompletingExit else { return }
+        collapseTask?.cancel()
+        isShowingWorkDetails = true
+        Task {
+            await model.requestManualRest()
+        }
+    }
+
+    private func scheduleCollapse() {
+        collapseTask?.cancel()
+        collapseTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(9))
+            guard !Task.isCancelled, model.phase != .resting else { return }
+            withAnimation(.easeInOut(duration: 0.45)) {
+                isShowingWorkDetails = false
+            }
+        }
+    }
+
+    /// Fired once when the swipe arms it. From here the exit is autonomous: a
+    /// single `withAnimation` drives `exitProgress` 0 → 1 monotonically on its
+    /// own clock, `isCompletingExit` blocks any re-trigger / tap / long-press,
+    /// and nothing reads the finger again — a finger held, released, or pulled
+    /// back down cannot reverse or cancel it.
+    private func startExit() {
+        guard !isCompletingExit else { return }
+        isCompletingExit = true
+        collapseTask?.cancel()
+
+        // Normal mode reuses the main page's tide: the same duration and the
+        // same velocity curve (`HushTideTimeline.tideProgress`'s bezier), so the
+        // two exits share one calm rhythm. Reduce Motion keeps the quick path.
+        let duration = reduceMotion
+            ? 0.2
+            : Double(HushTideTimeline.tideDuration)
+        let animation: Animation = reduceMotion
+            ? .easeInOut(duration: duration)
+            : .timingCurve(0.12, 0.16, 0.62, 1.0, duration: duration)
+
+        withAnimation(animation) {
+            exitProgress = 1
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            model.stop()
+            onClose()
+        }
+    }
+}
+
+private struct HushCompanionTypewriterText: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visibleCharacterCount = 0
+
+    let text: String
+
+    var body: some View {
+        Text(String(text.prefix(visibleCharacterCount)))
+            .accessibilityLabel(text)
+            .task(id: text) {
+                visibleCharacterCount = reduceMotion ? text.count : 0
+                guard !reduceMotion, !text.isEmpty else { return }
+
+                for count in 1...text.count {
+                    guard !Task.isCancelled else { return }
+                    visibleCharacterCount = count
+                    try? await Task.sleep(for: .milliseconds(38))
+                }
+            }
     }
 }
 
@@ -596,7 +1085,7 @@ private struct HushAlwaysOnCompanionView: View {
         VStack(spacing: 26) {
             HStack(spacing: 7) {
                 Image(systemName: "laptopcomputer")
-                Text(model.snapshot?.deviceName ?? "正在接续 Mac…")
+                Text(model.connectionText)
             }
             .font(.caption)
             .foregroundStyle(Color.white.opacity(0.52))
@@ -613,7 +1102,7 @@ private struct HushAlwaysOnCompanionView: View {
                     )
                     .contentTransition(.numericText())
 
-                Text("连续工作")
+                Text("连续使用屏幕")
                     .font(.subheadline)
                     .tracking(1.4)
                     .foregroundStyle(.secondary)
@@ -629,7 +1118,10 @@ private struct HushAlwaysOnCompanionView: View {
                     Text(snapshot.currentContext)
                     Text("·")
                         .foregroundStyle(Color.white.opacity(0.24))
-                    Text("今天 \(snapshot.dailyMinutes) 分钟")
+                    Text("当前任务 \(model.appContinuousMinutes) 分钟")
+                    Text("·")
+                        .foregroundStyle(Color.white.opacity(0.24))
+                    Text("此任务今日 \(model.dailyMinutes) 分钟")
                 }
                 .font(.caption)
                 .foregroundStyle(Color.white.opacity(0.48))
@@ -652,12 +1144,27 @@ private struct HushAlwaysOnCompanionView: View {
                     Text(model.formattedRest)
                         .font(.system(size: 48, weight: .light, design: .rounded))
                         .monospacedDigit()
-                } else {
-                    Text("站起来，去窗边看一眼远处。\n慢慢呼吸三次。")
-                        .font(.title3)
-                        .multilineTextAlignment(.center)
+                } else if let quest = model.selectedQuest {
+                    VStack(spacing: 12) {
+                        Text(quest.title)
+                            .font(.title3.weight(.semibold))
+
+                        Text(quest.durationLabel)
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.5))
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(
+                                Array(quest.steps.enumerated()),
+                                id: \.offset
+                            ) { index, step in
+                                Text("\(index + 1). \(step)")
+                            }
+                        }
+                        .font(.body)
                         .foregroundStyle(Color.white.opacity(0.82))
-                        .lineSpacing(7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
 
@@ -696,26 +1203,46 @@ private struct HushAlwaysOnCompanionView: View {
 
     private var footer: some View {
         VStack(spacing: 12) {
-            if model.phase == .working || model.phase == .approachingRest {
+            if model.phase == .working {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        model.simulateAgentRestDecision()
+                    Task {
+                        await model.requestManualRest()
                     }
                 } label: {
-                    Image(systemName: "bell.badge")
-                        .font(.system(size: 13, weight: .regular))
-                        .frame(width: 34, height: 34)
-                        .background(Color.white.opacity(0.045), in: Circle())
+                    if model.isRequestingManualRest {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("正在请 Agent 推荐…")
+                        }
+                    } else {
+                        Text("我现在想休息一下")
+                    }
                 }
-                .foregroundStyle(Color.white.opacity(0.68))
-                .accessibilityLabel("模拟 Agent 建议休息")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.white.opacity(0.82))
+                .disabled(
+                    model.snapshot == nil
+                        || model.isRequestingManualRest
+                )
+            }
+
+            if let agentErrorMessage = model.agentErrorMessage {
+                Text(agentErrorMessage)
+                    .font(.caption2)
+                    .foregroundStyle(Color.orange.opacity(0.9))
+                    .multilineTextAlignment(.center)
             }
 
             HStack(spacing: 7) {
                 Circle()
-                    .fill(Color.green.opacity(0.9))
+                    .fill(
+                        model.snapshot == nil
+                            ? Color.orange.opacity(0.9)
+                            : Color.green.opacity(0.9)
+                    )
                     .frame(width: 6, height: 6)
-                Text("屏幕保持常亮 · Mac / Agent Fixture")
+                Text("屏幕保持常亮 · Mac 实时同步")
                     .font(.caption2)
                     .foregroundStyle(Color.white.opacity(0.48))
             }
