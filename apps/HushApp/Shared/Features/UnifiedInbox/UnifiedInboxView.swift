@@ -112,7 +112,313 @@ final class UnifiedInboxDemoStore: ObservableObject {
     }
 }
 
+enum UnifiedInboxViewSource {
+    case sample
+    case real(UnifiedInboxViewModel)
+}
+
 struct UnifiedInboxView: View {
+    let onClose: () -> Void
+    var reveal: HushTideReveal = .settled
+    var source: UnifiedInboxViewSource = .sample
+
+    var body: some View {
+        switch source {
+        case .sample:
+            UnifiedInboxSampleView(onClose: onClose, reveal: reveal)
+        case .real(let model):
+            UnifiedInboxRealView(
+                model: model,
+                onClose: onClose,
+                reveal: reveal
+            )
+        }
+    }
+}
+
+private struct UnifiedInboxRealView: View {
+    @ObservedObject var model: UnifiedInboxViewModel
+    let onClose: () -> Void
+    var reveal: HushTideReveal
+    @State private var draftText = ""
+
+    var body: some View {
+        ZStack {
+            HushTidePageSurface(progress: reveal.progress)
+            VStack(spacing: 0) {
+                header
+                content
+            }
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            if model.loadState == .idle {
+                await model.load()
+            }
+        }
+        .onChange(of: model.draft?.content) { _, value in
+            draftText = value ?? ""
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Button(action: onClose) {
+                Image(systemName: "chevron.down")
+                    .frame(width: 34, height: 34)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("回到 Hush")
+
+            Spacer()
+            Text("消息")
+                .font(HushType.bodyStrong)
+            Spacer()
+
+            Label(originTitle, systemImage: originImage)
+                .font(HushType.caption)
+                .foregroundStyle(HushColor.textSecondary)
+        }
+        .foregroundStyle(HushColor.textPrimary)
+        .padding(.horizontal, HushSpacing.lg)
+        .padding(.vertical, HushSpacing.md)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let item = model.selectedItem {
+            detail(item)
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: HushSpacing.md) {
+                readiness
+                switch model.loadState {
+                case .idle, .loading:
+                    ProgressView().frame(maxWidth: .infinity)
+                case .empty:
+                    stateMessage("消息已同步，目前没有待处理内容。")
+                case .failed(let message):
+                    stateMessage(message)
+                    Button("重试") { Task { await model.refresh() } }
+                        .buttonStyle(.bordered)
+                case .loaded:
+                    ForEach(model.items) { item in
+                        Button {
+                            Task { await model.open(item.id) }
+                        } label: {
+                            VStack(alignment: .leading, spacing: HushSpacing.xs) {
+                                HStack {
+                                    Text(providerTitle(item.provider))
+                                        .font(HushType.caption)
+                                    Spacer()
+                                    Text(item.receivedAt)
+                                        .font(HushType.caption)
+                                }
+                                Text(item.subject ?? item.conversationName)
+                                    .font(HushType.bodyStrong)
+                                Text(item.summary ?? item.content ?? "等待摘要")
+                                    .font(HushType.caption)
+                                    .lineLimit(3)
+                            }
+                            .foregroundStyle(HushColor.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .hushPanel()
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxWidth: 760)
+            .padding(HushSpacing.lg)
+        }
+    }
+
+    private var readiness: some View {
+        VStack(alignment: .leading, spacing: HushSpacing.xs) {
+            HushSectionLabel(text: "渠道状态")
+            ForEach(Array(model.providerReadiness.enumerated()), id: \.offset) { _, value in
+                HStack {
+                    Text(providerTitle(value.provider))
+                    Spacer()
+                    Text(readinessTitle(value.status))
+                        .foregroundStyle(
+                            value.status == .ready
+                                ? HushColor.textSecondary
+                                : Color.orange
+                        )
+                }
+                .font(HushType.caption)
+            }
+        }
+        .hushPanel()
+    }
+
+    private func detail(_ item: UnifiedInboxPresentedItem) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: HushSpacing.md) {
+                Button {
+                    model.closeItem()
+                } label: {
+                    Label("返回消息列表", systemImage: "chevron.left")
+                }
+                .buttonStyle(.plain)
+
+                VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                    Text(providerTitle(item.provider))
+                        .font(HushType.caption)
+                        .foregroundStyle(HushColor.textSecondary)
+                    Text(item.conversationName).font(HushType.title)
+                    if let sender = item.sender { Text(sender) }
+                    if let subject = item.subject { Text(subject).font(HushType.bodyStrong) }
+                    if let summary = item.summary { Text(summary) }
+                    ForEach(item.importantPoints, id: \.self) { Text("• \($0)") }
+                    ForEach(item.replyTargets, id: \.displayName) { target in
+                        Text("回复 \(target.displayName)：\(target.reason)")
+                            .font(HushType.caption)
+                    }
+                }
+                .foregroundStyle(HushColor.textPrimary)
+                .hushPanel(emphasized: true)
+
+                Button("确认已读") {
+                    Task { await model.acknowledgeSelected() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isMutationInFlight)
+
+                if let draft = model.draft {
+                    VStack(alignment: .leading, spacing: HushSpacing.sm) {
+                        HushSectionLabel(text: "回复草稿 · v\(draft.version)")
+                        TextEditor(text: $draftText)
+                            .frame(minHeight: 120)
+                            .scrollContentBackground(.hidden)
+                            .disabled(editorLocked)
+                        HStack {
+                            Button("保存修改") {
+                                Task { await model.updateDraft(content: draftText) }
+                            }
+                            .disabled(
+                                draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    || model.sendState == .unknown
+                                    || model.sendState == .sent
+                                    || model.isMutationInFlight
+                            )
+                            Spacer()
+                            sendControls
+                        }
+                    }
+                    .hushPanel()
+                } else if item.hasDraft {
+                    Button("加载回复草稿") {
+                        Task { await model.loadDraft() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.isMutationInFlight)
+                }
+
+                sendStatus
+            }
+            .frame(maxWidth: 760)
+            .padding(HushSpacing.lg)
+        }
+    }
+
+    @ViewBuilder
+    private var sendControls: some View {
+        Group {
+            switch model.sendState {
+            case .idle, .failed:
+                Button("检查发送") {
+                    model.beginReview(displayedContent: draftText)
+                }
+            case .sent, .unknown:
+                EmptyView()
+            case .reviewing:
+                Button("获取确认") { Task { await model.requestConfirmation() } }
+            case .confirming:
+                Button("确认发送") { Task { await model.sendConfirmedDraft() } }
+            case .sending:
+                ProgressView()
+            }
+        }
+        .frame(width: 112, height: 36)
+        .disabled(
+            (model.isMutationInFlight && model.sendState != .sending)
+                || hasUnsavedDraftChanges
+        )
+    }
+
+    @ViewBuilder
+    private var sendStatus: some View {
+        switch model.sendState {
+        case .sent: stateMessage("已发送。")
+        case .failed(let message): stateMessage(message)
+        case .unknown: stateMessage("发送结果未知。请先到对应渠道确认，不要重复发送。")
+        default: EmptyView()
+        }
+    }
+
+    private func stateMessage(_ text: String) -> some View {
+        Text(text)
+            .font(HushType.body)
+            .foregroundStyle(HushColor.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, HushSpacing.md)
+    }
+
+    private var originTitle: String {
+        if case .failed = model.loadState { return "连接失败" }
+        return model.origin == .real ? "实时" : "未验证"
+    }
+
+    private var originImage: String {
+        if case .failed = model.loadState {
+            return "exclamationmark.shield"
+        }
+        return model.origin == .real
+            ? "checkmark.shield"
+            : "exclamationmark.shield"
+    }
+
+    private var hasUnsavedDraftChanges: Bool {
+        guard let draft = model.draft else { return false }
+        return draftText != draft.content
+    }
+
+    private var editorLocked: Bool {
+        switch model.sendState {
+        case .reviewing, .confirming, .sending, .sent, .unknown:
+            return true
+        case .idle, .failed:
+            return model.isMutationInFlight
+        }
+    }
+
+    private func providerTitle(_ provider: InboxProviderResponse) -> String {
+        switch provider {
+        case .feishu: "飞书"
+        case .dingtalk: "钉钉"
+        case .outlook: "Outlook"
+        case .qqMail: "QQ 邮箱"
+        }
+    }
+
+    private func readinessTitle(_ status: InboxSyncStateResponse) -> String {
+        switch status {
+        case .ready: "已就绪"
+        case .degraded: "部分可用"
+        case .unavailable: "不可用"
+        case .unknown: "未知"
+        }
+    }
+}
+
+private struct UnifiedInboxSampleView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var store = UnifiedInboxDemoStore()
     let onClose: () -> Void
@@ -248,7 +554,7 @@ struct UnifiedInboxView: View {
                     sourceHeader(item)
 
                     VStack(alignment: .leading, spacing: HushSpacing.sm) {
-                        HushSectionLabel(text: "AI 摘要")
+                        HushSectionLabel(text: "演示摘要")
                         Text(item.summary)
                             .font(HushType.body)
                             .lineSpacing(5)
@@ -464,7 +770,7 @@ struct UnifiedInboxView: View {
                 )
 
             HStack(spacing: HushSpacing.sm) {
-                Button("重新生成") {
+                Button("重置演示草稿") {
                     store.regenerateDraft()
                 }
                 .buttonStyle(HushSecondaryButtonStyle())
@@ -475,7 +781,7 @@ struct UnifiedInboxView: View {
                 .buttonStyle(HushSecondaryButtonStyle())
             }
 
-            Button(store.sentItemIDs.contains(item.id) ? "演示已发送" : "检查并确认发送") {
+            Button(store.sentItemIDs.contains(item.id) ? "演示已发送" : "模拟确认发送") {
                 store.isShowingSendConfirmation = true
             }
             .buttonStyle(HushPrimaryButtonStyle())

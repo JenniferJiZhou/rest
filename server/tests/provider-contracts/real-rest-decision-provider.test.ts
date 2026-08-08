@@ -381,6 +381,7 @@ function context(
     usage: {
       dailyMinutes: 60,
       continuousMinutes: 35,
+      continuousScreenMinutes: null,
       continuousIsEstimated: true
     },
     appSwitchesLast10Minutes: 2,

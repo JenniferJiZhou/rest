@@ -43,14 +43,17 @@ final class HushDemoStore: ObservableObject {
     @Published var sleepTodaySummary = ""
     @Published var sleepHighlight = ""
     @Published var sleepTomorrowFirstStep = ""
+    @Published private(set) var generatedRestTask: GeneratedRestTask?
 
     let content: HushDemoContentSnapshot
 
     init(
         provider: any HushRestContentProviding = BundledHushRestContentProvider.automatic,
-        initialQuestID: String? = nil
+        initialQuestID: String? = nil,
+        initialGeneratedRestTask: GeneratedRestTask? = nil
     ) {
         content = HushDemoContentSnapshot.load(from: provider)
+        generatedRestTask = initialGeneratedRestTask
         let preferredQuestID = initialQuestID ?? "wash_face_01"
         if let initialIndex = content.quests.firstIndex(
             where: { $0.id == preferredQuestID }
@@ -59,8 +62,24 @@ final class HushDemoStore: ObservableObject {
         }
     }
 
+    convenience init(
+        provider: any HushRestContentProviding,
+        manualRestProvider: (any HushManualRestTaskProviding)?,
+        initialQuestID: String? = nil,
+        initialGeneratedRestTask: GeneratedRestTask? = nil
+    ) {
+        self.init(
+            provider: provider,
+            initialQuestID: initialQuestID,
+            initialGeneratedRestTask: initialGeneratedRestTask
+        )
+    }
+
     var currentQuest: HushQuestContent {
-        content.quests[selectedQuestIndex % content.quests.count]
+        if let generatedRestTask {
+            return generatedRestTask.questContent
+        }
+        return content.quests[selectedQuestIndex % content.quests.count]
     }
 
     var currentDriftPrompt: HushDriftPrompt {
@@ -149,6 +168,7 @@ final class HushDemoStore: ObservableObject {
     }
 
     func presentRestSuggestion(questID: String?) {
+        generatedRestTask = nil
         if let questID,
            let index = content.quests.firstIndex(
                where: { $0.id == questID }
@@ -159,10 +179,16 @@ final class HushDemoStore: ObservableObject {
         move(to: .door)
     }
 
+    func presentRestSuggestion(task: GeneratedRestTask) {
+        generatedRestTask = task
+        move(to: .door)
+    }
+
     func reset() {
         fatigueDescription = ""
         selectedPreference = nil
         selectedQuestIndex = 0
+        generatedRestTask = nil
         clearSleepDraft()
         route = .door
     }

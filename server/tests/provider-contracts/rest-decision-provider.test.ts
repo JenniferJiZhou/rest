@@ -104,6 +104,7 @@ describe("RestDecisionProvider contract", () => {
         usage: {
           dailyMinutes: 5,
           continuousMinutes: 5,
+          continuousScreenMinutes: null,
           continuousIsEstimated: true
         }
       })

@@ -112,6 +112,7 @@ function decisionContext(): RestDecisionContext {
     usage: {
       dailyMinutes: 90,
       continuousMinutes: 32,
+      continuousScreenMinutes: null,
       continuousIsEstimated: false
     },
     appSwitchesLast10Minutes: 4,

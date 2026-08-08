@@ -12,6 +12,37 @@ extension Notification.Name {
     )
 }
 
+enum HushSleepExitPolicy {
+    static func isEligible(
+        isComplete: Bool,
+        startLocation: CGPoint,
+        translation: CGSize,
+        containerSize: CGSize
+    ) -> Bool {
+        isComplete
+            && startLocation.y > containerSize.height * 0.6
+            && translation.height < 0
+            && abs(translation.height) > abs(translation.width) * 1.3
+    }
+
+    static func completionDuration(reduceMotion: Bool) -> TimeInterval {
+        reduceMotion ? 0.2 : 1.35
+    }
+
+    static func recapOffset(
+        reduceMotion: Bool,
+        isVisible: Bool
+    ) -> CGFloat {
+        reduceMotion ? 0 : (isVisible ? 0 : 18)
+    }
+
+    static func recapAnimationDuration(
+        reduceMotion: Bool
+    ) -> TimeInterval {
+        reduceMotion ? 0.2 : 0.75
+    }
+}
+
 @MainActor
 final class HushSleepScheduleController: ObservableObject {
     static let shared = HushSleepScheduleController()

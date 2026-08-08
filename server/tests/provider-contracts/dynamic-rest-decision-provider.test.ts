@@ -299,6 +299,7 @@ function context(): RestDecisionContext {
     usage: {
       dailyMinutes: 120,
       continuousMinutes: 45,
+      continuousScreenMinutes: null,
       continuousIsEstimated: true
     },
     appSwitchesLast10Minutes: 2,

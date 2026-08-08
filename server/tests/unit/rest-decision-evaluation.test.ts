@@ -64,6 +64,7 @@ describe("Rest Decision prompt evaluation fixtures", () => {
           usage: {
             dailyMinutes: fixture.dailyMinutes,
             continuousMinutes: fixture.continuousMinutes,
+            continuousScreenMinutes: null,
             continuousIsEstimated:
               fixture.continuousIsEstimated
           },
@@ -236,6 +237,7 @@ function context(
     usage: {
       dailyMinutes: 60,
       continuousMinutes: 35,
+      continuousScreenMinutes: null,
       continuousIsEstimated: true
     },
     appSwitchesLast10Minutes: 2,
