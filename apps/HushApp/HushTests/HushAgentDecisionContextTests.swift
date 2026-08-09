@@ -138,6 +138,95 @@ final class HushAgentDecisionContextTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testIOSSnapshotUsesMostRecentConfiguredCheckpoint() throws {
+        let defaults = makeSnapshotDefaults()
+        defer { clearSnapshotDefaults(defaults) }
+        let now = Date(timeIntervalSince1970: 1_786_243_200)
+        let olderID = UUID()
+        let latestID = UUID()
+        try seedUsageStates(
+            [
+                olderID.uuidString: SnapshotUsageState(
+                    lastThresholdDate: now.addingTimeInterval(-120),
+                    lastDailyCheckpointMinutes: 20,
+                    estimatedContinuousMinutes: 10
+                ),
+                latestID.uuidString: SnapshotUsageState(
+                    lastThresholdDate: now.addingTimeInterval(-30),
+                    lastDailyCheckpointMinutes: 35,
+                    estimatedContinuousMinutes: 15
+                )
+            ],
+            defaults: defaults
+        )
+        defaults.set(
+            now.addingTimeInterval(-90 * 60),
+            forKey: "restSession.lastCompletedDate"
+        )
+        let model = DeviceActivityMonitoringModel(userDefaults: defaults)
+
+        let context = model.agentTestDecisionContext(
+            configuredContextLabels: [olderID: "写作", latestID: "阅读"],
+            now: now
+        )
+
+        XCTAssertEqual(context.userProvidedContextLabel, "阅读")
+        XCTAssertEqual(context.dailyAppUsageMinutes, 35)
+        XCTAssertEqual(context.continuousAppUsageMinutes, 15)
+        XCTAssertEqual(context.continuousUsageIsEstimated, true)
+        XCTAssertNil(context.appSwitchesLast10Minutes)
+        XCTAssertEqual(context.minutesSinceLastRest, 90)
+        XCTAssertEqual(
+            context.localHour,
+            Calendar.current.component(.hour, from: now)
+        )
+        XCTAssertFalse(context.rawAppNamesIncluded)
+        XCTAssertFalse(context.fullURLIncluded)
+        XCTAssertFalse(context.pageTitleIncluded)
+        XCTAssertFalse(context.learningEligible)
+    }
+
+    @MainActor
+    func testIOSSnapshotWithoutCheckpointUsesNullMeasurements() {
+        let defaults = makeSnapshotDefaults()
+        defer { clearSnapshotDefaults(defaults) }
+        let now = Date(timeIntervalSince1970: 1_786_243_200)
+        let model = DeviceActivityMonitoringModel(userDefaults: defaults)
+
+        let context = model.agentTestDecisionContext(
+            configuredContextLabels: [UUID(): "阅读"],
+            now: now
+        )
+
+        assertUnavailableSnapshot(context)
+    }
+
+    @MainActor
+    func testIOSSnapshotIgnoresCheckpointForRemovedApplication() throws {
+        let defaults = makeSnapshotDefaults()
+        defer { clearSnapshotDefaults(defaults) }
+        let now = Date(timeIntervalSince1970: 1_786_243_200)
+        try seedUsageStates(
+            [
+                UUID().uuidString: SnapshotUsageState(
+                    lastThresholdDate: now,
+                    lastDailyCheckpointMinutes: 45,
+                    estimatedContinuousMinutes: 25
+                )
+            ],
+            defaults: defaults
+        )
+        let model = DeviceActivityMonitoringModel(userDefaults: defaults)
+
+        let context = model.agentTestDecisionContext(
+            configuredContextLabels: [UUID(): "另一个 App"],
+            now: now
+        )
+
+        assertUnavailableSnapshot(context)
+    }
+
     private func makeProvider() throws -> HTTPManualRestTaskProvider {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ManualRestStubURLProtocol.self]
@@ -194,6 +283,45 @@ final class HushAgentDecisionContextTests: XCTestCase {
         )
         return (response, body)
     }
+
+    private func makeSnapshotDefaults() -> UserDefaults {
+        let suiteName = "HushAgentDecisionContextTests.\(UUID().uuidString)"
+        return UserDefaults(suiteName: suiteName)!
+    }
+
+    private func clearSnapshotDefaults(_ defaults: UserDefaults) {
+        defaults.removeObject(forKey: "deviceActivity.appUsageStates")
+        defaults.removeObject(forKey: "restSession.lastCompletedDate")
+    }
+
+    private func seedUsageStates(
+        _ states: [String: SnapshotUsageState],
+        defaults: UserDefaults
+    ) throws {
+        defaults.set(
+            try PropertyListEncoder().encode(states),
+            forKey: "deviceActivity.appUsageStates"
+        )
+    }
+
+    private func assertUnavailableSnapshot(
+        _ context: HushAgentDecisionContext,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertNil(context.userProvidedContextLabel, file: file, line: line)
+        XCTAssertNil(context.dailyAppUsageMinutes, file: file, line: line)
+        XCTAssertNil(context.continuousAppUsageMinutes, file: file, line: line)
+        XCTAssertNil(context.continuousUsageIsEstimated, file: file, line: line)
+        XCTAssertNil(context.appSwitchesLast10Minutes, file: file, line: line)
+        XCTAssertNil(context.minutesSinceLastRest, file: file, line: line)
+    }
+}
+
+private struct SnapshotUsageState: Codable {
+    let lastThresholdDate: Date
+    let lastDailyCheckpointMinutes: Int
+    let estimatedContinuousMinutes: Int
 }
 
 private final class ManualRestRequestRecorder: @unchecked Sendable {

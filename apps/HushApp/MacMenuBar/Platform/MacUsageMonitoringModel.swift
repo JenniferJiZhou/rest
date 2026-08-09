@@ -398,6 +398,33 @@ final class MacUsageMonitoringModel: ObservableObject {
         sendAgentCheckpoint(now: Date(), automatic: false)
     }
 
+    func agentTestDecisionContext(now: Date) -> HushAgentDecisionContext {
+        pruneSwitchHistory(now: now)
+        let application = currentMonitoredApplication
+        return HushAgentDecisionContext(
+            measuredAt: ISO8601DateFormatter().string(from: now),
+            platform: "macos",
+            userProvidedContextLabel:
+                application?.trimmedUserProvidedName,
+            dailyAppUsageMinutes:
+                application == nil ? nil : currentDailyMinutes,
+            continuousAppUsageMinutes:
+                application == nil ? nil : currentContinuousMinutes,
+            continuousUsageIsEstimated:
+                application == nil ? nil : false,
+            appSwitchesLast10Minutes:
+                application == nil ? nil : switchDates.count,
+            minutesSinceLastRest: lastCompletedRestDate.map {
+                max(0, Int(now.timeIntervalSince($0) / 60))
+            },
+            localHour: Calendar.current.component(.hour, from: now),
+            rawAppNamesIncluded: false,
+            fullURLIncluded: false,
+            pageTitleIncluded: false,
+            learningEligible: false
+        )
+    }
+
     func icon(for application: ApplicationIdentity) -> NSImage {
         icon(bundleURL: application.bundleURL)
     }
