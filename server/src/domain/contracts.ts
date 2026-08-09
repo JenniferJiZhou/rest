@@ -558,6 +558,33 @@ export const restRecommendationRequestV1Schema = z
   })
   .strict();
 
+export const manualRestDecisionContextSchema = z
+  .object({
+    measured_at: z.iso.datetime({ offset: true }),
+    platform: z.enum(["ios", "ipados", "macos"]),
+    user_provided_context_label: userProvidedContextLabel.nullable(),
+    daily_app_usage_minutes: z.number().int().min(0).max(1440).nullable(),
+    continuous_app_usage_minutes: z
+      .number()
+      .int()
+      .min(0)
+      .max(1440)
+      .nullable(),
+    continuous_usage_is_estimated: z.boolean().nullable(),
+    app_switches_last_10_minutes: z
+      .number()
+      .int()
+      .min(0)
+      .nullable(),
+    minutes_since_last_rest: z.number().int().min(0).nullable(),
+    local_hour: z.number().int().min(0).max(23),
+    raw_app_names_included: z.literal(false),
+    full_url_included: z.literal(false),
+    page_title_included: z.literal(false),
+    learning_eligible: z.literal(false)
+  })
+  .strict();
+
 export const restRecommendationRequestV1_1Schema = z
   .object({
     schema_version: z.literal(DYNAMIC_REST_CONTRACT_VERSION),
@@ -570,9 +597,58 @@ export const restRecommendationRequestV1_1Schema = z
       .optional(),
     available_minutes: z.number().int().min(1).max(10),
     source: z.string().min(1),
-    location_tags: z.array(z.string()).optional().default([])
+    location_tags: z.array(z.string()).optional().default([]),
+    decision_context: manualRestDecisionContextSchema.optional()
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const decisionContext = value.decision_context;
+
+    if (value.source === "settings_agent_test_ios") {
+      if (!decisionContext) {
+        context.addIssue({
+          code: "custom",
+          path: ["decision_context"],
+          message: "iOS settings Agent tests require decision_context"
+        });
+      } else if (
+        decisionContext.platform !== "ios" &&
+        decisionContext.platform !== "ipados"
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["decision_context", "platform"],
+          message: "iOS settings Agent tests require an Apple mobile platform"
+        });
+      }
+      return;
+    }
+
+    if (value.source === "settings_agent_test_macos") {
+      if (!decisionContext) {
+        context.addIssue({
+          code: "custom",
+          path: ["decision_context"],
+          message: "macOS settings Agent tests require decision_context"
+        });
+      } else if (decisionContext.platform !== "macos") {
+        context.addIssue({
+          code: "custom",
+          path: ["decision_context", "platform"],
+          message: "macOS settings Agent tests require platform macos"
+        });
+      }
+      return;
+    }
+
+    if (decisionContext) {
+      context.addIssue({
+        code: "custom",
+        path: ["decision_context"],
+        message: "decision_context is reserved for settings Agent tests"
+      });
+    }
+  });
 
 export const restRecommendationRequestSchema = z.discriminatedUnion(
   "schema_version",

@@ -156,4 +156,109 @@ describe("contract fixtures", () => {
 
     expect(schema.safeParse(input).success).toBe(true);
   });
+
+  const settingsTestRequest = {
+    schema_version: "1.1",
+    request_id: "req_settings_agent_test_ios",
+    session_id: "session_settings_agent_test_ios",
+    fatigue_type: "unknown",
+    user_preference: "surprise",
+    available_minutes: 3,
+    source: "settings_agent_test_ios",
+    location_tags: [],
+    decision_context: {
+      measured_at: "2026-08-09T10:15:00+08:00",
+      platform: "ios",
+      user_provided_context_label: "阅读",
+      daily_app_usage_minutes: 35,
+      continuous_app_usage_minutes: 15,
+      continuous_usage_is_estimated: true,
+      app_switches_last_10_minutes: null,
+      minutes_since_last_rest: 90,
+      local_hour: 10,
+      raw_app_names_included: false,
+      full_url_included: false,
+      page_title_included: false,
+      learning_eligible: false
+    }
+  };
+
+  it("accepts a privacy-bounded iOS settings Agent test context", () => {
+    expect(
+      restRecommendationRequestV1_1Schema.parse(settingsTestRequest)
+    ).toMatchObject(settingsTestRequest);
+  });
+
+  it("accepts explicit nulls for unavailable settings test measurements", () => {
+    const decisionContext = settingsTestRequest.decision_context;
+
+    expect(
+      restRecommendationRequestV1_1Schema.safeParse({
+        ...settingsTestRequest,
+        decision_context: {
+          ...decisionContext,
+          user_provided_context_label: null,
+          daily_app_usage_minutes: null,
+          continuous_app_usage_minutes: null,
+          continuous_usage_is_estimated: null,
+          app_switches_last_10_minutes: null,
+          minutes_since_last_rest: null
+        }
+      }).success
+    ).toBe(true);
+  });
+
+  it.each([
+    ["learning eligibility", { learning_eligible: true }],
+    ["raw App names", { raw_app_names_included: true }],
+    ["full URLs", { full_url_included: true }],
+    ["page titles", { page_title_included: true }],
+    ["private extra fields", { bundle_id: "com.example.private" }],
+    ["negative daily minutes", { daily_app_usage_minutes: -1 }],
+    ["out-of-range local hour", { local_hour: 24 }]
+  ])("rejects settings Agent context with %s", (_name, override) => {
+    expect(
+      restRecommendationRequestV1_1Schema.safeParse({
+        ...settingsTestRequest,
+        decision_context: {
+          ...settingsTestRequest.decision_context,
+          ...override
+        }
+      }).success
+    ).toBe(false);
+  });
+
+  it("requires decision context for a settings test source", () => {
+    const { decision_context: _decisionContext, ...withoutContext } =
+      settingsTestRequest;
+
+    expect(
+      restRecommendationRequestV1_1Schema.safeParse(withoutContext).success
+    ).toBe(false);
+  });
+
+  it("rejects decision context on a non-settings source", () => {
+    expect(
+      restRecommendationRequestV1_1Schema.safeParse({
+        ...settingsTestRequest,
+        source: "manual_rest"
+      }).success
+    ).toBe(false);
+  });
+
+  it.each([
+    ["settings_agent_test_ios", "macos"],
+    ["settings_agent_test_macos", "ios"]
+  ])("rejects %s with platform %s", (source, platform) => {
+    expect(
+      restRecommendationRequestV1_1Schema.safeParse({
+        ...settingsTestRequest,
+        source,
+        decision_context: {
+          ...settingsTestRequest.decision_context,
+          platform
+        }
+      }).success
+    ).toBe(false);
+  });
 });
