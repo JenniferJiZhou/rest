@@ -25,6 +25,9 @@
 		A50000000000000000000016 /* UnifiedInboxConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000011 /* UnifiedInboxConnectionView.swift */; };
 		A50000000000000000000017 /* UnifiedInboxModeCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50000000000000000000012 /* UnifiedInboxModeCoordinatorTests.swift */; };
 		A70000000000000000000001 /* HushAgentDecisionContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000001 /* HushAgentDecisionContextTests.swift */; };
+		A70000000000000000000002 /* HushAgentTaskTestModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000002 /* HushAgentTaskTestModel.swift */; };
+		A70000000000000000000003 /* HushAgentTaskTestModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000002 /* HushAgentTaskTestModel.swift */; };
+		A70000000000000000000004 /* HushAgentTaskTestModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70000000000000000000003 /* HushAgentTaskTestModelTests.swift */; };
 		A00000000000000000000001 /* iOSApp/App/HushApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* iOSApp/App/HushApp.swift */; };
 		A00000000000000000000002 /* Shared/Core/HushProduct.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* Shared/Core/HushProduct.swift */; };
 		A00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* MacMenuBar/App/HushMacApp.swift */; };
@@ -174,6 +177,8 @@
 		B50000000000000000000005 /* inbox-draft-edited-demo.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ../../../contracts/fixtures/inbox-draft-edited-demo.json; sourceTree = "<group>"; };
 		B50000000000000000000006 /* UnifiedInboxAPIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedInboxAPIClientTests.swift; sourceTree = "<group>"; };
 		B70000000000000000000001 /* HushAgentDecisionContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushAgentDecisionContextTests.swift; sourceTree = "<group>"; };
+		B70000000000000000000002 /* HushAgentTaskTestModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/RestQuest/HushAgentTaskTestModel.swift; sourceTree = "<group>"; };
+		B70000000000000000000003 /* HushAgentTaskTestModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HushAgentTaskTestModelTests.swift; sourceTree = "<group>"; };
 		B50000000000000000000007 /* UnifiedInboxConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxConfiguration.swift; sourceTree = SOURCE_ROOT; };
 		B50000000000000000000008 /* UnifiedInboxAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxAPIClient.swift; sourceTree = SOURCE_ROOT; };
 		B50000000000000000000009 /* UnifiedInboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Features/UnifiedInbox/UnifiedInboxStore.swift; sourceTree = SOURCE_ROOT; };
@@ -386,6 +391,7 @@
 				B50000000000000000000002 /* UnifiedInboxTransportModelsTests.swift */,
 				B50000000000000000000006 /* UnifiedInboxAPIClientTests.swift */,
 				B70000000000000000000001 /* HushAgentDecisionContextTests.swift */,
+				B70000000000000000000003 /* HushAgentTaskTestModelTests.swift */,
 				B50000000000000000000003 /* inbox-item-enriched-demo.json */,
 				B50000000000000000000004 /* inbox-group-digest-demo.json */,
 				B50000000000000000000005 /* inbox-draft-edited-demo.json */,
@@ -437,6 +443,7 @@
 				B30000000000000000000001 /* HushBreathTideView.swift */,
 				B30000000000000000000002 /* HushBreathShaders.metal */,
 				B10000000000000000000012 /* HushRestContent.swift */,
+				B70000000000000000000002 /* HushAgentTaskTestModel.swift */,
 				B10000000000000000000013 /* RestQuestView.swift */,
 				B10000000000000000000014 /* BlueResetView.swift */,
 				B10000000000000000000015 /* PauseReceiptView.swift */,
@@ -725,6 +732,7 @@
 				A30000000000000000000001 /* HushBreathTideView.swift in Sources */,
 				A30000000000000000000003 /* HushBreathShaders.metal in Sources */,
 				A10000000000000000000023 /* HushRestContent.swift in Sources */,
+				A70000000000000000000002 /* HushAgentTaskTestModel.swift in Sources */,
 				A10000000000000000000025 /* RestQuestView.swift in Sources */,
 				A10000000000000000000027 /* BlueResetView.swift in Sources */,
 				A10000000000000000000029 /* PauseReceiptView.swift in Sources */,
@@ -762,6 +770,7 @@
 				A30000000000000000000002 /* HushBreathTideView.swift in Sources */,
 				A30000000000000000000004 /* HushBreathShaders.metal in Sources */,
 				A10000000000000000000024 /* HushRestContent.swift in Sources */,
+				A70000000000000000000003 /* HushAgentTaskTestModel.swift in Sources */,
 				A10000000000000000000026 /* RestQuestView.swift in Sources */,
 				A10000000000000000000028 /* BlueResetView.swift in Sources */,
 				A10000000000000000000030 /* PauseReceiptView.swift in Sources */,
@@ -798,6 +807,7 @@
 				A50000000000000000000014 /* UnifiedInboxStoreTests.swift in Sources */,
 				A50000000000000000000017 /* UnifiedInboxModeCoordinatorTests.swift in Sources */,
 				A70000000000000000000001 /* HushAgentDecisionContextTests.swift in Sources */,
+				A70000000000000000000004 /* HushAgentTaskTestModelTests.swift in Sources */,
 				A00000000000000000000025 /* HushTestTargetSmokeTests.swift in Sources */,
 				A00000000000000000000027 /* HushTideTimelineTests.swift in Sources */,
 				A00000000000000000000028 /* HushDoorTriggerTests.swift in Sources */,
