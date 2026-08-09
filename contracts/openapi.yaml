@@ -130,9 +130,12 @@ paths:
       description: >
         Contract 1.0 selects a Quest from fixed content for legacy clients.
         Contract 1.1 generates one manual rest task after the user has
-        already chosen to rest. request_id is the idempotency key: an
-        identical retry returns the stored result, while reuse with
-        different content returns 409.
+        already chosen to rest. Settings tests may add decision_context
+        only with their platform-specific source and
+        learning_eligible=false; this context is used for the current
+        inference only. request_id is the idempotency key: an identical
+        retry returns the stored result, while reuse with different
+        content returns 409.
       parameters:
         - $ref: "#/components/parameters/RequestId"
         - $ref: "#/components/parameters/ClientVersion"

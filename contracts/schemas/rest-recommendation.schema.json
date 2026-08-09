@@ -89,6 +89,78 @@
         }
       }
     },
+    "ManualRestDecisionContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "measured_at",
+        "platform",
+        "user_provided_context_label",
+        "daily_app_usage_minutes",
+        "continuous_app_usage_minutes",
+        "continuous_usage_is_estimated",
+        "app_switches_last_10_minutes",
+        "minutes_since_last_rest",
+        "local_hour",
+        "raw_app_names_included",
+        "full_url_included",
+        "page_title_included",
+        "learning_eligible"
+      ],
+      "properties": {
+        "measured_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["ios", "ipados", "macos"]
+        },
+        "user_provided_context_label": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "daily_app_usage_minutes": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "continuous_app_usage_minutes": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "continuous_usage_is_estimated": {
+          "type": ["boolean", "null"]
+        },
+        "app_switches_last_10_minutes": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "minutes_since_last_rest": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "local_hour": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        },
+        "raw_app_names_included": {
+          "const": false
+        },
+        "full_url_included": {
+          "const": false
+        },
+        "page_title_included": {
+          "const": false
+        },
+        "learning_eligible": {
+          "const": false
+        }
+      }
+    },
     "RestRecommendationRequestV1_1": {
       "type": "object",
       "additionalProperties": false,
@@ -133,8 +205,71 @@
           "items": {
             "type": "string"
           }
+        },
+        "decision_context": {
+          "$ref": "#/$defs/ManualRestDecisionContext"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": { "const": "settings_agent_test_ios" }
+            },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["decision_context"],
+            "properties": {
+              "decision_context": {
+                "type": "object",
+                "properties": {
+                  "platform": { "enum": ["ios", "ipados"] }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": { "const": "settings_agent_test_macos" }
+            },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["decision_context"],
+            "properties": {
+              "decision_context": {
+                "type": "object",
+                "properties": {
+                  "platform": { "const": "macos" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "not": {
+                  "enum": [
+                    "settings_agent_test_ios",
+                    "settings_agent_test_macos"
+                  ]
+                }
+              }
+            },
+            "required": ["source"]
+          },
+          "then": {
+            "not": {
+              "required": ["decision_context"]
+            }
+          }
+        }
+      ]
     },
     "RestRecommendationRequest": {
       "oneOf": [

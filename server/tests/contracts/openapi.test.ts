@@ -7,6 +7,10 @@ import { parse } from "yaml";
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(currentDirectory, "../../..");
 const openApiPath = resolve(repositoryRoot, "contracts/openapi.yaml");
+const restRecommendationSchemaPath = resolve(
+  repositoryRoot,
+  "contracts/schemas/rest-recommendation.schema.json"
+);
 
 describe("OpenAPI contract", () => {
   it("parses and points only to existing local schema files", () => {
@@ -136,6 +140,49 @@ describe("OpenAPI contract", () => {
     ).toBe("1.0");
   });
 
+  it("documents the optional privacy-bounded settings test context", () => {
+    const document = parse(
+      readFileSync(openApiPath, "utf8")
+    ) as OpenApiDocument;
+    const operation = document.paths["/v1/rest/recommend"]!.post!;
+    expect(operation.description).toContain("decision_context");
+    expect(operation.description).toContain("learning_eligible=false");
+
+    const schema = JSON.parse(
+      readFileSync(restRecommendationSchemaPath, "utf8")
+    ) as RestRecommendationSchemaDocument;
+    const context = schema.$defs.ManualRestDecisionContext!;
+    const request = schema.$defs.RestRecommendationRequestV1_1!;
+
+    expect(request.required).not.toContain("decision_context");
+    expect(request.properties.decision_context).toEqual({
+      $ref: "#/$defs/ManualRestDecisionContext"
+    });
+    expect(context.additionalProperties).toBe(false);
+    expect(context.required).toContain("learning_eligible");
+    expect(context.properties.learning_eligible).toMatchObject({
+      const: false
+    });
+    expect(context.properties.raw_app_names_included).toMatchObject({
+      const: false
+    });
+    expect(context.properties.full_url_included).toMatchObject({
+      const: false
+    });
+    expect(context.properties.page_title_included).toMatchObject({
+      const: false
+    });
+    expect(context.properties.daily_app_usage_minutes.type).toEqual([
+      "integer",
+      "null"
+    ]);
+    expect(context.properties.minutes_since_last_rest.type).toEqual([
+      "integer",
+      "null"
+    ]);
+    expect(request.allOf).toHaveLength(3);
+  });
+
 });
 
 interface OpenApiResponse {
@@ -150,6 +197,7 @@ interface OpenApiDocument {
       string,
       {
         operationId?: string;
+        description?: string;
         parameters?: Array<{ $ref?: string }>;
         responses: Record<string, OpenApiResponse>;
         requestBody?: {
@@ -165,6 +213,20 @@ interface OpenApiDocument {
     >;
     responses: Record<string, OpenApiResponse>;
   };
+}
+
+interface JsonSchemaObject {
+  additionalProperties?: boolean;
+  allOf?: unknown[];
+  required?: string[];
+  properties: Record<
+    string,
+    { $ref?: string; const?: unknown; type?: string | string[] }
+  >;
+}
+
+interface RestRecommendationSchemaDocument {
+  $defs: Record<string, JsonSchemaObject | undefined>;
 }
 
 function collectReferences(value: unknown): string[] {
