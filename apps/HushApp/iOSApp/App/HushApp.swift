@@ -1274,6 +1274,7 @@ private struct HushSettingsView: View {
     @StateObject private var notifications = NotificationAuthorizationModel()
     @StateObject private var interruptionMode = InterruptionModeModel()
     @StateObject private var agentSettings = AgentConnectionSettingsModel()
+    @StateObject private var agentTaskTest = HushAgentTaskTestModel()
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
     @State private var isShowingActivityPicker = false
@@ -1400,6 +1401,50 @@ private struct HushSettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+
+                    DisclosureGroup("本次将发送的数据") {
+                        ForEach(
+                            Array(
+                                agentTaskTest.previewRows(
+                                    for: agentTestDecisionContext
+                                ).enumerated()
+                            ),
+                            id: \.offset
+                        ) { _, row in
+                            LabeledContent(row.label, value: row.value)
+                                .font(.footnote)
+                        }
+                    }
+
+                    Button {
+                        let context = monitoring.agentTestDecisionContext(
+                            applicationContexts:
+                                selectionStore.configuredApplicationContexts,
+                            now: Date()
+                        )
+                        Task {
+                            await agentTaskTest.test(
+                                baseURL: agentSettings.baseURL,
+                                context: context,
+                                source: "settings_agent_test_ios"
+                            )
+                        }
+                    } label: {
+                        if agentTaskTest.isRequesting {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("正在请求…")
+                            }
+                        } else {
+                            Text("测试 Agent 并返回任务")
+                        }
+                    }
+                    .disabled(
+                        !agentSettings.isConfigured
+                            || agentTaskTest.isRequesting
+                    )
+
+                    agentTaskTestResult
 
                     Text(monitoring.monitoringStatusMessage)
                         .foregroundStyle(.secondary)
@@ -1533,6 +1578,63 @@ private struct HushSettingsView: View {
                 updateMonitoringAfterSelectionChange()
             }
         }
+    }
+
+    private var agentTestDecisionContext: HushAgentDecisionContext {
+        monitoring.agentTestDecisionContext(
+            applicationContexts:
+                selectionStore.configuredApplicationContexts,
+            now: Date()
+        )
+    }
+
+    @ViewBuilder
+    private var agentTaskTestResult: some View {
+        switch agentTaskTest.state {
+        case .idle, .loading:
+            EmptyView()
+        case let .failure(message):
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.red)
+        case let .success(suggestion):
+            VStack(alignment: .leading, spacing: 6) {
+                if let originLabel = agentTaskTest.originLabel {
+                    Text(originLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Text(suggestion.message)
+                    .font(.footnote)
+                Text(suggestion.generatedTask.title)
+                    .font(.headline)
+                Text(agentTaskDurationLabel(
+                    suggestion.generatedTask.durationSeconds
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                ForEach(
+                    Array(suggestion.generatedTask.steps.enumerated()),
+                    id: \.offset
+                ) { index, step in
+                    Text("\(index + 1). \(step)")
+                        .font(.footnote)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func agentTaskDurationLabel(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+        if minutes == 0 {
+            return "\(remainingSeconds) 秒"
+        }
+        if remainingSeconds == 0 {
+            return "\(minutes) 分钟"
+        }
+        return "\(minutes) 分 \(remainingSeconds) 秒"
     }
 
     private func updateMonitoringAfterSelectionChange() {

@@ -363,6 +363,7 @@ private struct HushMacDashboardView: View {
     @ObservedObject var websiteModel: MacWebsiteMonitoringModel
     @ObservedObject private var sleepSchedule =
         HushSleepScheduleController.shared
+    @StateObject private var agentTaskTest = HushAgentTaskTestModel()
     @State private var isShowingAppPicker = false
 
     var body: some View {
@@ -851,6 +852,62 @@ private struct HushMacDashboardView: View {
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.52))
 
+            DisclosureGroup("本次将发送的数据") {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(
+                        Array(
+                            agentTaskTest.previewRows(
+                                for: model.agentTestDecisionContext(
+                                    now: Date()
+                                )
+                            ).enumerated()
+                        ),
+                        id: \.offset
+                    ) { _, row in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(row.label)
+                            Spacer()
+                            Text(row.value)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.62))
+                .padding(.top, 8)
+            }
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.68))
+
+            Button {
+                let context = model.agentTestDecisionContext(now: Date())
+                Task {
+                    await agentTaskTest.test(
+                        baseURL: model.agentBaseURL,
+                        context: context,
+                        source: "settings_agent_test_macos"
+                    )
+                }
+            } label: {
+                if agentTaskTest.isRequesting {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("正在请求…")
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    Text("测试 Agent 并返回任务")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(HushMacPrimaryButtonStyle())
+            .disabled(
+                !model.isAgentConnected || agentTaskTest.isRequesting
+            )
+
+            agentTaskTestResult
+
             Divider()
                 .overlay(.white.opacity(0.12))
 
@@ -908,6 +965,56 @@ private struct HushMacDashboardView: View {
             }
         }
         .hushMacPanel()
+    }
+
+    @ViewBuilder
+    private var agentTaskTestResult: some View {
+        switch agentTaskTest.state {
+        case .idle, .loading:
+            EmptyView()
+        case let .failure(message):
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.orange)
+        case let .success(suggestion):
+            VStack(alignment: .leading, spacing: 6) {
+                if let originLabel = agentTaskTest.originLabel {
+                    Text(originLabel)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                Text(suggestion.message)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.72))
+                Text(suggestion.generatedTask.title)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(agentTaskDurationLabel(
+                    suggestion.generatedTask.durationSeconds
+                ))
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.5))
+                ForEach(
+                    Array(suggestion.generatedTask.steps.enumerated()),
+                    id: \.offset
+                ) { index, step in
+                    Text("\(index + 1). \(step)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+            }
+        }
+    }
+
+    private func agentTaskDurationLabel(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+        if minutes == 0 {
+            return "\(remainingSeconds) 秒"
+        }
+        if remainingSeconds == 0 {
+            return "\(minutes) 分钟"
+        }
+        return "\(minutes) 分 \(remainingSeconds) 秒"
     }
 
     private var privacyCard: some View {
