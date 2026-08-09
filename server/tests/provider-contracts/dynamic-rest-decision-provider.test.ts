@@ -89,7 +89,8 @@ describe("DynamicRestDecisionProvider", () => {
         userPreference: "quiet",
         availableMinutes: 2,
         source: "manual_ios",
-        locationTags: ["desk"]
+        locationTags: ["desk"],
+        decisionContext: null
       })
     ).resolves.toEqual({
       message: "好，现在给自己留一点空间。",
@@ -159,7 +160,8 @@ describe("DynamicRestDecisionProvider", () => {
         userPreference: null,
         availableMinutes: 2,
         source: "manual_macos",
-        locationTags: []
+        locationTags: [],
+        decisionContext: null
       })
     ).rejects.toMatchObject({
       code: "LLM_INVALID_OUTPUT",

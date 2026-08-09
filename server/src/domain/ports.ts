@@ -168,6 +168,22 @@ export interface GeneratedRestTaskCandidate {
   steps: string[];
 }
 
+export interface ManualRestDecisionContext {
+  measuredAt: string;
+  platform: "ios" | "ipados" | "macos";
+  userProvidedContextLabel: string | null;
+  dailyAppUsageMinutes: number | null;
+  continuousAppUsageMinutes: number | null;
+  continuousUsageIsEstimated: boolean | null;
+  appSwitchesLast10Minutes: number | null;
+  minutesSinceLastRest: number | null;
+  localHour: number;
+  rawAppNamesIncluded: false;
+  fullUrlIncluded: false;
+  pageTitleIncluded: false;
+  learningEligible: false;
+}
+
 export interface DynamicManualRestContext {
   requestId: string;
   sessionId: string;
@@ -182,6 +198,7 @@ export interface DynamicManualRestContext {
   availableMinutes: number;
   source: string;
   locationTags: string[];
+  decisionContext: ManualRestDecisionContext | null;
 }
 
 export interface DynamicManualRestCandidate {

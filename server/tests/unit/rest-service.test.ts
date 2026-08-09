@@ -213,6 +213,71 @@ describe("RestService", () => {
     });
     expect(replay).toEqual(first);
     expect(manualProvider.contexts).toHaveLength(1);
+    expect(manualProvider.contexts[0]).toMatchObject({
+      decisionContext: null
+    });
+  });
+
+  it("maps a validated settings test context to the manual Agent", async () => {
+    const content = new FileRestContentRepository();
+    const manualProvider = new FixedManualProvider({
+      message: "先离开屏幕一小会儿。",
+      generatedTask: {
+        title: "望向远处",
+        durationSeconds: 60,
+        steps: ["放松肩膀", "看向远处"]
+      }
+    });
+    const service = new RestService(
+      new CannedAgentLLM(),
+      content,
+      new InMemoryFeedbackRepository(),
+      new InMemoryIdempotencyStore<unknown>(),
+      new CannedRestDecisionProvider(content),
+      { dynamicManualRestProvider: manualProvider }
+    );
+    const input = {
+      ...dynamicManualRequest("req_settings_context_mapping"),
+      source: "settings_agent_test_ios",
+      decision_context: {
+        measured_at: "2026-08-09T10:15:00+08:00",
+        platform: "ios" as const,
+        user_provided_context_label: "阅读",
+        daily_app_usage_minutes: 35,
+        continuous_app_usage_minutes: 15,
+        continuous_usage_is_estimated: true,
+        app_switches_last_10_minutes: null,
+        minutes_since_last_rest: 90,
+        local_hour: 10,
+        raw_app_names_included: false as const,
+        full_url_included: false as const,
+        page_title_included: false as const,
+        learning_eligible: false as const
+      }
+    };
+
+    await service.recommend(input, input.request_id, {
+      contractVersion: "1.1"
+    });
+
+    expect(manualProvider.contexts).toHaveLength(1);
+    expect(manualProvider.contexts[0]).toMatchObject({
+      decisionContext: {
+        measuredAt: "2026-08-09T10:15:00+08:00",
+        platform: "ios",
+        userProvidedContextLabel: "阅读",
+        dailyAppUsageMinutes: 35,
+        continuousAppUsageMinutes: 15,
+        continuousUsageIsEstimated: true,
+        appSwitchesLast10Minutes: null,
+        minutesSinceLastRest: 90,
+        localHour: 10,
+        rawAppNamesIncluded: false,
+        fullUrlIncluded: false,
+        pageTitleIncluded: false,
+        learningEligible: false
+      }
+    });
   });
 
   it("does not fall back to a fixed Quest when Contract 1.1 generation fails", async () => {

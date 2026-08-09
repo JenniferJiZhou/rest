@@ -356,7 +356,34 @@ export class RestService {
       userPreference: request.user_preference ?? null,
       availableMinutes: request.available_minutes,
       source: request.source,
-      locationTags: [...request.location_tags]
+      locationTags: [...request.location_tags],
+      decisionContext: request.decision_context
+        ? {
+            measuredAt: request.decision_context.measured_at,
+            platform: request.decision_context.platform,
+            userProvidedContextLabel:
+              request.decision_context.user_provided_context_label,
+            dailyAppUsageMinutes:
+              request.decision_context.daily_app_usage_minutes,
+            continuousAppUsageMinutes:
+              request.decision_context.continuous_app_usage_minutes,
+            continuousUsageIsEstimated:
+              request.decision_context.continuous_usage_is_estimated,
+            appSwitchesLast10Minutes:
+              request.decision_context.app_switches_last_10_minutes,
+            minutesSinceLastRest:
+              request.decision_context.minutes_since_last_rest,
+            localHour: request.decision_context.local_hour,
+            rawAppNamesIncluded:
+              request.decision_context.raw_app_names_included,
+            fullUrlIncluded:
+              request.decision_context.full_url_included,
+            pageTitleIncluded:
+              request.decision_context.page_title_included,
+            learningEligible:
+              request.decision_context.learning_eligible
+          }
+        : null
     };
   }
 

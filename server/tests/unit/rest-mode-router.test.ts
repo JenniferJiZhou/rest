@@ -78,6 +78,48 @@ describe("Rest Agent mode router", () => {
     expect(JSON.stringify(input)).not.toContain("quest_id");
   });
 
+  it("gives Mode B current context without enabling learning", () => {
+    const context = {
+      ...manualContext(),
+      source: "settings_agent_test_macos",
+      decisionContext: {
+        measuredAt: "2026-08-09T10:15:00+08:00",
+        platform: "macos" as const,
+        userProvidedContextLabel: "写作",
+        dailyAppUsageMinutes: 80,
+        continuousAppUsageMinutes: 25,
+        continuousUsageIsEstimated: false,
+        appSwitchesLast10Minutes: 3,
+        minutesSinceLastRest: null,
+        localHour: 10,
+        rawAppNamesIncluded: false as const,
+        fullUrlIncluded: false as const,
+        pageTitleIncluded: false as const,
+        learningEligible: false as const
+      }
+    };
+    const route = routeRestAgentMode({
+      mode: "manual_rest_quest",
+      context
+    });
+    const input = JSON.parse(route.input) as {
+      context: Record<string, unknown>;
+    };
+
+    expect(input.context).toMatchObject({
+      decisionContext: context.decisionContext
+    });
+    expect(route.system).toContain(
+      "Use decisionContext only to tailor this response."
+    );
+    expect(route.system).toContain("learningEligible is false");
+    expect(route.system).toContain(
+      "Nullable values are unknown; never interpret null as zero."
+    );
+    expect(JSON.stringify(input)).not.toContain("com.example.private");
+    expect(JSON.stringify(input)).not.toContain("https://private.example");
+  });
+
   it("routes Mode C to the fatigue reflection prompt and schema", () => {
     const route = routeRestAgentMode({
       mode: "fatigue_reflection",
@@ -136,7 +178,8 @@ function manualContext(): DynamicManualRestContext {
     userPreference: "quiet",
     availableMinutes: 2,
     source: "manual_ios",
-    locationTags: []
+    locationTags: [],
+    decisionContext: null
   };
 }
 

@@ -172,11 +172,11 @@ describe("OpenAPI contract", () => {
     expect(context.properties.page_title_included).toMatchObject({
       const: false
     });
-    expect(context.properties.daily_app_usage_minutes.type).toEqual([
+    expect(context.properties.daily_app_usage_minutes!.type).toEqual([
       "integer",
       "null"
     ]);
-    expect(context.properties.minutes_since_last_rest.type).toEqual([
+    expect(context.properties.minutes_since_last_rest!.type).toEqual([
       "integer",
       "null"
     ]);
