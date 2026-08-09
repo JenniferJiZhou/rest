@@ -29,10 +29,108 @@ struct GeneratedRestTask: Codable, Equatable, Sendable {
     }
 }
 
+enum HushAgentDataOrigin: String, Equatable, Sendable {
+    case real
+    case mock
+}
+
+struct HushAgentDecisionContext: Encodable, Equatable, Sendable {
+    let measuredAt: String
+    let platform: String
+    let userProvidedContextLabel: String?
+    let dailyAppUsageMinutes: Int?
+    let continuousAppUsageMinutes: Int?
+    let continuousUsageIsEstimated: Bool?
+    let appSwitchesLast10Minutes: Int?
+    let minutesSinceLastRest: Int?
+    let localHour: Int
+    let rawAppNamesIncluded: Bool
+    let fullURLIncluded: Bool
+    let pageTitleIncluded: Bool
+    let learningEligible: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case measuredAt = "measured_at"
+        case platform
+        case userProvidedContextLabel = "user_provided_context_label"
+        case dailyAppUsageMinutes = "daily_app_usage_minutes"
+        case continuousAppUsageMinutes = "continuous_app_usage_minutes"
+        case continuousUsageIsEstimated = "continuous_usage_is_estimated"
+        case appSwitchesLast10Minutes = "app_switches_last_10_minutes"
+        case minutesSinceLastRest = "minutes_since_last_rest"
+        case localHour = "local_hour"
+        case rawAppNamesIncluded = "raw_app_names_included"
+        case fullURLIncluded = "full_url_included"
+        case pageTitleIncluded = "page_title_included"
+        case learningEligible = "learning_eligible"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(measuredAt, forKey: .measuredAt)
+        try values.encode(platform, forKey: .platform)
+        try values.encodeOptional(
+            userProvidedContextLabel,
+            forKey: .userProvidedContextLabel
+        )
+        try values.encodeOptional(
+            dailyAppUsageMinutes,
+            forKey: .dailyAppUsageMinutes
+        )
+        try values.encodeOptional(
+            continuousAppUsageMinutes,
+            forKey: .continuousAppUsageMinutes
+        )
+        try values.encodeOptional(
+            continuousUsageIsEstimated,
+            forKey: .continuousUsageIsEstimated
+        )
+        try values.encodeOptional(
+            appSwitchesLast10Minutes,
+            forKey: .appSwitchesLast10Minutes
+        )
+        try values.encodeOptional(
+            minutesSinceLastRest,
+            forKey: .minutesSinceLastRest
+        )
+        try values.encode(localHour, forKey: .localHour)
+        try values.encode(rawAppNamesIncluded, forKey: .rawAppNamesIncluded)
+        try values.encode(fullURLIncluded, forKey: .fullURLIncluded)
+        try values.encode(pageTitleIncluded, forKey: .pageTitleIncluded)
+        try values.encode(learningEligible, forKey: .learningEligible)
+    }
+}
+
+private extension KeyedEncodingContainer {
+    mutating func encodeOptional<T: Encodable>(
+        _ value: T?,
+        forKey key: Key
+    ) throws {
+        if let value {
+            try encode(value, forKey: key)
+        } else {
+            try encodeNil(forKey: key)
+        }
+    }
+}
+
 struct HushDynamicRestSuggestion: Equatable, Sendable {
     let requestID: String
     let message: String
     let generatedTask: GeneratedRestTask
+    let dataOrigin: HushAgentDataOrigin?
+
+    init(
+        requestID: String,
+        message: String,
+        generatedTask: GeneratedRestTask,
+        dataOrigin: HushAgentDataOrigin? = nil
+    ) {
+        self.requestID = requestID
+        self.message = message
+        self.generatedTask = generatedTask
+        self.dataOrigin = dataOrigin
+    }
 }
 
 struct HushManualRestContext: Equatable, Sendable {
@@ -42,6 +140,25 @@ struct HushManualRestContext: Equatable, Sendable {
     let availableMinutes: Int
     let source: String
     let locationTags: [String]
+    let decisionContext: HushAgentDecisionContext?
+
+    init(
+        sessionID: String,
+        fatigueType: String,
+        userPreference: String?,
+        availableMinutes: Int,
+        source: String,
+        locationTags: [String],
+        decisionContext: HushAgentDecisionContext? = nil
+    ) {
+        self.sessionID = sessionID
+        self.fatigueType = fatigueType
+        self.userPreference = userPreference
+        self.availableMinutes = availableMinutes
+        self.source = source
+        self.locationTags = locationTags
+        self.decisionContext = decisionContext
+    }
 }
 
 protocol HushManualRestTaskProviding {
@@ -60,7 +177,17 @@ final class HTTPManualRestTaskProvider: HushManualRestTaskProviding {
     private let baseURL: URL
     private let session: URLSession
 
-    init(baseURLString: String) throws {
+    convenience init(baseURLString: String) throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 35
+        configuration.timeoutIntervalForResource = 35
+        try self.init(
+            baseURLString: baseURLString,
+            session: URLSession(configuration: configuration)
+        )
+    }
+
+    init(baseURLString: String, session: URLSession) throws {
         let trimmed = baseURLString.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -73,10 +200,7 @@ final class HTTPManualRestTaskProvider: HushManualRestTaskProviding {
         }
 
         self.baseURL = baseURL
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 35
-        configuration.timeoutIntervalForResource = 35
-        session = URLSession(configuration: configuration)
+        self.session = session
     }
 
     static var automatic: HTTPManualRestTaskProvider? {
@@ -108,7 +232,8 @@ final class HTTPManualRestTaskProvider: HushManualRestTaskProviding {
             userPreference: context.userPreference,
             availableMinutes: context.availableMinutes,
             source: context.source,
-            locationTags: context.locationTags
+            locationTags: context.locationTags,
+            decisionContext: context.decisionContext
         )
         let endpoint = baseURL
             .appendingPathComponent("v1")
@@ -144,6 +269,14 @@ final class HTTPManualRestTaskProvider: HushManualRestTaskProviding {
         else {
             throw ProviderError.requestFailed
         }
+        guard
+            let rawOrigin = httpResponse.value(
+                forHTTPHeaderField: "X-Hush-Data-Origin"
+            ),
+            let dataOrigin = HushAgentDataOrigin(rawValue: rawOrigin)
+        else {
+            throw ProviderError.invalidResponse
+        }
         let result = try JSONDecoder().decode(
             ManualRestResponse.self,
             from: data
@@ -163,7 +296,8 @@ final class HTTPManualRestTaskProvider: HushManualRestTaskProviding {
         return HushDynamicRestSuggestion(
             requestID: result.requestID,
             message: result.message,
-            generatedTask: result.generatedTask
+            generatedTask: result.generatedTask,
+            dataOrigin: dataOrigin
         )
     }
 }
@@ -177,6 +311,7 @@ private struct ManualRestRequest: Encodable {
     let availableMinutes: Int
     let source: String
     let locationTags: [String]
+    let decisionContext: HushAgentDecisionContext?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -187,6 +322,7 @@ private struct ManualRestRequest: Encodable {
         case availableMinutes = "available_minutes"
         case source
         case locationTags = "location_tags"
+        case decisionContext = "decision_context"
     }
 }
 
